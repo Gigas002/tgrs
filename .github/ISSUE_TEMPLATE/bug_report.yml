@@ -8,7 +8,7 @@ body:
       value: |
         > [!WARNING]
         > Before submitting this issue, please ensure that a similar issue or pull request does not already exist.
-        > You can search existing issues and pull requests [here](https://github.com/FedericoBruzzone/tgt/issues) and [here](https://github.com/FedericoBruzzone/tgt/pulls).
+        > You can search existing issues and pull requests [here](https://github.com/Gigas002/tgt/issues) and [here](https://github.com/Gigas002/tgt/pulls).
         > If you find a similar issue or pull request, please consider adding a comment to provide additional information or upvote it to indicate your interest.
   - type: input
     id: description
@@ -53,7 +53,6 @@ body:
       description: Please specify how you installed tgt
       options:
         - Cargo
-        - Docker
         - Download from GitHub
         - Build from source
     validations:
@@ -74,8 +73,7 @@ body:
       label: Operating System (including version and architecture)
       description: |
         Please provide the operating system you're using, including its version and architecture.
-        If you are using tgt inside Docker, please also specify the Docker version you're using.
-      placeholder: Windows 10 (64-bit)
+      placeholder: Arch Linux (x86_64)
     validations:
       required: true
   - type: input
@@ -83,7 +81,7 @@ body:
     attributes:
       label: Terminal and Command Line Interface (CLI) (including versions)
       description: Please specify the terminal emulator and the Command Line Interface (CLI) you're using, along with its versions.
-      placeholder: Windows Terminal (1.19.10821.0) PowerShell (7.4.2)
+      placeholder: Alacritty (0.15.1) fish (4.0.2)
     validations:
       required: false
   - type: input
@@ -93,6 +91,6 @@ body:
       description: |
         Please specify the rustc and rustup target you're using, along with its versions.
         The rustup target can be found by running the command `rustup target list` and looking for an enrty marked as installed.
-      placeholder: rustc 1.74.1 (a28077b28 2023-12-04) x86_64-pc-windows-msvc
+      placeholder: rustc 1.74.1 (a28077b28 2023-12-04) x86_64-unknown-linux-gnu
     validations:
       required: false
