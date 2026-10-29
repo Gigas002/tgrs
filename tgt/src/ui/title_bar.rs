@@ -124,7 +124,6 @@ impl Component for TitleBar {
             .alignment(Alignment::Center)
             .wrap(Wrap { trim: true });
 
-
         frame.render_widget(paragraph, chunks[1]);
 
         Ok(())
