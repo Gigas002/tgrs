@@ -5,7 +5,39 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+### Removed
+
+- Legacy config locations (`~/.tgt`, `.tgt-dev`, `.data`); only XDG directories are used.
+- `app.toml`, `logger.toml` and `telegram.toml`, replaced by a single `config.toml`. `theme_filename`, `take_api_*_from_telegram_config` and the log file name options are gone.
+- `--logout` and `--send-message` flags, replaced by subcommands.
+- Writing to the user's config: keymaps are no longer upgraded in place and switching themes no longer rewrites `app.toml`.
+- Dependencies `config`, `dirs`, `tracing-error` and the `env-filter` feature; `image` limited to GIF, JPEG, PNG and WebP decoding.
+- CI workflows `ci-linux`, `cd` and `cleanup-caches`.
+
+- Support for Windows, macOS and Android; `tgt` now targets Linux only.
+- Features that download, build or bundle native dependencies: `download-tdlib`, `local-tdlib`, `pkg-config`, `static`, `static-download` and `chafa-static`. TDLib (`tdjson`), libopus and chafa must be installed system-wide; TDLib is located via `pkg-config`.
+- CI workflows for Windows, macOS and Android.
+- Docker image (`Dockerfile`, Docker CI/publish workflows) and Nix flake.
+- `build.rs`: release builds no longer copy default configs into the user's config directory; defaults are bundled in the binary and `tgt init-config` writes them on demand.
+- Rust examples (`examples/*.rs`).
+
+### Changed
+
+- Split into a workspace: `libtgt` (TDLib client, store and models, no UI) and the `tgt` binary.
+- Restructured `tgt` into `cli`, `config`, `settings`, `logger`, `app`, `audio`, `ui` and `utils` modules with a single settings resolver (`CLI > environment > config.toml > defaults`).
+- The theme picked in the UI is remembered in `$XDG_STATE_HOME/tgt/theme`; `--theme` and `app.theme` take precedence.
+- Feature `rodio` renamed to `audio`.
+- CI, dependabot, `deny.toml` and `.typos.toml` follow the [rust-template](https://github.com/Gigas002/rust-template) setup; TDLib is built and cached by a composite action.
+
+- Default config files moved from `config/` to `examples/`.
+- Migrated to Rust edition 2024 and Cargo resolver v3.
+- Replaced `lazy_static` with `std::sync::LazyLock`; trimmed unused dependency features (`config`, `tokio`, `futures`, `chrono`, `rodio`, `ratatui-image`, `arboard`).
+- Switched to the [Gigas002/tdlib-rs](https://github.com/Gigas002/tdlib-rs) fork (TDLib 1.8.68, system `tdjson` via `pkg-config`).
+
 ### Added
+
+- Subcommands `send`, `logout`, `init-config` and `clear`; options `--config-dir`, `--log-dir`, `--log-level`, `-v`/`-q` and `--theme`.
+- `docs/ARCHITECTURE.md`.
 
 - `static` feature to statically link `tdjson` (use with `download-tdlib` or `local-tdlib`); no runtime `tdjson` dependency needed. Powered by **tdlib-rs v1.4.0**.
 - CI: `static` feature combinations (`local-tdlib,static`, `download-tdlib,static`) in Linux, macOS, and Windows workflows.
@@ -61,7 +93,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - Handle view message
 - Change user status to online and offline
 - Display messages with time of arrival
-- Display if messages has been readed
+- Display if messages have been read
 - Edit message
 - Delete message
 - Copy message
