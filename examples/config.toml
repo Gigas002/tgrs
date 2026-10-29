@@ -1,0 +1,79 @@
+# tgt configuration.
+#
+# Location: $XDG_CONFIG_HOME/tgt/config.toml (default ~/.config/tgt/config.toml),
+# or the directory given by `--config-dir` / `TGT_CONFIG_DIR`.
+# Every key is optional; commented-out values are the defaults.
+# Paths may start with `~`; relative paths are rejected.
+
+[app]
+# Mouse support in the terminal.
+# mouse_support = true
+# Bracketed paste support in the terminal.
+# paste_support = true
+# Frames per second. Lower values reduce CPU usage when idle
+# (120 ultra smooth, 60 smooth, 30 balanced, 15 battery saving).
+# frame_rate = 60.0
+# Show the status bar at the bottom of the terminal.
+# show_status_bar = true
+# Show the title bar at the top of the terminal.
+# show_title_bar = true
+# Apply theme colors; false uses the terminal's defaults.
+# theme_enable = true
+# Theme name: a file in themes/ without `.toml`, bundled or user-provided.
+# When unset, the theme last picked in the UI is used, then "theme".
+# theme = "theme"
+# Use emoji for message status (edited, reply, sent, seen) instead of
+# ASCII indicators ([edited], <-- reply, [✓] sent, [o o] seen).
+# use_emoji_icons = false
+# Longer side of displayed photos, in pixels; 0 disables downscaling.
+# photo_max_dimension = 1920
+# Photo viewer popup size as a fraction of the terminal (clamped to 0.01–1.0).
+# photo_viewer_popup_size = 0.8
+
+[logger]
+# off, error, warn, info, debug or trace. Overridden by `--log-level`, `-v`, `-q`.
+# level = "info"
+# Log directory (default $XDG_STATE_HOME/tgt/logs). Overridden by `--log-dir`.
+# dir = "~/.local/state/tgt/logs"
+# Log file rotation: minutely, hourly, daily or never.
+# rotation = "daily"
+# Number of rotated log files to keep.
+# keep = 7
+
+[telegram]
+# Telegram API credentials from https://my.telegram.org.
+# Overridden by the API_ID and API_HASH environment variables.
+# api_id = 94575
+# api_hash = "a3406de8d171bb422bb6ddf3bbd800e2"
+# TDLib database directory (default $XDG_DATA_HOME/tgt/tdlib).
+# database_dir = "~/.local/share/tgt/tdlib"
+# Keep information about downloaded and uploaded files between restarts.
+# use_file_database = true
+# Keep users, groups, channels and secret chats between restarts.
+# use_chat_info_database = true
+# Keep chats and messages between restarts.
+# use_message_database = true
+# IETF language tag of the system language.
+# system_language_code = "en"
+# Device model reported to Telegram.
+# device_model = "Desktop"
+# TDLib log verbosity: 0 fatal, 1 errors, 2 warnings, 3 info, 4 debug, 5 verbose.
+# log_verbosity = 2
+# TDLib log file (default $XDG_STATE_HOME/tgt/tdlib.log).
+# log_path = "~/.local/state/tgt/tdlib.log"
+# Also redirect stderr to the TDLib log.
+# log_redirect_stderr = false
+
+# Optional proxy for connecting to Telegram; ignored without `server`.
+# [telegram.proxy]
+# socks5, http or mtproto.
+# type = "socks5"
+# server = "127.0.0.1"
+# port = 1080
+# SOCKS5/HTTP credentials.
+# username = ""
+# password = ""
+# HTTP only: the proxy handles only HTTP requests (no CONNECT tunneling).
+# http_only = false
+# MTProto only: hex-encoded secret.
+# secret = ""
