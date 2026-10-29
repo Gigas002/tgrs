@@ -1,0 +1,15 @@
+[package]
+name = "libtgt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+description = "Telegram domain logic for tgt: data model, store and TDLib client"
+keywords.workspace = true
+repository.workspace = true
+
+[dependencies]
+chrono.workspace = true
+tdlib-rs.workspace = true
+tokio.workspace = true
+tracing.workspace = true

@@ -1,99 +1,49 @@
-[package]
-name = "tgt"
-version = "1.0.0"
-edition = "2021"
-description = "A simple TUI for Telegram"
+[workspace]
+members = ["libtgt", "tgt"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
 license = "MIT OR Apache-2.0"
-documentation = "https://docs.rs/crate/tgt/1.0.0"
-homepage = "https://github.com/FedericoBruzzone/tgt"
-repository = "https://github.com/FedericoBruzzone/tgt"
-readme = "README.md"
-keywords = [
-    "tgt",
-    "tgtui",
-    "telegram",
-    "tui",
-    "tdlib",
-]
-authors = [
-    "Federico Bruzzone <federico.bruzzone.i@gmail.com>",
-    "Andrea Longoni",
-]
-default-run = "tgt"
-build = "build.rs"
-categories = []
+homepage = "https://github.com/Gigas002/tgt"
+description = "A simple TUI for Telegram"
+keywords = ["telegram", "tui", "tdlib"]
+repository = "https://github.com/Gigas002/tgt"
+version = "1.0.0"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-# [toolchain]
-# channel = "nightly-2020-07-10"
-# components = [ "rustfmt", "rustc-dev" ]
-# targets = [ "wasm32-unknown-unknown", "thumbv2-none-eabi" ]
-# profile = "minimal"
-
-[features]
-# By deafult you need to set the `LOCAL_TDLIB_PATH` environment variable to the path of the TDLib library. See CONTRIBUTING.md for more information.
-default = ["static-download", "voice-message", "rodio"] # download-tdlib
-local-tdlib = ["tdlib-rs/local-tdlib"]
-download-tdlib = ["tdlib-rs/download-tdlib"]
-pkg-config = ["tdlib-rs/pkg-config"]
-static = ["tdlib-rs/static"]
-# Convenience feature: static linking + auto-download/build TDLib.
-static-download = ["static", "download-tdlib"]
-# Enable chafa-based image rendering in ratatui-image (macOS, Linux x86_64, Windows x64). Not supported on Windows ARM.
-chafa-dyn = ["ratatui-image/chafa-dyn"]
-chafa-static = ["ratatui-image/chafa-static"]
-# Audio playback (MP3, WAV, etc.) via rodio. Voice notes (OGG Opus) also need voice-message.
-# voice-message = OGG/Opus only (Telegram voice notes); requires CMake. Rodio stays enabled for other formats.
-voice-message = ["ogg", "audiopus"]
-
-[package.metadata.system-deps]
-tdjson = "1.8.29"
-
-[dependencies]
-config = "0.15.23"
-crossterm = { version = "0.29.0", features = ["event-stream"] }
-dirs = "7.0.0"
-futures = "0.3.32"
-lazy_static = "1.5.0"
-ratatui = "0.30.1"
-serde = "1.0.228"
-toml = "1.0"
-tdlib-rs = "1.4.0"
-tokio = { version = "1.50.0", features = ["full"] }
-tracing = "0.1.44"
-tracing-error = "0.2.1"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter", "chrono"] }
+[workspace.dependencies]
+arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }
+audiopus = "0.2"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+clap = { version = "4", features = ["derive"] }
+crossterm = { version = "0.29", features = ["event-stream"] }
+futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
+image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
+nucleo-matcher = "0.3"
+ogg = "0.9"
+ratatui = "0.30"
+ratatui-explorer = "0.3"
+ratatui-image = { version = "11", default-features = false }
+rodio = { version = "0.23", default-features = false, features = [
+  "playback",
+  "flac",
+  "mp3",
+  "mp4",
+  "vorbis",
+  "wav",
+] }
+serde = { version = "1", features = ["derive"] }
+signal-hook = "0.4"
+tdlib-rs = { git = "https://github.com/Gigas002/tdlib-rs" }
+tempfile = "3"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+toml = "1"
+tracing = "0.1"
 tracing-appender = "0.2"
-chrono = "0.4.45"
-# Default: no chafa. Enable via chafa- dyn or chafa-static (not supported on Windows ARM).
-ratatui-image = { version = "11.0.3", default-features = false, features = ["crossterm", "image-defaults"] }
-image = "0.25.10"
-signal-hook = "0.4.4"
-clap = { version = "4.6.1", features = ["derive"] }
-nucleo-matcher = "0.3.1"
-unicode-width = "0.2.2"
-# Voice message and audio playback (latest rodio; we implement Source in ogg_opus.rs).
-rodio = { version = "0.23", optional = true, default-features = true }
-# OGG Opus for Telegram voice notes (we implement the rodio Source in ogg_opus.rs).
-ogg = { version = "0.9", optional = true }
-# Opus codec for Telegram voice notes (via audiopus_sys; requires CMake when building with voice-message).
-audiopus = { version = "0.2", optional = true }
-ratatui-explorer = "0.3.0"
-
-[target.'cfg(not(target_os = "android"))'.dependencies]
-arboard = { version = "3.6.1", features = ["wayland-data-control", "wl-clipboard-rs"] }
-
-[build-dependencies]
-dirs = "7.0.0"
-reqwest = { version = "0.13.4", features = ["blocking"] }
-zip = { version = "9.0.0" }
-tdlib-rs = "1.4.0"
-
-[dev-dependencies]
-tempfile = "3.27.0"
-
-[profile.release]
-lto = true
-opt-level = 'z'
-codegen-units = 1
-strip = "debuginfo"
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+  "fmt",
+  "registry",
+  "std",
+] }
+unicode-width = "0.2"

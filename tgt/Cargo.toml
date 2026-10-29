@@ -1,0 +1,53 @@
+[package]
+name = "tgt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+description.workspace = true
+keywords.workspace = true
+repository.workspace = true
+
+[lib]
+name = "tgt"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tgt"
+path = "src/main.rs"
+
+[features]
+default = ["audio", "voice-message"]
+# Audio playback (MP3, FLAC, WAV, ...) via rodio.
+audio = ["dep:rodio"]
+# Telegram voice notes (OGG Opus); links the system libopus.
+voice-message = ["audio", "dep:ogg", "dep:audiopus"]
+# chafa-based image rendering in the photo viewer; links the system chafa.
+chafa-dyn = ["ratatui-image/chafa-dyn"]
+
+[dependencies]
+libtgt = { path = "../libtgt", version = "1.0.0" }
+arboard.workspace = true
+audiopus = { workspace = true, optional = true }
+clap.workspace = true
+crossterm.workspace = true
+futures.workspace = true
+image.workspace = true
+nucleo-matcher.workspace = true
+ogg = { workspace = true, optional = true }
+ratatui.workspace = true
+ratatui-explorer.workspace = true
+ratatui-image.workspace = true
+rodio = { workspace = true, optional = true }
+serde.workspace = true
+signal-hook.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+toml.workspace = true
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true
+unicode-width.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,0 +1,387 @@
+use std::collections::BTreeSet;
+use std::sync::Arc;
+use std::sync::MutexGuard;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
+
+use tdlib_rs::enums::{AuthorizationState, ChatList, Update};
+use tdlib_rs::types::{Chat, ChatPosition};
+use tokio::sync::mpsc::UnboundedSender;
+
+use crate::model::{MessageEntry, OrderedChat};
+use crate::store::Store;
+
+/// What changed in the [`Store`], for the UI to react to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Notification {
+    /// Chats were added, reordered or changed (rate limited).
+    ChatListChanged,
+    /// A new message arrived in the open chat (sent or received).
+    OpenChatMessageAdded(i64),
+    /// A message in the open chat was pinned or unpinned.
+    OpenChatPinsChanged,
+    /// TDLib evicted open chat messages from its cache; history should be reloaded.
+    OpenChatHistoryInvalidated,
+}
+
+/// Minimum gap between two [`Notification::ChatListChanged`] (~1 frame at 60fps).
+const CHAT_LIST_INTERVAL: Duration = Duration::from_millis(16);
+
+/// Coalesces bursts of chat list changes into at most one notification per interval.
+struct Throttle {
+    last: Instant,
+    pending: bool,
+}
+
+impl Throttle {
+    fn new() -> Self {
+        Self {
+            last: Instant::now(),
+            pending: false,
+        }
+    }
+
+    fn request(&mut self, notify: &UnboundedSender<Notification>) {
+        self.pending = true;
+        self.flush(notify);
+    }
+
+    fn flush(&mut self, notify: &UnboundedSender<Notification>) {
+        if self.pending && self.last.elapsed() >= CHAT_LIST_INTERVAL {
+            let _ = notify.send(Notification::ChatListChanged);
+            self.last = Instant::now();
+            self.pending = false;
+        }
+    }
+}
+
+/// Receives TDLib updates until `can_quit` is set, applying them to `store`.
+pub(super) async fn run(
+    store: Arc<Store>,
+    auth_tx: UnboundedSender<AuthorizationState>,
+    can_quit: Arc<AtomicBool>,
+    notify: UnboundedSender<Notification>,
+) {
+    tracing::info!("Starting handling updates from TDLib");
+    let mut throttle = Throttle::new();
+
+    while !can_quit.load(Ordering::Acquire) {
+        match tdlib_rs::receive() {
+            Some((update, _client_id)) => {
+                apply(&store, update, &auth_tx, &notify, &mut throttle).await;
+                throttle.flush(&notify);
+                // Let the runtime schedule other tasks (main loop, I/O) during TDLib bursts.
+                tokio::task::yield_now().await;
+            }
+            None => {
+                // No updates available, sleep briefly to avoid busy-wait loop
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                throttle.flush(&notify);
+            }
+        }
+    }
+}
+
+/// Updates a chat known to the store; updates for unknown chats are dropped.
+fn with_chat(store: &Store, chat_id: i64, f: impl FnOnce(&mut Chat)) -> bool {
+    match store.chats().get_mut(&chat_id) {
+        Some(chat) => {
+            f(chat);
+            true
+        }
+        None => false,
+    }
+}
+
+async fn apply(
+    store: &Store,
+    update: Update,
+    auth_tx: &UnboundedSender<AuthorizationState>,
+    notify: &UnboundedSender<Notification>,
+    throttle: &mut Throttle,
+) {
+    let open_chat_id = store.open_chat_id().as_i64();
+    match update {
+        Update::MessageSendSucceeded(update) => {
+            tracing::info!("Message sent: {:?}", update.message.id);
+        }
+        Update::MessageSendAcknowledged(update) => {
+            store.set_last_acknowledged_message_id(update.message_id);
+        }
+        Update::AuthorizationState(update) => {
+            let _ = auth_tx.send(update.authorization_state);
+        }
+        Update::User(update) => {
+            store.users().insert(update.user.id, update.user);
+        }
+        Update::UserStatus(update) => {
+            if let Some(user) = store.users().get_mut(&update.user_id) {
+                user.status = update.status;
+            }
+        }
+        Update::BasicGroup(update) => {
+            store
+                .basic_groups()
+                .insert(update.basic_group.id, update.basic_group);
+        }
+        Update::Supergroup(update) => {
+            store
+                .supergroups()
+                .insert(update.supergroup.id, update.supergroup);
+        }
+        Update::SecretChat(update) => {
+            store
+                .secret_chats()
+                .insert(update.secret_chat.id, update.secret_chat);
+        }
+        Update::NewChat(update) => {
+            let mut chat = update.chat;
+            store.chats().insert(chat.id, chat.clone());
+            let positions = std::mem::take(&mut chat.positions);
+            set_chat_positions(store.chats_index(), &mut chat, positions);
+            throttle.request(notify);
+        }
+        Update::ChatTitle(update) => {
+            if with_chat(store, update.chat_id, |chat| chat.title = update.title) {
+                throttle.request(notify);
+            }
+        }
+        Update::ChatPhoto(update) => {
+            with_chat(store, update.chat_id, |chat| chat.photo = update.photo);
+        }
+        Update::ChatPermissions(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.permissions = update.permissions
+            });
+        }
+        Update::ChatLastMessage(update) => {
+            // Also received when a message is edited
+            let changed = with_chat(store, update.chat_id, |chat| {
+                chat.last_message = update.last_message;
+                set_chat_positions(store.chats_index(), chat, update.positions);
+            });
+            if changed {
+                throttle.request(notify);
+            }
+        }
+        Update::ChatPosition(update) => {
+            if let ChatList::Main = update.position.list {
+                let changed = with_chat(store, update.chat_id, |chat| {
+                    let mut positions: Vec<ChatPosition> = Vec::new();
+                    if update.position.order != 0 {
+                        positions.push(update.position);
+                    }
+                    positions.extend(
+                        chat.positions
+                            .iter()
+                            .filter(|p| !matches!(p.list, ChatList::Main))
+                            .cloned(),
+                    );
+                    set_chat_positions(store.chats_index(), chat, positions);
+                });
+                if changed {
+                    throttle.request(notify);
+                }
+            }
+        }
+        Update::ChatReadInbox(update) => {
+            let changed = with_chat(store, update.chat_id, |chat| {
+                chat.last_read_inbox_message_id = update.last_read_inbox_message_id;
+                chat.unread_count = update.unread_count;
+            });
+            if changed {
+                throttle.request(notify);
+            }
+        }
+        Update::ChatReadOutbox(update) => {
+            let changed = with_chat(store, update.chat_id, |chat| {
+                chat.last_read_outbox_message_id = update.last_read_outbox_message_id;
+            });
+            if changed {
+                throttle.request(notify);
+            }
+        }
+        Update::ChatActionBar(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.action_bar = update.action_bar
+            });
+        }
+        Update::ChatAvailableReactions(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.available_reactions = update.available_reactions
+            });
+        }
+        Update::ChatUnreadMentionCount(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.unread_mention_count = update.unread_mention_count
+            });
+        }
+        Update::MessageMentionRead(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.unread_mention_count = update.unread_mention_count
+            });
+        }
+        Update::ChatReplyMarkup(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.reply_markup_message_id =
+                    update.reply_markup_message.as_ref().map_or(0, |m| m.id);
+            });
+        }
+        Update::ChatDraftMessage(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.draft_message = update.draft_message;
+                set_chat_positions(store.chats_index(), chat, update.positions);
+            });
+        }
+        Update::ChatMessageSender(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.message_sender_id = update.message_sender_id
+            });
+        }
+        Update::ChatMessageAutoDeleteTime(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.message_auto_delete_time = update.message_auto_delete_time
+            });
+        }
+        Update::ChatNotificationSettings(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.notification_settings = update.notification_settings
+            });
+        }
+        Update::ChatPendingJoinRequests(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.pending_join_requests = update.pending_join_requests
+            });
+        }
+        Update::ChatBackground(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.background = update.background
+            });
+        }
+        Update::ChatTheme(update) => {
+            with_chat(store, update.chat_id, |chat| chat.theme = update.theme);
+        }
+        Update::ChatUnreadReactionCount(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.unread_reaction_count = update.unread_reaction_count
+            });
+        }
+        Update::ChatDefaultDisableNotification(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.default_disable_notification = update.default_disable_notification
+            });
+        }
+        Update::ChatIsMarkedAsUnread(update) => {
+            let changed = with_chat(store, update.chat_id, |chat| {
+                chat.is_marked_as_unread = update.is_marked_as_unread;
+            });
+            if changed {
+                throttle.request(notify);
+            }
+        }
+        Update::ChatBlockList(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.block_list = update.block_list
+            });
+        }
+        Update::ChatHasScheduledMessages(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.has_scheduled_messages = update.has_scheduled_messages
+            });
+        }
+        Update::MessageUnreadReactions(update) => {
+            with_chat(store, update.chat_id, |chat| {
+                chat.unread_reaction_count = update.unread_reaction_count
+            });
+        }
+        Update::UserFullInfo(update) => {
+            store
+                .users_full_info()
+                .insert(update.user_id, update.user_full_info);
+        }
+        Update::BasicGroupFullInfo(update) => {
+            store
+                .basic_groups_full_info()
+                .insert(update.basic_group_id, update.basic_group_full_info);
+        }
+        Update::SupergroupFullInfo(update) => {
+            store
+                .supergroups_full_info()
+                .insert(update.supergroup_id, update.supergroup_full_info);
+        }
+        // Only the open chat's messages are cached; updates for other chats are ignored.
+        Update::NewMessage(update) if update.message.chat_id == open_chat_id => {
+            let message = update.message;
+            store
+                .open_chat_messages()
+                .insert_messages(std::iter::once(MessageEntry::from(&message)));
+            let _ = notify.send(Notification::OpenChatMessageAdded(message.id));
+            // Let the main loop process the message before blocking in receive() again.
+            tokio::task::yield_now().await;
+        }
+        Update::MessageContent(update) if update.chat_id == open_chat_id => {
+            if let Some(entry) = store
+                .open_chat_messages()
+                .get_message_mut(update.message_id)
+            {
+                entry.set_message_content(&update.new_content);
+                entry.set_is_edited(true);
+            }
+        }
+        Update::MessageIsPinned(update) if update.chat_id == open_chat_id => {
+            let _ = notify.send(Notification::OpenChatPinsChanged);
+        }
+        Update::DeleteMessages(update) if update.chat_id == open_chat_id => {
+            // from_cache: TDLib evicted messages from its local cache, they were NOT
+            // deleted on the server. Keep them and reload instead.
+            if update.from_cache {
+                tracing::info!(
+                    chat_id = update.chat_id,
+                    count = update.message_ids.len(),
+                    "DeleteMessages from cache, reloading history"
+                );
+                let _ = notify.send(Notification::OpenChatHistoryInvalidated);
+                return;
+            }
+            tracing::info!(
+                chat_id = update.chat_id,
+                count = update.message_ids.len(),
+                "DeleteMessages: removing messages from open chat"
+            );
+            let mut messages = store.open_chat_messages();
+            for id in &update.message_ids {
+                messages.remove_message(*id);
+            }
+            drop(messages);
+            // The chat's last message may have changed
+            throttle.request(notify);
+        }
+        _ => {}
+    }
+}
+
+fn set_chat_positions(
+    mut chats_index: MutexGuard<'_, BTreeSet<OrderedChat>>,
+    chat: &mut Chat,
+    positions: Vec<ChatPosition>,
+) {
+    for position in &chat.positions {
+        if let ChatList::Main = position.list {
+            chats_index.remove(&OrderedChat {
+                position: position.clone(),
+                chat_id: chat.id,
+            });
+        }
+    }
+
+    chat.positions = positions;
+
+    for position in &chat.positions {
+        if let ChatList::Main = position.list {
+            chats_index.insert(OrderedChat {
+                position: position.clone(),
+                chat_id: chat.id,
+            });
+        }
+    }
+}

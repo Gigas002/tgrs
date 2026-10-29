@@ -1,0 +1,407 @@
+use std::str::FromStr;
+
+use crossterm::event::{KeyCode, KeyModifiers};
+use libtgt::model::{TdChatList, TdMessageReplyToMessage};
+use ratatui::layout::Rect;
+
+use crate::{app::error::AppError, ui::component_name::ComponentName};
+
+/// Payload for [`Action::PhotoDecoded`]: message_id and decode result.
+/// [`Eq`] compares message_id and error message only (Ok images are not compared).
+#[derive(Debug, Clone)]
+pub struct PhotoDecodedPayload(pub i64, pub Result<image::DynamicImage, String>);
+
+impl PartialEq for PhotoDecodedPayload {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+            && match (&self.1, &other.1) {
+                (Ok(_), Ok(_)) => true,
+                (Err(a), Err(b)) => a == b,
+                _ => false,
+            }
+    }
+}
+
+impl Eq for PhotoDecodedPayload {}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+/// `Modifiers` is a struct that represents the modifiers of a key event.
+/// It is used to determine the state of the modifiers when a key event is
+/// generated.
+pub struct Modifiers {
+    /// A boolean that represents the shift modifier.
+    pub shift: bool,
+    /// A boolean that represents the control modifier.
+    pub control: bool,
+    /// A boolean that represents the alt modifier.
+    pub alt: bool,
+    /// A boolean that represents the super modifier.
+    pub super_: bool,
+    /// A boolean that represents the hyper modifier.
+    pub hyper: bool,
+    /// A boolean that represents the meta modifier.
+    pub meta: bool,
+}
+/// Implement the `From` trait for `KeyModifiers`
+impl From<KeyModifiers> for Modifiers {
+    fn from(modifiers: KeyModifiers) -> Self {
+        Modifiers {
+            shift: modifiers.contains(KeyModifiers::SHIFT),
+            control: modifiers.contains(KeyModifiers::CONTROL),
+            alt: modifiers.contains(KeyModifiers::ALT),
+            super_: modifiers.contains(KeyModifiers::SUPER),
+            hyper: modifiers.contains(KeyModifiers::HYPER),
+            meta: modifiers.contains(KeyModifiers::META),
+        }
+    }
+}
+/// Implement the `From` trait for `Modifiers`
+impl From<Modifiers> for KeyModifiers {
+    fn from(modifiers: Modifiers) -> Self {
+        let mut key_modifiers = KeyModifiers::empty();
+        if modifiers.shift {
+            key_modifiers.insert(KeyModifiers::SHIFT);
+        }
+        if modifiers.control {
+            key_modifiers.insert(KeyModifiers::CONTROL);
+        }
+        if modifiers.alt {
+            key_modifiers.insert(KeyModifiers::ALT);
+        }
+        if modifiers.super_ {
+            key_modifiers.insert(KeyModifiers::SUPER);
+        }
+        if modifiers.hyper {
+            key_modifiers.insert(KeyModifiers::HYPER);
+        }
+        if modifiers.meta {
+            key_modifiers.insert(KeyModifiers::META);
+        }
+        key_modifiers
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+// Action` is an enum that represents an action that can be handled by the
+/// main application loop and the components of the user interface.
+pub enum Action {
+    /// Unknown action.
+    Unknown,
+    /// Init action.
+    Init,
+    /// Quit action.
+    Quit,
+    /// TryQuit action, it is used to try to quit the application.
+    /// It asks the the core window to confirm the quit action.
+    /// If the prompt is not focused, we can quit.
+    TryQuit,
+    /// Render action.
+    Render,
+    /// Refresh action: requests a TUI redraw (e.g. from a timer so status bar updates).
+    Refresh,
+    /// Resize action with width and height.
+    Resize(u16, u16),
+    /// Paste action with a `String`.
+    Paste(String),
+    /// Focus Lost action.
+    FocusLost,
+    /// Focus Gained action.
+    FocusGained,
+
+    /// GetMe action.
+    GetMe,
+    /// LoadChats action with a `ChatList` and a limit.
+    LoadChats(TdChatList, i32),
+    /// SendMessage action with a `String`.
+    /// The first parameter is the `text`.
+    /// The second parameter is the `reply_to` field.
+    SendMessage(String, Option<TdMessageReplyToMessage>),
+    /// SendMessageEdited action with a `i64` and a `String`.
+    /// The first parameter is the `message_id` and the second parameter is the `text`.
+    SendMessageEdited(i64, String),
+    /// GetChatHistory action (load older messages).
+    GetChatHistory,
+    /// GetChatHistoryNewer action (load newer messages when scrolling near bottom).
+    GetChatHistoryNewer,
+    /// Chat history was appended (from background task); triggers one render.
+    ChatHistoryAppended,
+    /// DeleteMessages action.
+    /// The first parameter is the `message_ids` and the second parameter is the `revoke`.
+    /// If `revoke` is true, the message will be deleted for everyone.
+    /// If `revoke` is false, the message will be deleted only for the current user.
+    DeleteMessages(Vec<i64>, bool),
+    /// ViewAllMessages action.
+    ViewAllMessages,
+
+    /// Focus action with a `ComponentName`.
+    FocusComponent(ComponentName),
+    /// Unfocus action.
+    UnfocusComponent,
+    /// Toggle ChatList action.
+    ToggleChatList,
+    /// Increase ChatList size action.
+    IncreaseChatListSize,
+    /// Decrease ChatList size action.
+    DecreaseChatListSize,
+    /// Increase Prompt size action.
+    IncreasePromptSize,
+    /// Decrease Prompt size action.
+    DecreasePromptSize,
+    /// Key action with a key code.
+    Key(KeyCode, Modifiers),
+    /// Update area action with a rectangular area.
+    UpdateArea(Rect),
+    /// ShowChatWindowReply action.
+    ShowChatWindowReply,
+    /// HideChatWindowReply action.
+    HideChatWindowReply,
+    /// ShowCommandGuide action.
+    ShowCommandGuide,
+    /// HideCommandGuide action.
+    HideCommandGuide,
+
+    /// ChatListNext action.
+    ChatListNext,
+    /// ChatListPrevious action.
+    ChatListPrevious,
+    /// ChatListSelect action.
+    ChatListUnselect,
+    /// ChatListOpen action.
+    ChatListOpen,
+    /// ChatListSortWithString action.
+    ChatListSortWithString(String),
+
+    /// ChatWindowNext action.
+    ChatWindowNext,
+    /// ChatWindowPrevious action.
+    ChatWindowPrevious,
+    /// ChatWindowUnselect action.
+    ChatWindowUnselect,
+    /// ChatWindowDeleteForEveryone action.
+    /// It is used to delete a message for everyone.
+    ChatWindowDeleteForEveryone,
+    /// ChatWindowDeleteForMe action.
+    /// It is used to delete a message only for the current user.
+    ChatWindowDeleteForMe,
+    /// ChatWindowCopy action.
+    ChatWindowCopy,
+    /// ChatWindowEdit action.
+    ChatWindowEdit,
+
+    /// EditMessage action with a `String`.
+    /// This action is used to edit a message.
+    /// The first parameter is the `message_id` and the second parameter is the `text`.
+    EditMessage(i64, String),
+    /// ReplyMessage event with a `String`.
+    /// This event is used to reply to a message.
+    /// The first parameter is the `message_id` and the second parameter is the `text`.
+    ReplyMessage(i64, String),
+    /// ChatListSearch event.
+    /// This event is used to set the prompt to search to set the search string
+    /// for the ChatListWindow.
+    ChatListSearch,
+    /// ChatListRestoreSort event.
+    /// This event is used to restore the default ordering.
+    /// I.e. pinned first then chronological order.
+    ChatListRestoreSort,
+    /// ChatWindowSearch event.
+    /// This event is used to set the prompt to search mode for filtering messages
+    /// in the ChatWindow.
+    ChatWindowSearch,
+    /// ChatWindowSortWithString action.
+    /// This action is used to filter messages in the chat window based on a search string.
+    ChatWindowSortWithString(String),
+    /// ChatWindowRestoreSort event.
+    /// This event is used to restore the default message ordering in the chat window.
+    ChatWindowRestoreSort,
+
+    /// Search chat messages via TDLib (server-side). Query is sent to backend; results via SearchResults.
+    SearchChatMessages(String),
+    /// Search results from TDLib (message IDs + entries for display in search overlay).
+    SearchResults(Vec<libtgt::model::MessageEntry>),
+    /// Jump to a message: load a window around it and select it (for unloaded messages).
+    JumpToMessage(i64),
+    /// Jump completed: ChatWindow should select this message_id.
+    JumpCompleted(i64),
+    /// Close the search overlay (Esc or after jump).
+    CloseSearchOverlay,
+    /// Show the search overlay (open server search UI).
+    ShowSearchOverlay,
+    /// Submit search query (Enter when no results).
+    SearchOverlaySubmit,
+    /// Confirm selection and jump to message (Enter when results exist).
+    SearchOverlayConfirm,
+
+    /// SwitchTheme action.
+    /// This action is used to switch to the next theme in the theme list.
+    SwitchTheme,
+    /// SwitchThemeTo action with a theme name.
+    /// This action is used to switch to a specific theme by name.
+    SwitchThemeTo(String),
+    /// ShowThemeSelector action.
+    /// This action is used to show the theme selector popup.
+    ShowThemeSelector,
+    /// HideThemeSelector action.
+    /// This action is used to hide the theme selector popup.
+    HideThemeSelector,
+
+    /// ShowPhotoViewer action.
+    /// This action is used to show the photo viewer popup.
+    ShowPhotoViewer,
+    /// HidePhotoViewer action.
+    /// This action is used to hide the photo viewer popup.
+    HidePhotoViewer,
+    /// ViewPhotoMessage action with message_id.
+    /// This action is used to view a photo from a message.
+    ViewPhotoMessage(i64),
+    /// PhotoDownloaded action with file path.
+    /// This action is sent when a photo has been downloaded.
+    PhotoDownloaded(String),
+    /// Load photo from path on a background thread (decode off main thread).
+    /// Payload: (path, message_id). Run loop spawns blocking task and sends PhotoDecoded with result.
+    LoadPhotoFromPath(String, i64),
+    /// Photo decoded on background thread; carries message_id and decode result.
+    PhotoDecoded(PhotoDecodedPayload),
+    /// PhotoViewerPrevious action.
+    /// Navigate to previous message in photo viewer.
+    PhotoViewerPrevious,
+    /// PhotoViewerNext action.
+    /// Navigate to next message in photo viewer.
+    PhotoViewerNext,
+
+    /// Load pinned messages for the open chat (TDLib search with pinned filter).
+    LoadPinnedMessages,
+    /// Open the pinned messages popup (Shift+Tab in chat or chat list when pins exist).
+    ShowPinnedMessagesPopup,
+    /// Close the pinned messages popup.
+    HidePinnedMessagesPopup,
+    /// Previous pinned message in the popup (older pin when sorted newest-first).
+    PinnedPopupPrevious,
+    /// Next pinned message in the popup (newer pin when sorted newest-first).
+    PinnedPopupNext,
+    /// Jump to the currently shown pinned message in the chat (then close popup).
+    PinnedPopupConfirmJump,
+    /// View photo for the current pinned message (inserts into open-chat cache if needed).
+    PinnedPopupViewPhoto,
+    /// Play voice/audio for the current pinned message (inserts into cache if needed).
+    PinnedPopupPlayVoice,
+
+    /// StatusMessage: short message to show in the status bar (e.g. "Message yanked").
+    StatusMessage(String),
+    /// Send the prompt contents using the current prompt mode.
+    PromptSendMessage,
+    /// PromptCopy: copy selected text in the prompt (overrides try_quit when prompt focused).
+    PromptCopy,
+
+    /// User requested play/stop voice (focus component resolves selected message and sends PlayVoiceMessage).
+    ToggleVoicePlayback,
+    /// Start or stop voice/audio playback for this message (toggle: if playing this, stop; else start from beginning).
+    PlayVoiceMessage(i64),
+    /// Voice playback actually started (playback thread appended source). Used so UI only shows counter when playback really started.
+    VoicePlaybackStarted(i64),
+    /// Voice playback position update (message_id, position_secs, duration_secs). Used by playback thread.
+    VoicePlaybackPosition(i64, u64, u64),
+    /// Voice playback ended for this message.
+    VoicePlaybackEnded(i64),
+
+    /// Show the file upload explorer popup.
+    ShowFileUploadExplorer,
+    /// Hide the file upload explorer popup.
+    HideFileUploadExplorer,
+
+    /// UploadFile action with a selected local path.
+    UploadFile(String),
+
+    /// Begin save-as flow for the selected chat message (photo or document); chat window resolves message id.
+    StartFileDownload,
+    /// Show the file download explorer for this message id.
+    ShowFileDownloadExplorer(i64),
+    /// Hide the file download explorer popup.
+    HideFileDownloadExplorer,
+    /// Download/copy a Telegram file to `dest_path` (full path including file name).
+    SaveChatFileAs { message_id: i64, dest_path: String },
+}
+/// Implement the `Action` enum.
+impl Action {
+    /// Create an action from a key event.
+    ///
+    /// # Arguments
+    /// * `key` - A `KeyCode` that represents the key code.
+    /// * `modifiers` - A `KeyModifiers` struct that represents the modifiers.
+    ///
+    /// # Returns
+    /// * `Action` - An action.
+    pub fn from_key_event(key: KeyCode, modifiers: KeyModifiers) -> Self {
+        Action::Key(key, Modifiers::from(modifiers))
+    }
+}
+
+/// Implement the `FromStr` trait for `Action`.
+impl FromStr for Action {
+    type Err = AppError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "quit" => Ok(Action::Quit),
+            "try_quit" => Ok(Action::TryQuit),
+            "render" => Ok(Action::Render),
+            "focus_chat_list" => Ok(Action::FocusComponent(ComponentName::ChatList)),
+            "focus_chat" => Ok(Action::FocusComponent(ComponentName::Chat)),
+            "focus_prompt" => Ok(Action::FocusComponent(ComponentName::Prompt)),
+            "unfocus_component" => Ok(Action::UnfocusComponent),
+            "toggle_chat_list" => Ok(Action::ToggleChatList),
+            "increase_chat_list_size" => Ok(Action::IncreaseChatListSize),
+            "decrease_chat_list_size" => Ok(Action::DecreaseChatListSize),
+            "increase_prompt_size" => Ok(Action::IncreasePromptSize),
+            "decrease_prompt_size" => Ok(Action::DecreasePromptSize),
+            "chat_list_next" => Ok(Action::ChatListNext),
+            "chat_list_previous" => Ok(Action::ChatListPrevious),
+            "chat_list_unselect" => Ok(Action::ChatListUnselect),
+            "chat_list_open" => Ok(Action::ChatListOpen),
+            "chat_list_search" => Ok(Action::ChatListSearch),
+            "chat_list_restore_sort" => Ok(Action::ChatListRestoreSort),
+            "chat_window_search" => Ok(Action::ChatWindowSearch),
+            "chat_window_restore_sort" => Ok(Action::ChatWindowRestoreSort),
+            "chat_window_next" => Ok(Action::ChatWindowNext),
+            "chat_window_previous" => Ok(Action::ChatWindowPrevious),
+            "chat_window_unselect" => Ok(Action::ChatWindowUnselect),
+            "chat_window_delete_for_everyone" => Ok(Action::ChatWindowDeleteForEveryone),
+            "chat_window_delete_for_me" => Ok(Action::ChatWindowDeleteForMe),
+            "chat_window_copy" => Ok(Action::ChatWindowCopy),
+            "chat_window_edit" => Ok(Action::ChatWindowEdit),
+            "chat_window_reply" => Ok(Action::ShowChatWindowReply),
+            "show_command_guide" => Ok(Action::ShowCommandGuide),
+            "hide_command_guide" => Ok(Action::HideCommandGuide),
+            "show_theme_selector" => Ok(Action::ShowThemeSelector),
+            "hide_theme_selector" => Ok(Action::HideThemeSelector),
+            "switch_theme" => Ok(Action::SwitchTheme),
+            "prompt_send_message" => Ok(Action::PromptSendMessage),
+            "prompt_copy" => Ok(Action::PromptCopy),
+            "close_search_overlay" => Ok(Action::CloseSearchOverlay),
+            "show_search_overlay" => Ok(Action::ShowSearchOverlay),
+            "search_overlay_submit" => Ok(Action::SearchOverlaySubmit),
+            "search_overlay_confirm" => Ok(Action::SearchOverlayConfirm),
+            "view_photo_message" => Ok(Action::ShowPhotoViewer),
+            "show_photo_viewer" => Ok(Action::ShowPhotoViewer),
+            "hide_photo_viewer" => Ok(Action::HidePhotoViewer),
+            "photo_viewer_previous" => Ok(Action::PhotoViewerPrevious),
+            "photo_viewer_next" => Ok(Action::PhotoViewerNext),
+            "show_file_upload_explorer" => Ok(Action::ShowFileUploadExplorer),
+            "hide_file_upload_explorer" => Ok(Action::HideFileUploadExplorer),
+            "start_file_download" => Ok(Action::StartFileDownload),
+            "hide_file_download_explorer" => Ok(Action::HideFileDownloadExplorer),
+            "load_pinned_messages" => Ok(Action::LoadPinnedMessages),
+            "toggle_chat_pinned_bar" | "show_pinned_messages_popup" => {
+                Ok(Action::ShowPinnedMessagesPopup)
+            }
+            "hide_pinned_messages_popup" => Ok(Action::HidePinnedMessagesPopup),
+            "pinned_popup_previous" => Ok(Action::PinnedPopupPrevious),
+            "pinned_popup_next" => Ok(Action::PinnedPopupNext),
+            "pinned_popup_confirm_jump" => Ok(Action::PinnedPopupConfirmJump),
+            "pinned_popup_view_photo" => Ok(Action::PinnedPopupViewPhoto),
+            "pinned_popup_play_voice" => Ok(Action::PinnedPopupPlayVoice),
+            "play_voice_message" => Ok(Action::ToggleVoicePlayback),
+            _ => Err(AppError::InvalidAction(s.to_string())),
+        }
+    }
+}

@@ -1,0 +1,231 @@
+//! Voice message and audio file playback using rodio.
+//! Runs in a dedicated thread; position updates are sent to the main loop via actions.
+
+use crate::app::action::Action;
+
+#[cfg(feature = "voice-message")]
+mod ogg_opus;
+use std::io::BufReader;
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::time::Duration;
+use tokio::sync::mpsc::UnboundedSender;
+
+#[derive(Debug, Clone, Default)]
+pub struct VoicePlaybackState {
+    pub message_id: Option<i64>,
+    pub position_secs: u64,
+    pub duration_secs: u64,
+    pub is_playing: bool,
+}
+
+#[derive(Debug)]
+pub enum VoicePlaybackCommand {
+    Play {
+        path: String,
+        duration_secs: u64,
+        message_id: i64,
+    },
+    Stop,
+}
+
+/// Spawns the playback thread and returns the command sender.
+/// Returns None if the audio output stream could not be opened (e.g. no ALSA on Linux ARM).
+/// Sink handle and player are created inside the thread (rodio MixerDeviceSink is not Send).
+/// `wake_tx`: signalled when position (or other UI) is updated so the main loop can redraw immediately.
+pub fn spawn_playback_thread(
+    action_tx: UnboundedSender<Action>,
+    wake_tx: tokio::sync::mpsc::UnboundedSender<()>,
+) -> Option<std::sync::mpsc::Sender<VoicePlaybackCommand>> {
+    let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
+
+    std::thread::spawn(move || {
+        let sink_handle = match rodio::DeviceSinkBuilder::open_default_sink() {
+            Ok(h) => h,
+            Err(e) => {
+                tracing::error!("Failed to open default audio stream: {:?}", e);
+                let _ = action_tx.send(Action::StatusMessage("Voice: no audio device".to_string()));
+                return;
+            }
+        };
+        run_playback_loop(cmd_rx, sink_handle, action_tx, wake_tx);
+    });
+
+    Some(cmd_tx)
+}
+
+fn run_playback_loop(
+    cmd_rx: Receiver<VoicePlaybackCommand>,
+    sink_handle: rodio::MixerDeviceSink, // must stay alive for playback
+    action_tx: UnboundedSender<Action>,
+    wake_tx: tokio::sync::mpsc::UnboundedSender<()>,
+) {
+    // Update often enough that the UI can show each second even when the main loop is occasionally slow.
+    const POSITION_UPDATE_INTERVAL_MS: u64 = 250;
+    let timeout = Duration::from_millis(POSITION_UPDATE_INTERVAL_MS);
+
+    // Create a new Player per play/stop so playback actually starts (reusing a stopped player would not play).
+    let mut player = rodio::Player::connect_new(sink_handle.mixer());
+
+    let mut current_message_id: Option<i64> = None;
+    let mut current_duration_secs: u64 = 0;
+    let mut playback_start = std::time::Instant::now(); // rodio 0.14 Sink has no get_pos()
+
+    loop {
+        match cmd_rx.recv_timeout(timeout) {
+            Ok(VoicePlaybackCommand::Play {
+                path,
+                duration_secs,
+                message_id,
+            }) => {
+                current_message_id = Some(message_id);
+                current_duration_secs = duration_secs;
+                // New Player so playback actually starts.
+                player = rodio::Player::connect_new(sink_handle.mixer());
+
+                if path.is_empty() {
+                    let _ =
+                        action_tx.send(Action::StatusMessage("Voice: no file path".to_string()));
+                    let _ = action_tx.send(Action::VoicePlaybackEnded(message_id));
+                    current_message_id = None;
+                } else if let Ok(file) = std::fs::File::open(&path) {
+                    let reader = BufReader::new(file);
+                    // With voice-message: try OGG Opus first (Telegram voice notes), then rodio Decoder. Without: only rodio (MP3, WAV, etc.).
+                    let appended = {
+                        #[cfg(feature = "voice-message")]
+                        {
+                            match crate::audio::ogg_opus::OpusSourceOgg::new(reader) {
+                                Ok(opus_source) => {
+                                    playback_start = std::time::Instant::now();
+                                    player.append(opus_source);
+                                    player.play();
+                                    tracing::info!(
+                                        "Voice: playing OGG Opus, player.empty()={}",
+                                        player.empty()
+                                    );
+                                    let _ =
+                                        action_tx.send(Action::VoicePlaybackStarted(message_id));
+                                    let _ = action_tx.send(Action::VoicePlaybackPosition(
+                                        message_id,
+                                        0,
+                                        duration_secs,
+                                    ));
+                                    true
+                                }
+                                Err(e) => {
+                                    tracing::debug!("Not OGG Opus ({:?}), trying rodio Decoder", e);
+                                    let file = match std::fs::File::open(&path) {
+                                        Ok(f) => f,
+                                        Err(_) => {
+                                            let _ = action_tx.send(Action::StatusMessage(
+                                                "Voice: re-open failed".to_string(),
+                                            ));
+                                            let _ = action_tx
+                                                .send(Action::VoicePlaybackEnded(message_id));
+                                            current_message_id = None;
+                                            continue;
+                                        }
+                                    };
+                                    let reader = BufReader::new(file);
+                                    match rodio::Decoder::try_from(reader) {
+                                        Ok(source) => {
+                                            playback_start = std::time::Instant::now();
+                                            player.append(source);
+                                            player.play();
+                                            tracing::info!(
+                                                "Voice: playing (rodio decoder), player.empty()={}",
+                                                player.empty()
+                                            );
+                                            let _ = action_tx
+                                                .send(Action::VoicePlaybackStarted(message_id));
+                                            let _ = action_tx.send(Action::VoicePlaybackPosition(
+                                                message_id,
+                                                0,
+                                                duration_secs,
+                                            ));
+                                            true
+                                        }
+                                        Err(dec_err) => {
+                                            tracing::error!(
+                                                "Voice decode failed: {} {:?}",
+                                                path,
+                                                dec_err
+                                            );
+                                            let _ = action_tx.send(Action::StatusMessage(
+                                                "Voice: decode failed (not OGG Opus?)".to_string(),
+                                            ));
+                                            false
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        #[cfg(not(feature = "voice-message"))]
+                        {
+                            match rodio::Decoder::try_from(reader) {
+                                Ok(source) => {
+                                    playback_start = std::time::Instant::now();
+                                    player.append(source);
+                                    player.play();
+                                    tracing::info!(
+                                        "Voice: playing (rodio decoder), player.empty()={}",
+                                        player.empty()
+                                    );
+                                    let _ =
+                                        action_tx.send(Action::VoicePlaybackStarted(message_id));
+                                    let _ = action_tx.send(Action::VoicePlaybackPosition(
+                                        message_id,
+                                        0,
+                                        duration_secs,
+                                    ));
+                                    true
+                                }
+                                Err(dec_err) => {
+                                    tracing::error!("Voice decode failed: {} {:?}", path, dec_err);
+                                    let _ = action_tx.send(Action::StatusMessage(
+                                        "Voice: decode failed".to_string(),
+                                    ));
+                                    false
+                                }
+                            }
+                        }
+                    };
+                    if !appended {
+                        let _ = action_tx.send(Action::VoicePlaybackEnded(message_id));
+                        current_message_id = None;
+                    }
+                } else {
+                    tracing::error!("Failed to open audio file: {}", path);
+                    let _ = action_tx
+                        .send(Action::StatusMessage("Voice: cannot open file".to_string()));
+                    let _ = action_tx.send(Action::VoicePlaybackEnded(message_id));
+                    current_message_id = None;
+                }
+            }
+            Ok(VoicePlaybackCommand::Stop) => {
+                // Replace with fresh player so next Play gets a clean player; dropping stops current sound.
+                player = rodio::Player::connect_new(sink_handle.mixer());
+                current_message_id = None;
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                if let Some(msg_id) = current_message_id {
+                    let empty = player.empty();
+                    if empty {
+                        tracing::debug!("Voice: timeout, player empty, sending Ended");
+                        let _ = action_tx.send(Action::VoicePlaybackEnded(msg_id));
+                        current_message_id = None;
+                    } else {
+                        let pos_secs = playback_start.elapsed().as_secs();
+                        tracing::debug!("Voice: position {}s/{}s", pos_secs, current_duration_secs);
+                        let _ = action_tx.send(Action::VoicePlaybackPosition(
+                            msg_id,
+                            pos_secs,
+                            current_duration_secs,
+                        ));
+                        let _ = wake_tx.send(());
+                    }
+                }
+            }
+            Err(RecvTimeoutError::Disconnected) => break,
+        }
+    }
+}
