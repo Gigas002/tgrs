@@ -1,25 +1,22 @@
-/target
-/.data
-/.tgt-dev
-/.log
-/.logs
-tgt.log
-# /.vscode
-/.vscode/settings.json
-result
-outputs/
-result-*
-result
-.direnv
-.envrc
+# Mac OS files
 .DS_Store
+
+# Project specific files
+build/
+.cache
+
+# Rust (workspace)
+/target
+
+# Editors files
+.vscode/
+.idea/
+.cursor/
+.zed/
+.zeditor/
+
+# TDLib built by CI (.github/actions/setup-tdlib)
+/.tdlib
 
 # Developer docs (planning / specs, not for repo)
 /devdocs/
-.autopilot.json
-.cursor/rules/after_each_chat.mdc
-/tmp/*
-
-# Specstory history and Cursor indexing
-.specstory/
-.cursorindexingignore
