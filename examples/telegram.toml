@@ -4,10 +4,8 @@ api_id = "94575"
 api_hash = "a3406de8d171bb422bb6ddf3bbd800e2"
 # The path to the directory for the persistent database; if empty, the current working directory will be used
 # If is not overridden, the database will be in the `tgt` directory.
-# In Linux and MacOS, the path is:
+# The path is:
 # $HOME/tgt/.data/tg
-# In Windows, the path is:
-# C:\Users\YourUsername\tgt\.data\tg
 database_dir = ".data/tg"
 # Pass true to keep information about downloaded and uploaded files between application restarts
 use_file_database = true
@@ -31,12 +29,10 @@ device_model = "Desktop"
 verbosity_level = 2
 # Path to the file to where the internal TDLib log will be written
 # If is not overridden, the log will be in the `tgt` directory.
-# In Linux and MacOS, the path is:
+# The path is:
 # $HOME/tgt/.data/tdlib_rs/tdlib_rs.log
-# In Windows, the path is:
-# C:\Users\YourUsername\tgt\.data\tdlib_rs\tdlib_rs.log
 log_path = ".data/tdlib_rs/tdlib_rs.log"
-# Pass true to additionally redirect stderr to the log file. Ignored on Windows
+# Pass true to additionally redirect stderr to the log file
 redirect_stderr = false
 # =========== proxy ===========
 # Optional proxy for connecting to Telegram. Uncomment and fill in to enable.
