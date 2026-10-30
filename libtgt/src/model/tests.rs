@@ -340,4 +340,164 @@ mod message {
         let entry = MessageEntry::from(&msg);
         assert_eq!(entry.message_content_to_string(), "📹 Video Call");
     }
+
+    fn with_content(content: MessageContent) -> MessageEntry {
+        let mut msg = message_with_entities("", vec![]);
+        msg.content = content;
+        MessageEntry::from(&msg)
+    }
+
+    fn td_file(id: i32, size: i64, path: &str, downloaded: bool) -> tdlib_rs::types::File {
+        tdlib_rs::types::File {
+            id,
+            size,
+            local: tdlib_rs::types::LocalFile {
+                path: path.to_owned(),
+                is_downloading_completed: downloaded,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn document_becomes_media_with_caption() {
+        use tdlib_rs::types::{Document, MessageDocument};
+        let entry = with_content(MessageContent::MessageDocument(MessageDocument {
+            document: Document {
+                file_name: "backup.tar.gz".into(),
+                mime_type: "application/gzip".into(),
+                minithumbnail: None,
+                thumbnail: None,
+                document: td_file(9, 3 * 1024 * 1024, "", false),
+            },
+            caption: FormattedText {
+                text: "weekly".into(),
+                entities: vec![],
+            },
+        }));
+        let media = entry.media().expect("document is media");
+        assert_eq!(media.kind, MediaKind::Document);
+        assert_eq!(media.file.id, 9);
+        assert_eq!(media.suggested_file_name(), "backup.tar.gz");
+        assert_eq!(media.file.downloaded_path(), None);
+        assert_eq!(
+            entry.message_content_to_string(),
+            "📄 backup.tar.gz (3.0 MiB)\nweekly"
+        );
+    }
+
+    #[test]
+    fn video_preview_is_its_still_thumbnail_only() {
+        use tdlib_rs::enums::ThumbnailFormat;
+        use tdlib_rs::types::{MessageVideo, Thumbnail, Video};
+        let video = |format| {
+            with_content(MessageContent::MessageVideo(MessageVideo {
+                video: Video {
+                    duration: 75,
+                    width: 320,
+                    height: 180,
+                    file_name: String::new(),
+                    mime_type: "video/mp4".into(),
+                    has_stickers: false,
+                    supports_streaming: true,
+                    minithumbnail: None,
+                    thumbnail: Some(Thumbnail {
+                        format,
+                        width: 320,
+                        height: 180,
+                        file: td_file(2, 10, "", false),
+                    }),
+                    video: td_file(1, 100, "", false),
+                },
+                alternative_videos: vec![],
+                storyboards: vec![],
+                cover: None,
+                start_timestamp: 0,
+                caption: FormattedText::default(),
+                show_caption_above_media: false,
+                has_spoiler: false,
+                is_secret: false,
+            }))
+        };
+        let entry = video(ThumbnailFormat::Jpeg);
+        let media = entry.media().unwrap();
+        assert_eq!(media.kind, MediaKind::Video);
+        assert_eq!(media.preview.as_ref().map(|f| f.id), Some(2));
+        assert_eq!(media.suggested_file_name(), "video_1.mp4");
+        assert_eq!(entry.message_content_to_string(), "🎥 Video (1:15)");
+
+        // Animated MPEG-4 thumbnails can't be shown as a still image
+        assert_eq!(video(ThumbnailFormat::Mpeg4).media().unwrap().preview, None);
+    }
+
+    #[test]
+    fn photo_previews_itself() {
+        use tdlib_rs::types::{MessagePhoto, Photo, PhotoSize};
+        let size = |id| PhotoSize {
+            photo: td_file(id, 0, "", false),
+            ..Default::default()
+        };
+        let entry = with_content(MessageContent::MessagePhoto(MessagePhoto {
+            photo: Photo {
+                sizes: vec![size(1), size(2)],
+                ..Default::default()
+            },
+            video: None,
+            caption: FormattedText::default(),
+            show_caption_above_media: false,
+            has_spoiler: false,
+            is_secret: false,
+        }));
+        let media = entry.media().unwrap();
+        // The largest size is the last one
+        assert_eq!(media.file.id, 2);
+        assert_eq!(media.preview, Some(media.file.clone()));
+        assert_eq!(media.suggested_file_name(), "photo_2.jpg");
+        assert_eq!(entry.pinned_strip_preview(50), "📷 Photo");
+    }
+
+    #[test]
+    fn downloaded_path_requires_a_complete_file_on_disk() {
+        let dir = std::env::temp_dir();
+        let file = dir.join(format!("libtgt-media-test-{}", std::process::id()));
+        std::fs::write(&file, "x").unwrap();
+        let path = file.to_str().unwrap();
+
+        assert_eq!(
+            MediaFile::from(&td_file(1, 1, path, true)).downloaded_path(),
+            Some(path)
+        );
+        assert_eq!(
+            MediaFile::from(&td_file(1, 1, path, false)).downloaded_path(),
+            None
+        );
+        std::fs::remove_file(&file).unwrap();
+        assert_eq!(
+            MediaFile::from(&td_file(1, 1, path, true)).downloaded_path(),
+            None
+        );
+        // The original name of a downloaded file without one is its cache name
+        let media = Media {
+            kind: MediaKind::Voice,
+            file: MediaFile::from(&td_file(4, 1, "/cache/voice/file_4.oga", true)),
+            file_name: String::new(),
+            mime_type: "audio/ogg".into(),
+            duration_secs: 3,
+            preview: None,
+        };
+        assert_eq!(media.suggested_file_name(), "file_4.oga");
+    }
+
+    #[test]
+    fn sizes_and_durations_are_human_readable() {
+        assert_eq!(format_size(0), "0 B");
+        assert_eq!(format_size(1023), "1023 B");
+        assert_eq!(format_size(1536), "1.5 KiB");
+        assert_eq!(format_size(5 * 1024 * 1024 * 1024), "5.0 GiB");
+        assert_eq!(format_duration(5), "0:05");
+        assert_eq!(format_duration(75), "1:15");
+        assert_eq!(format_duration(3725), "1:02:05");
+        assert_eq!(format_duration(-1), "0:00");
+    }
 }

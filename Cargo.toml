@@ -13,25 +13,18 @@ version = "1.0.0"
 
 [workspace.dependencies]
 arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }
-audiopus = "0.2"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 clap = { version = "4", features = ["derive"] }
 crossterm = { version = "0.29", features = ["event-stream"] }
+dbus-secret-service-keyring-store = { version = "1", features = ["crypto-rust"] }
 futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
+getrandom = "0.4"
 image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
+keyring-core = "1"
 nucleo-matcher = "0.3"
-ogg = "0.9"
 ratatui = "0.30"
 ratatui-explorer = "0.3"
 ratatui-image = { version = "11", default-features = false }
-rodio = { version = "0.23", default-features = false, features = [
-  "playback",
-  "flac",
-  "mp3",
-  "mp4",
-  "vorbis",
-  "wav",
-] }
 serde = { version = "1", features = ["derive"] }
 signal-hook = "0.4"
 tdlib-rs = { git = "https://github.com/Gigas002/tdlib-rs" }

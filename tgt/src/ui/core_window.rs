@@ -3,7 +3,6 @@ use crate::{
     app::context::AppContext,
     app::error::AppError,
     app::event::Event,
-    app::themes::ThemeSwitcher,
     settings::ActionBinding,
     ui::component_name::ComponentName,
     ui::{MAX_CHAT_LIST_SIZE, MAX_PROMPT_SIZE, MIN_CHAT_LIST_SIZE, MIN_PROMPT_SIZE},
@@ -12,13 +11,12 @@ use crate::{
         chat_window::ChatWindow,
         command_guide::CommandGuide,
         component_traits::{Component, HandleFocus},
-        file_download_explorer::FileDownloadExplorer,
         file_upload_explorer::FileUploadExplorer,
-        photo_viewer::PhotoViewer,
+        media_viewer::MediaViewer,
+        message_actions::MessageActions,
         pinned_messages_popup::PinnedMessagesPopup,
         prompt_window::PromptWindow,
         search_overlay::SearchOverlay,
-        theme_selector::ThemeSelector,
     },
 };
 use crossterm::event::{MouseButton, MouseEventKind};
@@ -56,20 +54,8 @@ pub struct CoreWindow {
     focused: bool,
     /// Indicates whether the reply message should be shown.
     show_reply_message: bool,
-    /// Indicates whether the command guide should be shown.
-    show_command_guide: bool,
-    /// Indicates whether the theme selector should be shown.
-    show_theme_selector: bool,
-    /// Indicates whether the search overlay (server-side chat search) should be shown.
-    show_search_overlay: bool,
-    /// Indicates whether the photo viewer should be shown.
-    show_photo_viewer: bool,
-    /// Indicates whether the file upload explorer should be shown.
-    show_file_upload_explorer: bool,
-    /// Indicates whether the file download (save-as) explorer should be shown.
-    show_file_download_explorer: bool,
-    /// Pinned messages browser popup (open chat).
-    show_pinned_messages_popup: bool,
+    /// The popup drawn over the window, if any; only one is shown at a time.
+    active_popup: Option<ComponentName>,
     /// Last known screen areas for focusable sections (chat list, chat, prompt) for click-to-focus.
     last_focusable_areas: HashMap<ComponentName, Rect>,
 }
@@ -115,33 +101,27 @@ impl CoreWindow {
                     .new_boxed(),
             ),
             (
-                ComponentName::ThemeSelector,
-                ThemeSelector::new(Arc::clone(&app_context))
-                    .with_name(ComponentName::ThemeSelector.to_string())
-                    .new_boxed(),
-            ),
-            (
                 ComponentName::SearchOverlay,
                 SearchOverlay::new(Arc::clone(&app_context))
                     .with_name(ComponentName::SearchOverlay.to_string())
                     .new_boxed(),
             ),
             (
-                ComponentName::PhotoViewer,
-                PhotoViewer::new(Arc::clone(&app_context))
-                    .with_name(ComponentName::PhotoViewer.to_string())
+                ComponentName::MessageActions,
+                MessageActions::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::MessageActions.to_string())
+                    .new_boxed(),
+            ),
+            (
+                ComponentName::MediaViewer,
+                MediaViewer::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::MediaViewer.to_string())
                     .new_boxed(),
             ),
             (
                 ComponentName::FileUploadExplorer,
                 FileUploadExplorer::new(Arc::clone(&app_context))
                     .with_name(ComponentName::FileUploadExplorer.to_string())
-                    .new_boxed(),
-            ),
-            (
-                ComponentName::FileDownloadExplorer,
-                FileDownloadExplorer::new(Arc::clone(&app_context))
-                    .with_name(ComponentName::FileDownloadExplorer.to_string())
                     .new_boxed(),
             ),
             (
@@ -164,13 +144,6 @@ impl CoreWindow {
         let component_focused = None;
         let focused = true;
         let show_reply_message = false;
-        let show_command_guide = false;
-        let show_theme_selector = false;
-        let show_search_overlay = false;
-        let show_photo_viewer = false;
-        let show_file_upload_explorer = false;
-        let show_file_download_explorer = false;
-        let show_pinned_messages_popup = false;
         let last_focusable_areas = HashMap::new();
 
         CoreWindow {
@@ -185,13 +158,7 @@ impl CoreWindow {
             component_focused,
             focused,
             show_reply_message,
-            show_command_guide,
-            show_theme_selector,
-            show_search_overlay,
-            show_photo_viewer,
-            show_file_upload_explorer,
-            show_file_download_explorer,
-            show_pinned_messages_popup,
+            active_popup: None,
             last_focusable_areas,
         }
     }
@@ -248,78 +215,90 @@ impl CoreWindow {
         self.size_prompt -= 1;
     }
 
-    /// Hide a specific popup component.
-    ///
-    /// # Arguments
-    /// * `popup_name` - The popup component to hide.
-    fn hide_popup(&mut self, popup_name: ComponentName) {
-        // Determine the hide action for this popup
-        let hide_action = match popup_name {
+    /// The action that tells a popup it is being hidden.
+    fn hide_action(popup: ComponentName) -> Option<Action> {
+        Some(match popup {
             ComponentName::CommandGuide => Action::HideCommandGuide,
-            ComponentName::ThemeSelector => Action::HideThemeSelector,
             ComponentName::SearchOverlay => Action::CloseSearchOverlay,
-            ComponentName::PhotoViewer => Action::HidePhotoViewer,
+            ComponentName::MessageActions => Action::HideMessageActions,
+            ComponentName::MediaViewer => Action::HideMediaViewer,
             ComponentName::FileUploadExplorer => Action::HideFileUploadExplorer,
-            ComponentName::FileDownloadExplorer => Action::HideFileDownloadExplorer,
             ComponentName::PinnedMessagesPopup => Action::HidePinnedMessagesPopup,
-            _ => return, // Not a popup, nothing to do
-        };
+            _ => return None,
+        })
+    }
 
-        // Check if this popup is currently visible
-        let is_visible = match popup_name {
-            ComponentName::CommandGuide => self.show_command_guide,
-            ComponentName::ThemeSelector => self.show_theme_selector,
-            ComponentName::SearchOverlay => self.show_search_overlay,
-            ComponentName::PhotoViewer => self.show_photo_viewer,
-            ComponentName::FileUploadExplorer => self.show_file_upload_explorer,
-            ComponentName::FileDownloadExplorer => self.show_file_download_explorer,
-            ComponentName::PinnedMessagesPopup => self.show_pinned_messages_popup,
-            _ => false,
-        };
+    fn is_popup_visible(&self, popup: ComponentName) -> bool {
+        self.active_popup == Some(popup)
+    }
 
-        if is_visible {
-            // Update the visibility flag
-            match popup_name {
-                ComponentName::CommandGuide => self.show_command_guide = false,
-                ComponentName::ThemeSelector => self.show_theme_selector = false,
-                ComponentName::SearchOverlay => self.show_search_overlay = false,
-                ComponentName::PhotoViewer => self.show_photo_viewer = false,
-                ComponentName::FileUploadExplorer => self.show_file_upload_explorer = false,
-                ComponentName::FileDownloadExplorer => self.show_file_download_explorer = false,
-                ComponentName::PinnedMessagesPopup => self.show_pinned_messages_popup = false,
-                _ => {}
-            }
-
-            // Update and unfocus the component
-            if let Some(component) = self.components.get_mut(&popup_name) {
-                component.update(hide_action);
+    /// Focuses `name` (or nothing) and unfocuses every other component.
+    fn focus_only(&mut self, name: Option<ComponentName>) {
+        self.component_focused = name;
+        self.app_context.set_focused_component(name);
+        for (component_name, component) in self.components.iter_mut() {
+            if Some(*component_name) == name {
+                component.focus();
+            } else {
                 component.unfocus();
             }
         }
     }
 
-    /// Hide all popup components except the one specified.
-    /// This ensures only one popup is visible at a time.
-    ///
-    /// # Arguments
-    /// * `except` - The component name that should remain visible (if it's a popup).
-    fn hide_other_popups(&mut self, except: ComponentName) {
-        // List of all popup components
-        let popups = [
-            ComponentName::CommandGuide,
-            ComponentName::ThemeSelector,
-            ComponentName::SearchOverlay,
-            ComponentName::PhotoViewer,
-            ComponentName::FileUploadExplorer,
-            ComponentName::FileDownloadExplorer,
-            ComponentName::PinnedMessagesPopup,
-        ];
-
-        for popup_name in popups {
-            // Skip the popup we want to keep visible
-            if popup_name != except {
-                self.hide_popup(popup_name);
+    /// Hides `popup` if it is visible, without moving the focus.
+    fn hide_popup(&mut self, popup: ComponentName) {
+        if !self.is_popup_visible(popup) {
+            return;
+        }
+        self.active_popup = None;
+        if let Some(component) = self.components.get_mut(&popup) {
+            if let Some(action) = Self::hide_action(popup) {
+                component.update(action);
             }
+            component.unfocus();
+        }
+    }
+
+    /// Shows `popup` on top of the window and focuses it, so its keymap is active.
+    fn show_popup(&mut self, popup: ComponentName, action: Action) {
+        if let Some(active) = self.active_popup
+            && active != popup
+        {
+            self.hide_popup(active);
+        }
+        self.active_popup = Some(popup);
+        self.focus_only(Some(popup));
+        if let Some(component) = self.components.get_mut(&popup) {
+            component.update(action);
+        }
+    }
+
+    /// Hides `popup` and, when it had the focus, moves the focus to `refocus`.
+    fn close_popup(&mut self, popup: ComponentName, refocus: Option<ComponentName>) {
+        let had_focus = self.component_focused == Some(popup);
+        if self.is_popup_visible(popup) {
+            self.hide_popup(popup);
+        } else if let Some(action) = Self::hide_action(popup)
+            && let Some(component) = self.components.get_mut(&popup)
+        {
+            component.update(action);
+        }
+        if had_focus {
+            self.focus_only(refocus);
+        }
+    }
+
+    /// Shows `popup`, or closes it when it is already visible.
+    fn toggle_popup(
+        &mut self,
+        popup: ComponentName,
+        action: Action,
+        refocus: Option<ComponentName>,
+    ) {
+        if self.is_popup_visible(popup) {
+            self.close_popup(popup, refocus);
+        } else {
+            self.show_popup(popup, action);
         }
     }
 }
@@ -408,33 +387,14 @@ impl Component for CoreWindow {
                     self.hide_popup(prev_focused);
                 }
 
-                self.component_focused = Some(component_name);
-                self.app_context
-                    .set_focused_component(self.component_focused);
-                self.components
-                    .get_mut(&component_name)
-                    .unwrap_or_else(|| panic!("Failed to get component: {component_name}"))
-                    .focus();
-                self.components
-                    .iter_mut()
-                    .filter(|(name, _)| *name != &component_name)
-                    .for_each(|(_, component)| component.unfocus());
+                self.focus_only(Some(component_name));
             }
             Action::UnfocusComponent => {
-                self.component_focused = None;
-                self.app_context.set_focused_component(None);
                 self.show_reply_message = false;
-                // Hide all popups when unfocusing
-                self.show_command_guide = false;
-                self.show_theme_selector = false;
-                self.show_search_overlay = false;
-                self.show_photo_viewer = false;
-                self.show_file_upload_explorer = false;
-                self.show_file_download_explorer = false;
-                self.show_pinned_messages_popup = false;
-                for component in self.components.values_mut() {
-                    component.unfocus();
+                if let Some(popup) = self.active_popup {
+                    self.hide_popup(popup);
                 }
+                self.focus_only(None);
             }
             Action::ToggleChatList => {
                 self.toggle_chat_list();
@@ -460,13 +420,6 @@ impl Component for CoreWindow {
                         .unwrap_or_else(|_| panic!("Failed to send action Quit from CoreWindow"));
                 }
             }
-            Action::ShowChatWindowReply => {
-                // Reply uses the prompt only (same as edit). Do not set show_reply_message.
-                // Dispatch to Chat so reply_selected() runs and sends FocusComponent(Prompt) + ReplyMessage.
-                if let Some(component) = self.components.get_mut(&ComponentName::Chat) {
-                    component.update(action.clone());
-                }
-            }
             Action::HideChatWindowReply => {
                 self.show_reply_message = false;
                 self.app_context
@@ -474,246 +427,41 @@ impl Component for CoreWindow {
                     .set_reply_message_i64(-1, String::new());
             }
             Action::ShowCommandGuide => {
-                // Toggle command guide: if already visible, hide it; otherwise show it
-                if self.show_command_guide {
-                    self.show_command_guide = false;
-                    if let Some(component) = self.components.get_mut(&ComponentName::CommandGuide) {
-                        component.update(Action::HideCommandGuide);
-                    }
-                    // Unfocus when hiding
-                    self.component_focused = None;
-                    self.app_context.set_focused_component(None);
-                } else {
-                    // Hide all other popup components before showing this one
-                    self.hide_other_popups(ComponentName::CommandGuide);
-
-                    self.show_command_guide = true;
-                    // Focus the command guide so its keymap is active
-                    self.component_focused = Some(ComponentName::CommandGuide);
-                    self.app_context
-                        .set_focused_component(self.component_focused);
-                    if let Some(component) = self.components.get_mut(&ComponentName::CommandGuide) {
-                        component.focus();
-                        component.update(action.clone());
-                    }
-                    // Unfocus other components
-                    self.components
-                        .iter_mut()
-                        .filter(|(name, _)| *name != &ComponentName::CommandGuide)
-                        .for_each(|(_, component)| component.unfocus());
+                self.toggle_popup(ComponentName::CommandGuide, action, None);
+            }
+            Action::HideCommandGuide => self.close_popup(ComponentName::CommandGuide, None),
+            Action::ShowMessageActionsFor(_) => {
+                self.show_popup(ComponentName::MessageActions, action);
+            }
+            Action::HideMessageActions => {
+                self.close_popup(ComponentName::MessageActions, Some(ComponentName::Chat));
+            }
+            Action::ShowMediaViewer(_) => self.show_popup(ComponentName::MediaViewer, action),
+            Action::HideMediaViewer => {
+                self.close_popup(ComponentName::MediaViewer, Some(ComponentName::Chat));
+            }
+            Action::RunMessageCommand(..) => {
+                // From the message actions menu, which may still be focused
+                if let Some(chat) = self.components.get_mut(&ComponentName::Chat) {
+                    chat.update(action);
                 }
             }
-            Action::HideCommandGuide => {
-                self.show_command_guide = false;
-                if let Some(component) = self.components.get_mut(&ComponentName::CommandGuide) {
-                    component.update(action.clone());
-                }
-                // Unfocus when hiding
-                if self.component_focused == Some(ComponentName::CommandGuide) {
-                    self.component_focused = None;
-                    self.app_context.set_focused_component(None);
-                }
-            }
-            Action::ShowThemeSelector => {
-                // Toggle theme selector: if already visible, hide it; otherwise show it
-                if self.show_theme_selector {
-                    self.show_theme_selector = false;
-                    if let Some(component) = self.components.get_mut(&ComponentName::ThemeSelector)
-                    {
-                        component.update(Action::HideThemeSelector);
-                    }
-                    // Unfocus when hiding
-                    self.component_focused = None;
-                    self.app_context.set_focused_component(None);
-                } else {
-                    // Hide all other popup components before showing this one
-                    self.hide_other_popups(ComponentName::ThemeSelector);
-
-                    self.show_theme_selector = true;
-                    // Focus the theme selector so its keymap is active
-                    self.component_focused = Some(ComponentName::ThemeSelector);
-                    self.app_context
-                        .set_focused_component(self.component_focused);
-                    if let Some(component) = self.components.get_mut(&ComponentName::ThemeSelector)
-                    {
-                        component.focus();
-                        component.update(action.clone());
-                    }
-                    // Unfocus other components
-                    self.components
-                        .iter_mut()
-                        .filter(|(name, _)| *name != &ComponentName::ThemeSelector)
-                        .for_each(|(_, component)| component.unfocus());
-                }
-            }
-            Action::HideThemeSelector => {
-                self.show_theme_selector = false;
-                if let Some(component) = self.components.get_mut(&ComponentName::ThemeSelector) {
-                    component.update(action.clone());
-                }
-                // Unfocus when hiding
-                if self.component_focused == Some(ComponentName::ThemeSelector) {
-                    self.component_focused = None;
-                    self.app_context.set_focused_component(None);
-                }
-            }
-            Action::ViewPhotoMessage(_) => {
-                // Hide all other popup components before showing photo viewer
-                self.hide_other_popups(ComponentName::PhotoViewer);
-
-                self.show_photo_viewer = true;
-                // Focus the photo viewer so its keymap is active
-                self.component_focused = Some(ComponentName::PhotoViewer);
-                self.app_context
-                    .set_focused_component(self.component_focused);
-                if let Some(component) = self.components.get_mut(&ComponentName::PhotoViewer) {
-                    component.focus();
-                    component.update(action.clone());
-                } else {
-                    tracing::error!("PhotoViewer component not found!");
-                    if let Some(tx) = self.action_tx.as_ref() {
-                        let _ =
-                            tx.send(Action::StatusMessage("Photo viewer not available.".into()));
-                    }
-                }
-                // Unfocus other components
-                self.components
-                    .iter_mut()
-                    .filter(|(name, _)| *name != &ComponentName::PhotoViewer)
-                    .for_each(|(_, component)| component.unfocus());
-            }
-            Action::PhotoViewerPrevious | Action::PhotoViewerNext => {
-                // Forward navigation actions to ChatWindow to handle message selection
-                // ChatWindow will respond by sending ViewPhotoMessage with the new message_id
-                if let Some(chat_window) = self.components.get_mut(&ComponentName::Chat) {
-                    chat_window.update(action);
-                }
-            }
-            Action::HidePhotoViewer => {
-                self.show_photo_viewer = false;
-                if let Some(component) = self.components.get_mut(&ComponentName::PhotoViewer) {
-                    component.update(action.clone());
-                }
-                // Unfocus PhotoViewer and refocus Chat
-                if self.component_focused == Some(ComponentName::PhotoViewer) {
-                    self.component_focused = Some(ComponentName::Chat);
-                    self.app_context
-                        .set_focused_component(self.component_focused);
-                    // Focus Chat and unfocus other components
-                    self.components
-                        .get_mut(&ComponentName::Chat)
-                        .unwrap()
-                        .focus();
-                    self.components
-                        .iter_mut()
-                        .filter(|(name, _)| *name != &ComponentName::Chat)
-                        .for_each(|(_, component)| component.unfocus());
+            #[cfg(feature = "media-preview")]
+            Action::PreviewDecoded(_) => {
+                if let Some(viewer) = self.components.get_mut(&ComponentName::MediaViewer) {
+                    viewer.update(action);
                 }
             }
             Action::ShowFileUploadExplorer => {
-                if self.show_file_upload_explorer {
-                    // Toggle off.
-                    self.show_file_upload_explorer = false;
-                    if let Some(component) =
-                        self.components.get_mut(&ComponentName::FileUploadExplorer)
-                    {
-                        component.update(Action::HideFileUploadExplorer);
-                    }
-                    if self.component_focused == Some(ComponentName::FileUploadExplorer) {
-                        self.component_focused = Some(ComponentName::Chat);
-                        self.app_context
-                            .set_focused_component(self.component_focused);
-                    }
-                } else {
-                    // Hide other popups before showing this one.
-                    self.hide_other_popups(ComponentName::FileUploadExplorer);
-
-                    self.show_file_upload_explorer = true;
-                    self.component_focused = Some(ComponentName::FileUploadExplorer);
-                    self.app_context
-                        .set_focused_component(self.component_focused);
-
-                    if let Some(component) =
-                        self.components.get_mut(&ComponentName::FileUploadExplorer)
-                    {
-                        component.focus();
-                        component.update(action.clone());
-                    }
-
-                    // Unfocus other components.
-                    self.components
-                        .iter_mut()
-                        .filter(|(name, _)| *name != &ComponentName::FileUploadExplorer)
-                        .for_each(|(_, component)| component.unfocus());
-                }
+                self.toggle_popup(
+                    ComponentName::FileUploadExplorer,
+                    action,
+                    Some(ComponentName::Chat),
+                );
             }
-
             Action::HideFileUploadExplorer => {
-                self.show_file_upload_explorer = false;
-                if let Some(component) = self.components.get_mut(&ComponentName::FileUploadExplorer)
-                {
-                    component.update(action.clone());
-                }
-
-                if self.component_focused == Some(ComponentName::FileUploadExplorer) {
-                    self.component_focused = Some(ComponentName::Chat);
-                    self.app_context
-                        .set_focused_component(self.component_focused);
-                    if let Some(chat) = self.components.get_mut(&ComponentName::Chat) {
-                        chat.focus();
-                    }
-                    self.components
-                        .iter_mut()
-                        .filter(|(name, _)| *name != &ComponentName::Chat)
-                        .for_each(|(_, component)| component.unfocus());
-                }
+                self.close_popup(ComponentName::FileUploadExplorer, Some(ComponentName::Chat));
             }
-
-            Action::ShowFileDownloadExplorer(message_id) => {
-                self.hide_other_popups(ComponentName::FileDownloadExplorer);
-
-                self.show_file_download_explorer = true;
-                self.component_focused = Some(ComponentName::FileDownloadExplorer);
-                self.app_context
-                    .set_focused_component(self.component_focused);
-
-                if let Some(component) = self
-                    .components
-                    .get_mut(&ComponentName::FileDownloadExplorer)
-                {
-                    component.focus();
-                    component.update(Action::ShowFileDownloadExplorer(message_id));
-                }
-
-                self.components
-                    .iter_mut()
-                    .filter(|(name, _)| *name != &ComponentName::FileDownloadExplorer)
-                    .for_each(|(_, component)| component.unfocus());
-            }
-
-            Action::HideFileDownloadExplorer => {
-                self.show_file_download_explorer = false;
-                if let Some(component) = self
-                    .components
-                    .get_mut(&ComponentName::FileDownloadExplorer)
-                {
-                    component.update(action.clone());
-                }
-
-                if self.component_focused == Some(ComponentName::FileDownloadExplorer) {
-                    self.component_focused = Some(ComponentName::Chat);
-                    self.app_context
-                        .set_focused_component(self.component_focused);
-                    if let Some(chat) = self.components.get_mut(&ComponentName::Chat) {
-                        chat.focus();
-                    }
-                    self.components
-                        .iter_mut()
-                        .filter(|(name, _)| *name != &ComponentName::Chat)
-                        .for_each(|(_, component)| component.unfocus());
-                }
-            }
-
             Action::ShowPinnedMessagesPopup => {
                 if self
                     .app_context
@@ -723,63 +471,16 @@ impl Component for CoreWindow {
                 {
                     return;
                 }
-                self.hide_other_popups(ComponentName::PinnedMessagesPopup);
-                self.show_pinned_messages_popup = true;
-                self.component_focused = Some(ComponentName::PinnedMessagesPopup);
-                self.app_context
-                    .set_focused_component(self.component_focused);
-                if let Some(component) =
-                    self.components.get_mut(&ComponentName::PinnedMessagesPopup)
-                {
-                    component.focus();
-                    component.update(action.clone());
-                }
-                self.components
-                    .iter_mut()
-                    .filter(|(name, _)| *name != &ComponentName::PinnedMessagesPopup)
-                    .for_each(|(_, component)| component.unfocus());
+                self.show_popup(ComponentName::PinnedMessagesPopup, action);
             }
             Action::HidePinnedMessagesPopup => {
-                self.show_pinned_messages_popup = false;
-                if let Some(component) =
-                    self.components.get_mut(&ComponentName::PinnedMessagesPopup)
-                {
-                    component.update(action.clone());
-                }
-                if self.component_focused == Some(ComponentName::PinnedMessagesPopup) {
-                    self.component_focused = Some(ComponentName::Chat);
-                    self.app_context
-                        .set_focused_component(self.component_focused);
-                    self.components
-                        .get_mut(&ComponentName::Chat)
-                        .unwrap()
-                        .focus();
-                    self.components
-                        .iter_mut()
-                        .filter(|(name, _)| *name != &ComponentName::Chat)
-                        .for_each(|(_, component)| component.unfocus());
-                }
-            }
-            Action::SwitchTheme => {
-                let mut switcher = ThemeSwitcher::from_context(&self.app_context);
-                if switcher.next_theme().is_some()
-                    && switcher.apply_current_theme(&self.app_context).is_ok()
-                {
-                    self.app_context.mark_dirty();
-                } else {
-                    tracing::error!("Failed to switch theme");
-                }
-            }
-            Action::SwitchThemeTo(theme_name) => {
-                // Apply the specified theme directly using static method
-                if ThemeSwitcher::apply_theme(&self.app_context, &theme_name).is_ok() {
-                    self.app_context.mark_dirty();
-                } else {
-                    tracing::error!("Failed to switch theme to {}", theme_name);
-                }
+                self.close_popup(
+                    ComponentName::PinnedMessagesPopup,
+                    Some(ComponentName::Chat),
+                );
             }
             Action::Key(key_code, modifiers) => {
-                // Note: Popup components (CommandGuide, ThemeSelector, SearchOverlay) are now focusable and use keymaps.
+                // Note: Popup components are focusable and use keymaps.
                 // Key events are routed to the focused component via the keymap system in run.rs.
                 // Send key events to focused component
                 if let Some(focused) = self.component_focused {
@@ -792,14 +493,7 @@ impl Component for CoreWindow {
             }
             Action::ChatListSearch => {
                 // If search overlay is open, close it first then focus ChatList
-                if self.show_search_overlay {
-                    self.show_search_overlay = false;
-                    if let Some(component) = self.components.get_mut(&ComponentName::SearchOverlay)
-                    {
-                        component.update(Action::CloseSearchOverlay);
-                        component.unfocus();
-                    }
-                }
+                self.hide_popup(ComponentName::SearchOverlay);
                 // Activate ChatList search when ChatList is focused, nothing focused, or Chat focused
                 let should_activate_search = match self.component_focused {
                     None => true,
@@ -812,69 +506,24 @@ impl Component for CoreWindow {
 
                 if should_activate_search {
                     // Focus ChatList and activate search mode
-                    self.component_focused = Some(ComponentName::ChatList);
-                    self.app_context
-                        .set_focused_component(self.component_focused);
-                    self.components
-                        .get_mut(&ComponentName::ChatList)
-                        .unwrap_or_else(|| {
-                            panic!("Failed to get component: {}", ComponentName::ChatList)
-                        })
-                        .focus();
-                    self.components
-                        .iter_mut()
-                        .filter(|(name, _)| *name != &ComponentName::ChatList)
-                        .for_each(|(_, component)| component.unfocus());
-                    // Activate search mode
+                    self.focus_only(Some(ComponentName::ChatList));
                     if let Some(component) = self.components.get_mut(&ComponentName::ChatList) {
                         component.update(action.clone());
                     }
                 }
             }
             Action::ChatWindowSearch => {
-                // Hide all other popup components before showing this one
-                self.hide_other_popups(ComponentName::SearchOverlay);
-
                 // Show server-side search overlay and focus it
-                self.show_search_overlay = true;
-                if let Some(component) = self.components.get_mut(&ComponentName::SearchOverlay) {
-                    component.update(Action::ShowSearchOverlay);
-                    component.focus();
-                }
-                self.component_focused = Some(ComponentName::SearchOverlay);
-                self.app_context
-                    .set_focused_component(self.component_focused);
-                self.components
-                    .iter_mut()
-                    .filter(|(name, _)| *name != &ComponentName::SearchOverlay)
-                    .for_each(|(_, component)| component.unfocus());
+                self.show_popup(ComponentName::SearchOverlay, Action::ShowSearchOverlay);
             }
             Action::CloseSearchOverlay => {
-                self.show_search_overlay = false;
-                if let Some(component) = self.components.get_mut(&ComponentName::SearchOverlay) {
-                    component.update(Action::CloseSearchOverlay);
-                    component.unfocus();
-                }
-                // Unfocus when hiding
-                if self.component_focused == Some(ComponentName::SearchOverlay) {
-                    self.component_focused = None;
-                    self.app_context.set_focused_component(None);
-                }
+                self.hide_popup(ComponentName::SearchOverlay);
                 // Refocus Chat after closing search
-                self.component_focused = Some(ComponentName::Chat);
-                self.app_context
-                    .set_focused_component(self.component_focused);
-                if let Some(component) = self.components.get_mut(&ComponentName::Chat) {
-                    component.focus();
-                }
-                self.components
-                    .iter_mut()
-                    .filter(|(name, _)| *name != &ComponentName::Chat)
-                    .for_each(|(_, component)| component.unfocus());
+                self.focus_only(Some(ComponentName::Chat));
             }
             Action::SearchResults(_) => {
                 // Propagate to SearchOverlay when visible
-                if self.show_search_overlay
+                if self.is_popup_visible(ComponentName::SearchOverlay)
                     && let Some(component) = self.components.get_mut(&ComponentName::SearchOverlay)
                 {
                     component.update(action.clone());
@@ -1037,76 +686,11 @@ impl Component for CoreWindow {
             .unwrap_or_else(|| panic!("Failed to get component: {}", ComponentName::Prompt))
             .draw(frame, sub_core_layout[2])?;
 
-        // Draw command guide popup if visible (draws on top of everything)
-        if self.show_command_guide {
+        // Draw the popup on top of everything
+        if let Some(popup) = self.active_popup {
             self.components
-                .get_mut(&ComponentName::CommandGuide)
-                .unwrap_or_else(|| {
-                    panic!("Failed to get component: {}", ComponentName::CommandGuide)
-                })
-                .draw(frame, area)?;
-        }
-
-        if self.show_theme_selector {
-            self.components
-                .get_mut(&ComponentName::ThemeSelector)
-                .unwrap_or_else(|| {
-                    panic!("Failed to get component: {}", ComponentName::ThemeSelector)
-                })
-                .draw(frame, area)?;
-        }
-
-        if self.show_search_overlay {
-            self.components
-                .get_mut(&ComponentName::SearchOverlay)
-                .unwrap_or_else(|| {
-                    panic!("Failed to get component: {}", ComponentName::SearchOverlay)
-                })
-                .draw(frame, area)?;
-        }
-
-        if self.show_photo_viewer {
-            self.components
-                .get_mut(&ComponentName::PhotoViewer)
-                .unwrap_or_else(|| {
-                    panic!("Failed to get component: {}", ComponentName::PhotoViewer)
-                })
-                .draw(frame, area)?;
-        }
-
-        if self.show_file_upload_explorer {
-            self.components
-                .get_mut(&ComponentName::FileUploadExplorer)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Failed to get component: {}",
-                        ComponentName::FileUploadExplorer
-                    )
-                })
-                .draw(frame, area)?;
-        }
-
-        if self.show_file_download_explorer {
-            self.components
-                .get_mut(&ComponentName::FileDownloadExplorer)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Failed to get component: {}",
-                        ComponentName::FileDownloadExplorer
-                    )
-                })
-                .draw(frame, area)?;
-        }
-
-        if self.show_pinned_messages_popup {
-            self.components
-                .get_mut(&ComponentName::PinnedMessagesPopup)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Failed to get component: {}",
-                        ComponentName::PinnedMessagesPopup
-                    )
-                })
+                .get_mut(&popup)
+                .unwrap_or_else(|| panic!("Failed to get component: {popup}"))
                 .draw(frame, area)?;
         }
 

@@ -11,7 +11,7 @@ use libtgt::client::{Proxy, ProxyKind, TdLogging, TdParams};
 
 use crate::{
     config::{
-        self, ConfigError, FileConfig, LogLevel, ProxyFile, ProxyType, Rotation,
+        self, ConfigError, CredentialStore, FileConfig, LogLevel, ProxyFile, ProxyType, Rotation,
         theme::{self as theme_file, ThemeSource},
     },
     utils::{self, AppDirs, PathsError, XdgDirs},
@@ -36,14 +36,11 @@ pub const API_HASH_ENV: &str = "API_HASH";
 pub const DEFAULT_API_ID: i32 = 94575;
 pub const DEFAULT_API_HASH: &str = "a3406de8d171bb422bb6ddf3bbd800e2";
 pub const DEFAULT_FRAME_RATE: f64 = 60.0;
-pub const DEFAULT_PHOTO_MAX_DIMENSION: u32 = 1920;
-pub const DEFAULT_PHOTO_VIEWER_POPUP_SIZE: f32 = 0.8;
+pub const DEFAULT_PREVIEW_MAX_DIMENSION: u32 = 1920;
+pub const DEFAULT_MEDIA_VIEWER_POPUP_SIZE: f32 = 0.8;
 pub const DEFAULT_LOG_KEEP: usize = 7;
 pub const DEFAULT_TDLIB_VERBOSITY: i32 = 2;
 pub const DEFAULT_PROXY_PORT: i32 = 1080;
-
-/// File in the state directory that remembers the theme picked in the UI.
-pub const THEME_STATE_FILE: &str = "theme";
 
 /// Values taken from the command line, already converted from `clap` types.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -85,8 +82,8 @@ pub struct Settings {
     pub tdlib_log: TdLogging,
     pub keymap: Keymap,
     pub theme: Theme,
-    /// Every theme the UI can switch to.
-    pub themes: Vec<(String, ThemeSource)>,
+    /// Where the key of the encrypted TDLib database is kept.
+    pub credentials: CredentialStore,
     pub command: Command,
 }
 
@@ -99,13 +96,6 @@ pub struct Dirs {
     pub state: PathBuf,
 }
 
-impl Dirs {
-    /// Where the theme picked in the UI is remembered.
-    pub fn theme_state_file(&self) -> PathBuf {
-        self.state.join(THEME_STATE_FILE)
-    }
-}
-
 /// `[app]`, resolved.
 #[derive(Debug, Clone, PartialEq)]
 pub struct App {
@@ -116,10 +106,12 @@ pub struct App {
     pub show_title_bar: bool,
     pub theme_enable: bool,
     pub use_emoji_icons: bool,
-    /// Longer side of displayed photos in pixels; 0 disables downscaling.
-    pub photo_max_dimension: u32,
-    /// Photo viewer size as a fraction of the terminal (0.01–1.0).
-    pub photo_viewer_popup_size: f32,
+    /// Where downloaded media is saved.
+    pub download_dir: PathBuf,
+    /// Longer side of media previews in pixels; 0 disables downscaling.
+    pub preview_max_dimension: u32,
+    /// Media viewer size as a fraction of the terminal (0.01–1.0).
+    pub media_viewer_popup_size: f32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -205,7 +197,9 @@ impl Settings {
             },
         };
 
-        let app = resolve_app(&file)?;
+        let download_dir = from_config("app.download_dir", file.app.download_dir.clone())?
+            .unwrap_or_else(|| xdg.download_dir.clone());
+        let app = resolve_app(&file, download_dir)?;
         let telegram = resolve_telegram(&file, &dirs, &cli.command, &lookup, &from_config)?;
         let tdlib_log = TdLogging {
             verbosity_level: file
@@ -223,7 +217,7 @@ impl Settings {
         )?;
 
         let themes = theme_file::discover(&dirs.config);
-        let theme = resolve_theme(&themes, cli.theme.or(file.app.theme), &dirs)?;
+        let theme = resolve_theme(&themes, cli.theme.or(file.app.theme))?;
 
         Ok(Self {
             dirs,
@@ -233,7 +227,7 @@ impl Settings {
             tdlib_log,
             keymap,
             theme,
-            themes,
+            credentials: file.credentials.store.unwrap_or_default(),
             command: cli.command,
         })
     }
@@ -246,14 +240,9 @@ impl Settings {
         })
         .expect("default settings resolve")
     }
-
-    /// Loads a theme by name from [`Settings::themes`].
-    pub fn load_theme(&self, name: &str) -> Result<Theme, SettingsError> {
-        load_theme(&self.themes, name)
-    }
 }
 
-fn resolve_app(file: &FileConfig) -> Result<App, SettingsError> {
+fn resolve_app(file: &FileConfig, download_dir: PathBuf) -> Result<App, SettingsError> {
     let app = &file.app;
     let frame_rate = app.frame_rate.unwrap_or(DEFAULT_FRAME_RATE);
     if frame_rate <= 0.0 || !frame_rate.is_finite() {
@@ -267,12 +256,13 @@ fn resolve_app(file: &FileConfig) -> Result<App, SettingsError> {
         show_title_bar: app.show_title_bar.unwrap_or(true),
         theme_enable: app.theme_enable.unwrap_or(true),
         use_emoji_icons: app.use_emoji_icons.unwrap_or(false),
-        photo_max_dimension: app
-            .photo_max_dimension
-            .unwrap_or(DEFAULT_PHOTO_MAX_DIMENSION),
-        photo_viewer_popup_size: app
-            .photo_viewer_popup_size
-            .unwrap_or(DEFAULT_PHOTO_VIEWER_POPUP_SIZE)
+        download_dir,
+        preview_max_dimension: app
+            .preview_max_dimension
+            .unwrap_or(DEFAULT_PREVIEW_MAX_DIMENSION),
+        media_viewer_popup_size: app
+            .media_viewer_popup_size
+            .unwrap_or(DEFAULT_MEDIA_VIEWER_POPUP_SIZE)
             .clamp(0.01, 1.0),
     })
 }
@@ -314,6 +304,8 @@ where
         api_hash,
         database_dir: from_config("telegram.database_dir", tg.database_dir.clone())?
             .unwrap_or_else(|| dirs.data.join("tdlib")),
+        // Read from the keychain at startup, not from config files
+        database_encryption_key: String::new(),
         use_file_database: tg.use_file_database.unwrap_or(true),
         use_chat_info_database: tg.use_chat_info_database.unwrap_or(true),
         use_message_database,
@@ -350,21 +342,13 @@ fn resolve_proxy(proxy: &ProxyFile) -> Option<Proxy> {
     })
 }
 
-/// An explicit theme (CLI or config) must exist; the remembered one falls
-/// back to the default when its file is gone.
+/// An explicit theme (CLI or config) must exist; otherwise the default one
+/// is used when present.
 fn resolve_theme(
     themes: &[(String, ThemeSource)],
     explicit: Option<String>,
-    dirs: &Dirs,
 ) -> Result<Theme, SettingsError> {
-    if let Some(name) = explicit {
-        return load_theme(themes, &name);
-    }
-    let remembered = std::fs::read_to_string(dirs.theme_state_file())
-        .ok()
-        .map(|name| name.trim().to_owned())
-        .filter(|name| themes.iter().any(|(theme, _)| theme == name));
-    match remembered {
+    match explicit {
         Some(name) => load_theme(themes, &name),
         None if themes.iter().any(|(name, _)| name == DEFAULT_THEME) => {
             load_theme(themes, DEFAULT_THEME)

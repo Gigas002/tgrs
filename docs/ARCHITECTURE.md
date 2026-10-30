@@ -9,7 +9,7 @@ This document defines how Rust projects in this workspace are structured, how co
 | Crate | Kind | Responsibility |
 | ----- | ---- | -------------- |
 | `libtgt` | library | Telegram client on top of [tdlib-rs](https://github.com/Gigas002/tdlib-rs): `client/` (TDLib requests, authorization through the `Authenticator` trait, the update loop emitting `Notification`s), `store/` (chats, users and open-chat state shared with the UI), `model/` (UI-agnostic chat and message types). No CLI, settings, logging setup or rendering. |
-| `tgt` | binary | `cli/`, `config/`, `settings/`, `logger/`, `app/` (run loop, subcommands, terminal login, theme switching), `audio/` (rodio playback, behind the `audio` feature), `ui/` (ratatui components), `utils/` (XDG paths). |
+| `tgt` | binary | `cli/`, `config/`, `settings/`, `logger/`, `app/` (run loop, subcommands, terminal login, keychain policy, background media tasks), `credentials/` (TDLib database key in the system keychain, behind the `keychain` feature), `media/` (opening files with `xdg-open`, saving downloads), `ui/` (ratatui components; media previews behind the `media-preview` feature), `utils/` (XDG paths). |
 
 Data flow at runtime:
 
@@ -23,14 +23,15 @@ TDLib ──updates──▶ libtgt::client ──writes──▶ libtgt::store 
 
 Settings precedence is `CLI > environment (TGT_CONFIG_DIR, API_ID, API_HASH) > config.toml > defaults`.
 Files live in XDG directories: config in `$XDG_CONFIG_HOME/tgt`, the TDLib database in
-`$XDG_DATA_HOME/tgt/tdlib`, logs and the remembered theme in `$XDG_STATE_HOME/tgt`.
+`$XDG_DATA_HOME/tgt/tdlib` (encrypted with a key from the keychain), logs in `$XDG_STATE_HOME/tgt`.
+Settings are only changed by editing these files; the UI never writes them.
 
 UI component tests need access to private component state, so they are child modules of
 each component, kept in `ui/tests/<element>.rs` (attached with `#[path]`); shared test
 helpers are in `ui/tests/mod.rs`.
 
-Native libraries are linked from the system: TDLib (`tdjson`, found with `pkg-config`),
-ALSA (`audio`), libopus (`voice-message`) and chafa (`chafa-dyn`). CI builds TDLib at
+Native libraries are linked from the system: TDLib (`tdjson`, found with `pkg-config`)
+and libdbus (`keychain`). Media is played by external programs through `xdg-open`. CI builds TDLib at
 the pinned commit with `.github/actions/setup-tdlib`. Tests run with
 `--test-threads=1`.
 

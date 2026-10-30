@@ -20,15 +20,18 @@
 # Apply theme colors; false uses the terminal's defaults.
 # theme_enable = true
 # Theme name: a file in themes/ without `.toml`, bundled or user-provided.
-# When unset, the theme last picked in the UI is used, then "theme".
 # theme = "theme"
 # Use emoji for message status (edited, reply, sent, seen) instead of
 # ASCII indicators ([edited], <-- reply, [✓] sent, [o o] seen).
 # use_emoji_icons = false
-# Longer side of displayed photos, in pixels; 0 disables downscaling.
-# photo_max_dimension = 1920
-# Photo viewer popup size as a fraction of the terminal (clamped to 0.01–1.0).
-# photo_viewer_popup_size = 0.8
+# Directory where downloaded media and files are saved
+# (default $XDG_DOWNLOAD_DIR, else ~/Downloads).
+# download_dir = "~/Downloads"
+# Longer side of media previews, in pixels; 0 disables downscaling.
+# Only used when built with the `media-preview` feature.
+# preview_max_dimension = 1920
+# Media viewer popup size as a fraction of the terminal (clamped to 0.01–1.0).
+# media_viewer_popup_size = 0.8
 
 [logger]
 # off, error, warn, info, debug or trace. Overridden by `--log-level`, `-v`, `-q`.
@@ -77,3 +80,12 @@
 # http_only = false
 # MTProto only: hex-encoded secret.
 # secret = ""
+
+[credentials]
+# Where the key of the encrypted TDLib database (your login session) is kept:
+#   auto     - the system keychain (Secret Service) when available, otherwise
+#              the database is left unencrypted;
+#   keychain - only the system keychain; tgt refuses to start without it;
+#   plain    - no keychain, the database is not encrypted.
+# Switching an encrypted database to `plain` requires logging in again.
+# store = "auto"

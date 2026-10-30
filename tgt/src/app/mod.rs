@@ -6,7 +6,8 @@ pub mod commands;
 pub mod context;
 pub mod error;
 pub mod event;
-pub mod themes;
+pub mod keychain;
+pub mod media;
 
 #[cfg(test)]
 mod tests;
@@ -53,7 +54,15 @@ pub fn run(settings: &Settings) -> Result<(), AppError> {
             data,
             state,
             yes,
-        } => commands::clear(&settings.dirs, *config, *data, *state, *yes),
+        } => {
+            commands::clear(&settings.dirs, *config, *data, *state, *yes)?;
+            // The key of a removed database is useless
+            let database_dir = &settings.telegram.database_dir;
+            if *data && !database_dir.exists() {
+                keychain::forget_key(settings.credentials, database_dir);
+            }
+            Ok(())
+        }
         Command::Tui | Command::Logout | Command::Send { .. } => {
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
@@ -65,19 +74,34 @@ pub fn run(settings: &Settings) -> Result<(), AppError> {
 
 /// Logs in, then runs the command that needs Telegram.
 async fn run_telegram(settings: &Settings) -> Result<(), AppError> {
+    let database_dir = settings.telegram.database_dir.clone();
+    let mut keychain = keychain::open(settings.credentials)?;
+    let mut params = settings.telegram.clone();
+    params.database_encryption_key =
+        keychain::load_key(&mut keychain, settings.credentials, &database_dir)?;
+
     let store = Arc::new(Store::default());
-    let mut client = Client::new(Arc::clone(&store), settings.telegram.clone());
+    let mut client = Client::new(Arc::clone(&store), params);
     let (notify_tx, notify_rx) = tokio::sync::mpsc::unbounded_channel();
     client.start(notify_tx);
     client.set_logging(&settings.tdlib_log).await;
     client.authorize(&mut StdinAuthenticator).await;
 
     if client.is_authorized() {
+        if let Some(keychain) = &keychain
+            && !client.is_database_encrypted()
+            && !matches!(settings.command, Command::Logout)
+        {
+            keychain::encrypt_database(&mut client, keychain, settings.credentials, &database_dir)
+                .await?;
+        }
         client.use_quick_ack().await;
         client.get_me().await;
         let result = match &settings.command {
             Command::Logout => {
                 client.log_out().await;
+                // TDLib destroys the database when logging out
+                keychain::forget_key(settings.credentials, &database_dir);
                 Ok(())
             }
             Command::Send { chat, message } => send(&mut client, chat, message).await,
@@ -152,17 +176,6 @@ async fn run_tui(
     tui.register_action_handler(app_context.action_tx().clone())?;
     app_context.mark_dirty();
 
-    // The playback thread signals position updates so the status bar redraws immediately.
-    let (voice_wake_tx, mut voice_wake_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
-    #[cfg(feature = "audio")]
-    if let Some(tx) =
-        crate::audio::spawn_playback_thread(app_context.action_tx().clone(), voice_wake_tx)
-    {
-        app_context.set_voice_playback_tx(tx);
-    }
-    #[cfg(not(feature = "audio"))]
-    drop(voice_wake_tx);
-
     // The chat list only rebuilds on LoadChats/ChatHistoryAppended/Resize.
     app_context
         .action_tx()
@@ -182,14 +195,13 @@ async fn run_tui(
         }
     });
 
-    // One blocking wait (tick | notification | voice), then drain every queue.
+    // One blocking wait (tick | notification), then drain every queue.
     let result = loop {
         let mut notification = None;
         tokio::select! {
             _ = tokio::time::sleep(Duration::from_millis(REFRESH_MS)) => {}
             _ = wake_rx.recv() => {}
             n = notify_rx.recv() => notification = n,
-            _ = voice_wake_rx.recv() => {}
         }
         let step = async {
             while let Some(ev) = tui_backend.try_next() {
@@ -400,30 +412,22 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::ShowSearchOverlay
             | Action::SearchOverlaySubmit
             | Action::SearchOverlayConfirm
-            | Action::SwitchTheme
-            | Action::SwitchThemeTo(_)
-            | Action::ShowThemeSelector
-            | Action::HideThemeSelector
-            | Action::ShowPhotoViewer
-            | Action::HidePhotoViewer
+            | Action::ShowMessageActionsFor(_)
+            | Action::HideMessageActions
+            | Action::MessageActionsPrevious
+            | Action::MessageActionsNext
+            | Action::ShowMediaViewer(_)
+            | Action::HideMediaViewer
+            | Action::MediaViewerPrevious
+            | Action::MediaViewerNext
+            | Action::RunMessageCommand(..)
+            | Action::StatusMessage(_)
             | Action::ShowFileUploadExplorer
             | Action::HideFileUploadExplorer
-            | Action::StartFileDownload
-            | Action::ShowFileDownloadExplorer(_)
-            | Action::HideFileDownloadExplorer
-            | Action::SaveChatFileAs { .. }
-            | Action::ViewPhotoMessage(_)
-            | Action::PhotoDownloaded(_)
-            | Action::PhotoDecoded(_)
-            | Action::ToggleVoicePlayback
-            | Action::VoicePlaybackStarted(_)
-            | Action::VoicePlaybackPosition(_, _, _)
-            | Action::VoicePlaybackEnded(_)
             | Action::LoadPinnedMessages
             | Action::ShowPinnedMessagesPopup
             | Action::PinnedPopupConfirmJump
-            | Action::PinnedPopupViewPhoto
-            | Action::PinnedPopupPlayVoice
+            | Action::PinnedPopupViewMedia
             | Action::HidePinnedMessagesPopup
             | Action::PinnedPopupPrevious
             | Action::PinnedPopupNext
@@ -433,7 +437,6 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::DecreaseChatListSize
             | Action::IncreasePromptSize
             | Action::DecreasePromptSize
-            | Action::ShowChatWindowReply
             | Action::HideChatWindowReply
             | Action::EditMessage(_, _)
             | Action::ReplyMessage(_, _)
@@ -442,7 +445,17 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::UpdateArea(_)
             | Action::GetChatHistoryNewer
             | Action::ChatHistoryAppended
-    )
+    ) || preview_changes_ui(action)
+}
+
+#[cfg(feature = "media-preview")]
+fn preview_changes_ui(action: &Action) -> bool {
+    matches!(action, Action::PreviewDecoded(_))
+}
+
+#[cfg(not(feature = "media-preview"))]
+fn preview_changes_ui(_: &Action) -> bool {
+    false
 }
 
 /// Handle incoming actions from the application.
@@ -539,51 +552,25 @@ async fn handle_app_actions(
                 }
                 let _ = client.send_document(file_path.to_string(), chat_id).await;
             }
-            Action::SaveChatFileAs {
+            Action::OpenMedia(message_id) => {
+                media::open(&app_context, client.files(), *message_id);
+            }
+            Action::DownloadMedia(message_id) => {
+                media::download(&app_context, client.files(), *message_id);
+            }
+            #[cfg(feature = "media-preview")]
+            Action::LoadPreview {
                 message_id,
-                dest_path,
+                file_id,
+                path,
             } => {
-                let Some(message) = app_context.store().get_message(*message_id) else {
-                    let _ = app_context
-                        .action_tx()
-                        .send(Action::StatusMessage("Message not found.".into()));
-                    continue;
-                };
-                let Some((file_id, _)) = message.save_as_candidate() else {
-                    let _ = app_context.action_tx().send(Action::StatusMessage(
-                        "This message has no file to save.".into(),
-                    ));
-                    continue;
-                };
-
-                let src_path = if let Some(p) = message.local_telegram_file_path() {
-                    p
-                } else {
-                    match client.download_file(file_id, 32).await {
-                        Ok(p) => p,
-                        Err(e) => {
-                            tracing::error!("Save as: download failed: {:?}", e);
-                            let _ = app_context.action_tx().send(Action::StatusMessage(
-                                "Failed to download file from Telegram.".into(),
-                            ));
-                            continue;
-                        }
-                    }
-                };
-
-                match std::fs::copy(&src_path, dest_path) {
-                    Ok(n) => {
-                        let _ = app_context.action_tx().send(Action::StatusMessage(format!(
-                            "Saved {n} bytes to {dest_path}"
-                        )));
-                    }
-                    Err(e) => {
-                        tracing::error!("Save as: copy failed: {:?}", e);
-                        let _ = app_context
-                            .action_tx()
-                            .send(Action::StatusMessage(format!("Save failed: {e}")));
-                    }
-                }
+                media::load_preview(
+                    &app_context,
+                    client.files(),
+                    *message_id,
+                    *file_id,
+                    path.clone(),
+                );
             }
             Action::GetChatHistory if !app_context.store().is_history_loading() => {
                 app_context.store().set_history_loading(true);
@@ -836,167 +823,6 @@ async fn handle_app_actions(
             }
             Action::ViewAllMessages => {
                 client.view_all_messages().await;
-            }
-            Action::ViewPhotoMessage(message_id) => {
-                // Get the message and check if it's a photo that needs downloading
-                if let Some(message) = app_context.store().get_message(*message_id)
-                    && let libtgt::model::MessageContentType::Photo { file_id, file_path } =
-                        message.content_type()
-                {
-                    // Check if file needs to be downloaded
-                    if file_path.is_empty() || !std::path::Path::new(file_path).exists() {
-                        // Download the file
-                        match client.download_file(*file_id, 32).await {
-                            Ok(downloaded_path) => {
-                                // Notify PhotoViewer that the photo is ready (viewer will send LoadPhotoFromPath)
-                                app_context
-                                    .action_tx()
-                                    .send(Action::PhotoDownloaded(downloaded_path))?;
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to download photo: {:?}", e);
-                                let _ = app_context.action_tx().send(Action::StatusMessage(
-                                    "Failed to download photo.".into(),
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-            #[cfg(not(feature = "audio"))]
-            Action::PlayVoiceMessage(_) => {
-                let _ = app_context.action_tx().send(Action::StatusMessage(
-                    "Audio playback is disabled. Build with default features.".into(),
-                ));
-            }
-            #[cfg(feature = "audio")]
-            Action::PlayVoiceMessage(message_id) => {
-                let message_opt = app_context.store().get_message(*message_id);
-                let skip_voice_disabled = cfg!(not(feature = "voice-message"))
-                    && message_opt.as_ref().is_none_or(|m| m.is_voice_note());
-                if skip_voice_disabled {
-                    let _ = app_context.action_tx().send(Action::StatusMessage(
-                        "Voice messages are disabled. Build with the voice-message feature (requires libopus).".into(),
-                    ));
-                    app_context.mark_dirty();
-                }
-                if !skip_voice_disabled
-                    && let Some(message) = message_opt
-                    && let Some((file_id, file_path, duration_secs)) =
-                        message.voice_audio_file_info()
-                {
-                    let path = if file_path.is_empty() || !std::path::Path::new(&file_path).exists()
-                    {
-                        match client.download_file(file_id, 32).await {
-                            Ok(downloaded) => {
-                                if let Some(entry) = app_context
-                                    .store()
-                                    .open_chat_messages()
-                                    .get_message_mut(*message_id)
-                                {
-                                    entry.set_audio_file_path(downloaded.clone());
-                                }
-                                downloaded
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to download voice/audio file: {:?}", e);
-                                continue;
-                            }
-                        }
-                    } else {
-                        file_path
-                    };
-                    let state = app_context.voice_playback_state();
-                    let is_playing_this = state.message_id == Some(*message_id) && state.is_playing;
-                    drop(state);
-                    if is_playing_this {
-                        app_context.voice_playback_send(crate::audio::VoicePlaybackCommand::Stop);
-                        let mut s = app_context.voice_playback_state();
-                        s.is_playing = false;
-                        s.message_id = None;
-                    } else {
-                        app_context.voice_playback_send(crate::audio::VoicePlaybackCommand::Stop);
-                        let sent = app_context.voice_playback_send(
-                            crate::audio::VoicePlaybackCommand::Play {
-                                path: path.clone(),
-                                duration_secs: duration_secs.max(0) as u64,
-                                message_id: *message_id,
-                            },
-                        );
-                        if !sent {
-                            let _ = app_context.action_tx().send(Action::StatusMessage(
-                                "Voice: playback unavailable".to_string(),
-                            ));
-                        } else {
-                            let mut s = app_context.voice_playback_state();
-                            s.message_id = Some(*message_id);
-                            s.position_secs = 0;
-                            s.duration_secs = duration_secs.max(0) as u64;
-                            s.is_playing = false;
-                        }
-                    }
-                }
-            }
-            #[cfg(feature = "audio")]
-            Action::VoicePlaybackStarted(msg_id) => {
-                let mut state = app_context.voice_playback_state();
-                if state.message_id == Some(*msg_id) {
-                    state.is_playing = true;
-                }
-            }
-            #[cfg(feature = "audio")]
-            Action::VoicePlaybackPosition(msg_id, pos, dur) => {
-                let mut state = app_context.voice_playback_state();
-                state.message_id = Some(*msg_id);
-                state.position_secs = *pos;
-                state.duration_secs = *dur;
-                state.is_playing = true;
-            }
-            #[cfg(feature = "audio")]
-            Action::VoicePlaybackEnded(msg_id) => {
-                let mut state = app_context.voice_playback_state();
-                if state.message_id == Some(*msg_id) {
-                    state.is_playing = false;
-                }
-            }
-            Action::LoadPhotoFromPath(path, message_id) => {
-                // Decode image on a blocking thread to avoid stalling the main loop
-                let photo_max_dimension = app_context.app_config().photo_max_dimension;
-                let action_tx = app_context.action_tx().clone();
-                let path = path.clone();
-                let msg_id = *message_id;
-                tokio::spawn(async move {
-                    let result = tokio::task::spawn_blocking(move || {
-                        image::open(&path).map_err(|e| e.to_string())
-                    })
-                    .await
-                    .unwrap_or_else(|e| Err(e.to_string()));
-                    // Downscale when photo_max_dimension > 0 (0 = no downscaling)
-                    let result = result.map(|img| {
-                        if photo_max_dimension == 0 {
-                            img
-                        } else {
-                            let (w, h) = (img.width(), img.height());
-                            if w.max(h) > photo_max_dimension {
-                                if w >= h {
-                                    img.thumbnail(
-                                        photo_max_dimension,
-                                        (h * photo_max_dimension / w).max(1),
-                                    )
-                                } else {
-                                    img.thumbnail(
-                                        (w * photo_max_dimension / h).max(1),
-                                        photo_max_dimension,
-                                    )
-                                }
-                            } else {
-                                img
-                            }
-                        }
-                    });
-                    let payload = crate::app::action::PhotoDecodedPayload(msg_id, result);
-                    let _ = action_tx.send(Action::PhotoDecoded(payload));
-                });
             }
             _ => {}
         }

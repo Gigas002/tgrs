@@ -6,12 +6,57 @@ use ratatui::layout::Rect;
 
 use crate::{app::error::AppError, ui::component_name::ComponentName};
 
-/// Payload for [`Action::PhotoDecoded`]: message_id and decode result.
-/// [`Eq`] compares message_id and error message only (Ok images are not compared).
-#[derive(Debug, Clone)]
-pub struct PhotoDecodedPayload(pub i64, pub Result<image::DynamicImage, String>);
+/// Something to do with one chat message, from a chat key or the message actions menu.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum MessageCommand {
+    Reply,
+    Edit,
+    Copy,
+    DeleteForEveryone,
+    DeleteForMe,
+    /// Open the attached media with the default application.
+    OpenMedia,
+    /// Show the attached media in the media viewer.
+    ViewMedia,
+    /// Save the attached media to the download directory.
+    DownloadMedia,
+}
 
-impl PartialEq for PhotoDecodedPayload {
+impl MessageCommand {
+    /// Every command, in the order of the message actions menu.
+    pub const ALL: [Self; 8] = [
+        Self::Reply,
+        Self::Edit,
+        Self::Copy,
+        Self::OpenMedia,
+        Self::ViewMedia,
+        Self::DownloadMedia,
+        Self::DeleteForEveryone,
+        Self::DeleteForMe,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Reply => "reply",
+            Self::Edit => "edit message",
+            Self::Copy => "copy message",
+            Self::DeleteForEveryone => "delete for everyone",
+            Self::DeleteForMe => "delete for me",
+            Self::OpenMedia => "open media",
+            Self::ViewMedia => "view media",
+            Self::DownloadMedia => "download file",
+        }
+    }
+}
+
+/// Payload for [`Action::PreviewDecoded`]: message_id and decode result.
+/// [`Eq`] compares message_id and error message only (Ok images are not compared).
+#[cfg(feature = "media-preview")]
+#[derive(Debug, Clone)]
+pub struct PreviewDecodedPayload(pub i64, pub Result<image::DynamicImage, String>);
+
+#[cfg(feature = "media-preview")]
+impl PartialEq for PreviewDecodedPayload {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
             && match (&self.1, &other.1) {
@@ -22,7 +67,8 @@ impl PartialEq for PhotoDecodedPayload {
     }
 }
 
-impl Eq for PhotoDecodedPayload {}
+#[cfg(feature = "media-preview")]
+impl Eq for PreviewDecodedPayload {}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 /// `Modifiers` is a struct that represents the modifiers of a key event.
@@ -151,8 +197,6 @@ pub enum Action {
     Key(KeyCode, Modifiers),
     /// Update area action with a rectangular area.
     UpdateArea(Rect),
-    /// ShowChatWindowReply action.
-    ShowChatWindowReply,
     /// HideChatWindowReply action.
     HideChatWindowReply,
     /// ShowCommandGuide action.
@@ -177,16 +221,10 @@ pub enum Action {
     ChatWindowPrevious,
     /// ChatWindowUnselect action.
     ChatWindowUnselect,
-    /// ChatWindowDeleteForEveryone action.
-    /// It is used to delete a message for everyone.
-    ChatWindowDeleteForEveryone,
-    /// ChatWindowDeleteForMe action.
-    /// It is used to delete a message only for the current user.
-    ChatWindowDeleteForMe,
-    /// ChatWindowCopy action.
-    ChatWindowCopy,
-    /// ChatWindowEdit action.
-    ChatWindowEdit,
+    /// Run a command on the message selected in the chat window.
+    SelectedMessage(MessageCommand),
+    /// Run a command on a message, e.g. picked in the message actions menu.
+    RunMessageCommand(MessageCommand, i64),
 
     /// EditMessage action with a `String`.
     /// This action is used to edit a message.
@@ -232,42 +270,45 @@ pub enum Action {
     /// Confirm selection and jump to message (Enter when results exist).
     SearchOverlayConfirm,
 
-    /// SwitchTheme action.
-    /// This action is used to switch to the next theme in the theme list.
-    SwitchTheme,
-    /// SwitchThemeTo action with a theme name.
-    /// This action is used to switch to a specific theme by name.
-    SwitchThemeTo(String),
-    /// ShowThemeSelector action.
-    /// This action is used to show the theme selector popup.
-    ShowThemeSelector,
-    /// HideThemeSelector action.
-    /// This action is used to hide the theme selector popup.
-    HideThemeSelector,
+    /// Open the actions menu for the message selected in the chat window.
+    ShowMessageActions,
+    /// Open the actions menu for this message.
+    ShowMessageActionsFor(i64),
+    /// Close the message actions menu.
+    HideMessageActions,
+    /// Run the action highlighted in the message actions menu.
+    MessageActionsConfirm,
+    /// Highlight the previous action in the message actions menu.
+    MessageActionsPrevious,
+    /// Highlight the next action in the message actions menu.
+    MessageActionsNext,
 
-    /// ShowPhotoViewer action.
-    /// This action is used to show the photo viewer popup.
-    ShowPhotoViewer,
-    /// HidePhotoViewer action.
-    /// This action is used to hide the photo viewer popup.
-    HidePhotoViewer,
-    /// ViewPhotoMessage action with message_id.
-    /// This action is used to view a photo from a message.
-    ViewPhotoMessage(i64),
-    /// PhotoDownloaded action with file path.
-    /// This action is sent when a photo has been downloaded.
-    PhotoDownloaded(String),
-    /// Load photo from path on a background thread (decode off main thread).
-    /// Payload: (path, message_id). Run loop spawns blocking task and sends PhotoDecoded with result.
-    LoadPhotoFromPath(String, i64),
-    /// Photo decoded on background thread; carries message_id and decode result.
-    PhotoDecoded(PhotoDecodedPayload),
-    /// PhotoViewerPrevious action.
-    /// Navigate to previous message in photo viewer.
-    PhotoViewerPrevious,
-    /// PhotoViewerNext action.
-    /// Navigate to next message in photo viewer.
-    PhotoViewerNext,
+    /// Open the media of a message with the default application (downloads it first).
+    OpenMedia(i64),
+    /// Save the media of a message to the download directory (downloads it first).
+    DownloadMedia(i64),
+    /// Show the media viewer for a message.
+    ShowMediaViewer(i64),
+    /// Close the media viewer.
+    HideMediaViewer,
+    /// Show the previous (older) message with media in the media viewer.
+    MediaViewerPrevious,
+    /// Show the next (newer) message with media in the media viewer.
+    MediaViewerNext,
+    /// Open the media shown in the media viewer with the default application.
+    MediaViewerOpen,
+    /// Save the media shown in the media viewer to the download directory.
+    MediaViewerDownload,
+    /// Download (when `path` is not on disk) and decode a preview image off the main thread.
+    #[cfg(feature = "media-preview")]
+    LoadPreview {
+        message_id: i64,
+        file_id: i32,
+        path: Option<String>,
+    },
+    /// A preview image was decoded in the background.
+    #[cfg(feature = "media-preview")]
+    PreviewDecoded(PreviewDecodedPayload),
 
     /// Load pinned messages for the open chat (TDLib search with pinned filter).
     LoadPinnedMessages,
@@ -281,10 +322,10 @@ pub enum Action {
     PinnedPopupNext,
     /// Jump to the currently shown pinned message in the chat (then close popup).
     PinnedPopupConfirmJump,
-    /// View photo for the current pinned message (inserts into open-chat cache if needed).
-    PinnedPopupViewPhoto,
-    /// Play voice/audio for the current pinned message (inserts into cache if needed).
-    PinnedPopupPlayVoice,
+    /// Show the media of the current pinned message in the media viewer.
+    PinnedPopupViewMedia,
+    /// Open the media of the current pinned message with the default application.
+    PinnedPopupOpenMedia,
 
     /// StatusMessage: short message to show in the status bar (e.g. "Message yanked").
     StatusMessage(String),
@@ -293,17 +334,6 @@ pub enum Action {
     /// PromptCopy: copy selected text in the prompt (overrides try_quit when prompt focused).
     PromptCopy,
 
-    /// User requested play/stop voice (focus component resolves selected message and sends PlayVoiceMessage).
-    ToggleVoicePlayback,
-    /// Start or stop voice/audio playback for this message (toggle: if playing this, stop; else start from beginning).
-    PlayVoiceMessage(i64),
-    /// Voice playback actually started (playback thread appended source). Used so UI only shows counter when playback really started.
-    VoicePlaybackStarted(i64),
-    /// Voice playback position update (message_id, position_secs, duration_secs). Used by playback thread.
-    VoicePlaybackPosition(i64, u64, u64),
-    /// Voice playback ended for this message.
-    VoicePlaybackEnded(i64),
-
     /// Show the file upload explorer popup.
     ShowFileUploadExplorer,
     /// Hide the file upload explorer popup.
@@ -311,15 +341,6 @@ pub enum Action {
 
     /// UploadFile action with a selected local path.
     UploadFile(String),
-
-    /// Begin save-as flow for the selected chat message (photo or document); chat window resolves message id.
-    StartFileDownload,
-    /// Show the file download explorer for this message id.
-    ShowFileDownloadExplorer(i64),
-    /// Hide the file download explorer popup.
-    HideFileDownloadExplorer,
-    /// Download/copy a Telegram file to `dest_path` (full path including file name).
-    SaveChatFileAs { message_id: i64, dest_path: String },
 }
 /// Implement the `Action` enum.
 impl Action {
@@ -365,31 +386,36 @@ impl FromStr for Action {
             "chat_window_next" => Ok(Action::ChatWindowNext),
             "chat_window_previous" => Ok(Action::ChatWindowPrevious),
             "chat_window_unselect" => Ok(Action::ChatWindowUnselect),
-            "chat_window_delete_for_everyone" => Ok(Action::ChatWindowDeleteForEveryone),
-            "chat_window_delete_for_me" => Ok(Action::ChatWindowDeleteForMe),
-            "chat_window_copy" => Ok(Action::ChatWindowCopy),
-            "chat_window_edit" => Ok(Action::ChatWindowEdit),
-            "chat_window_reply" => Ok(Action::ShowChatWindowReply),
+            "chat_window_delete_for_everyone" => {
+                Ok(Action::SelectedMessage(MessageCommand::DeleteForEveryone))
+            }
+            "chat_window_delete_for_me" => Ok(Action::SelectedMessage(MessageCommand::DeleteForMe)),
+            "chat_window_copy" => Ok(Action::SelectedMessage(MessageCommand::Copy)),
+            "chat_window_edit" => Ok(Action::SelectedMessage(MessageCommand::Edit)),
+            "chat_window_reply" => Ok(Action::SelectedMessage(MessageCommand::Reply)),
+            "open_message_media" => Ok(Action::SelectedMessage(MessageCommand::OpenMedia)),
+            "view_message_media" => Ok(Action::SelectedMessage(MessageCommand::ViewMedia)),
+            "download_message_media" => Ok(Action::SelectedMessage(MessageCommand::DownloadMedia)),
+            "show_message_actions" => Ok(Action::ShowMessageActions),
+            "hide_message_actions" => Ok(Action::HideMessageActions),
+            "message_actions_confirm" => Ok(Action::MessageActionsConfirm),
+            "message_actions_previous" => Ok(Action::MessageActionsPrevious),
+            "message_actions_next" => Ok(Action::MessageActionsNext),
+            "hide_media_viewer" => Ok(Action::HideMediaViewer),
+            "media_viewer_previous" => Ok(Action::MediaViewerPrevious),
+            "media_viewer_next" => Ok(Action::MediaViewerNext),
+            "media_viewer_open" => Ok(Action::MediaViewerOpen),
+            "media_viewer_download" => Ok(Action::MediaViewerDownload),
             "show_command_guide" => Ok(Action::ShowCommandGuide),
             "hide_command_guide" => Ok(Action::HideCommandGuide),
-            "show_theme_selector" => Ok(Action::ShowThemeSelector),
-            "hide_theme_selector" => Ok(Action::HideThemeSelector),
-            "switch_theme" => Ok(Action::SwitchTheme),
             "prompt_send_message" => Ok(Action::PromptSendMessage),
             "prompt_copy" => Ok(Action::PromptCopy),
             "close_search_overlay" => Ok(Action::CloseSearchOverlay),
             "show_search_overlay" => Ok(Action::ShowSearchOverlay),
             "search_overlay_submit" => Ok(Action::SearchOverlaySubmit),
             "search_overlay_confirm" => Ok(Action::SearchOverlayConfirm),
-            "view_photo_message" => Ok(Action::ShowPhotoViewer),
-            "show_photo_viewer" => Ok(Action::ShowPhotoViewer),
-            "hide_photo_viewer" => Ok(Action::HidePhotoViewer),
-            "photo_viewer_previous" => Ok(Action::PhotoViewerPrevious),
-            "photo_viewer_next" => Ok(Action::PhotoViewerNext),
             "show_file_upload_explorer" => Ok(Action::ShowFileUploadExplorer),
             "hide_file_upload_explorer" => Ok(Action::HideFileUploadExplorer),
-            "start_file_download" => Ok(Action::StartFileDownload),
-            "hide_file_download_explorer" => Ok(Action::HideFileDownloadExplorer),
             "load_pinned_messages" => Ok(Action::LoadPinnedMessages),
             "toggle_chat_pinned_bar" | "show_pinned_messages_popup" => {
                 Ok(Action::ShowPinnedMessagesPopup)
@@ -398,9 +424,8 @@ impl FromStr for Action {
             "pinned_popup_previous" => Ok(Action::PinnedPopupPrevious),
             "pinned_popup_next" => Ok(Action::PinnedPopupNext),
             "pinned_popup_confirm_jump" => Ok(Action::PinnedPopupConfirmJump),
-            "pinned_popup_view_photo" => Ok(Action::PinnedPopupViewPhoto),
-            "pinned_popup_play_voice" => Ok(Action::PinnedPopupPlayVoice),
-            "play_voice_message" => Ok(Action::ToggleVoicePlayback),
+            "pinned_popup_view_media" => Ok(Action::PinnedPopupViewMedia),
+            "pinned_popup_open_media" => Ok(Action::PinnedPopupOpenMedia),
             _ => Err(AppError::InvalidAction(s.to_string())),
         }
     }

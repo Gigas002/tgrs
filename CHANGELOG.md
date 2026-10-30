@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Removed
 
+- In-app audio playback (`audio` and `voice-message` features, `rodio`, `ogg`, `audiopus`, ALSA and libopus): media is opened in external applications instead.
+- Theme selector popup, theme switching and the remembered theme in `$XDG_STATE_HOME/tgt/theme`: settings are only changed by editing `config.toml`.
+- Photo viewer and the save-as file explorer, replaced by the media viewer and downloads to `app.download_dir`.
+- Commands `show_theme_selector`, `hide_theme_selector`, `switch_theme`, `view_photo_message`, `show_photo_viewer`, `hide_photo_viewer`, `photo_viewer_previous`, `photo_viewer_next`, `play_voice_message`, `start_file_download`, `hide_file_download_explorer`, `pinned_popup_view_photo` and `pinned_popup_play_voice`; keymap sections `[theme_selector]`, `[photo_viewer]` and `[file_download_explorer]`.
+- Config keys `app.photo_max_dimension` and `app.photo_viewer_popup_size`, renamed to `app.preview_max_dimension` and `app.media_viewer_popup_size`.
+
 - Legacy config locations (`~/.tgt`, `.tgt-dev`, `.data`); only XDG directories are used.
 - `app.toml`, `logger.toml` and `telegram.toml`, replaced by a single `config.toml`. `theme_filename`, `take_api_*_from_telegram_config` and the log file name options are gone.
 - `--logout` and `--send-message` flags, replaced by subcommands.
@@ -15,7 +21,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - CI workflows `ci-linux`, `cd` and `cleanup-caches`.
 
 - Support for Windows, macOS and Android; `tgt` now targets Linux only.
-- Features that download, build or bundle native dependencies: `download-tdlib`, `local-tdlib`, `pkg-config`, `static`, `static-download` and `chafa-static`. TDLib (`tdjson`), libopus and chafa must be installed system-wide; TDLib is located via `pkg-config`.
+- Features that download, build or bundle native dependencies: `download-tdlib`, `local-tdlib`, `pkg-config`, `static`, `static-download`, `chafa-static` and `chafa-dyn`. TDLib (`tdjson`) and libdbus must be installed system-wide; TDLib is located via `pkg-config`.
 - CI workflows for Windows, macOS and Android.
 - Docker image (`Dockerfile`, Docker CI/publish workflows) and Nix flake.
 - `build.rs`: release builds no longer copy default configs into the user's config directory; defaults are bundled in the binary and `tgt init-config` writes them on demand.
@@ -24,9 +30,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ### Changed
 
 - Split into a workspace: `libtgt` (TDLib client, store and models, no UI) and the `tgt` binary.
-- Restructured `tgt` into `cli`, `config`, `settings`, `logger`, `app`, `audio`, `ui` and `utils` modules with a single settings resolver (`CLI > environment > config.toml > defaults`).
-- The theme picked in the UI is remembered in `$XDG_STATE_HOME/tgt/theme`; `--theme` and `app.theme` take precedence.
-- Feature `rodio` renamed to `audio`.
+- Restructured `tgt` into `cli`, `config`, `settings`, `logger`, `app`, `credentials`, `media`, `ui` and `utils` modules with a single settings resolver (`CLI > environment > config.toml > defaults`).
+- Images, videos, GIFs and stickers are previewed with the new `media-preview` feature (on by default; build with `--no-default-features` to drop it), rendered by `ratatui-image` without chafa; `image` and `ratatui-image` are optional.
 - CI, dependabot, `deny.toml` and `.typos.toml` follow the [rust-template](https://github.com/Gigas002/rust-template) setup; TDLib is built and cached by a composite action.
 
 - Default config files moved from `config/` to `examples/`.
@@ -36,6 +41,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+- Concord-like media handling: `o` opens the media of the selected message (photo, video, GIF, audio, voice/video message, sticker or file) in the default application via `xdg-open`, `v` shows the media viewer, `s` downloads to `app.download_dir` (default `$XDG_DOWNLOAD_DIR` or `~/Downloads`) without overwriting files. Programs and scripts are refused by `o` and can only be downloaded.
+- Message actions menu (`Enter` in the chat) listing every message action with its key; unavailable actions are dimmed.
+- `keychain` feature (default): the TDLib database is encrypted with a key kept in the system keychain (Secret Service); `[credentials] store = "auto" | "keychain" | "plain"`. Existing databases are encrypted on the next start; `tgt logout` and `tgt clear --data` remove the key.
+- Captions, videos, GIFs, video messages and stickers are shown in the chat with their duration or size.
 - Subcommands `send`, `logout`, `init-config` and `clear`; options `--config-dir`, `--log-dir`, `--log-level`, `-v`/`-q` and `--theme`.
 - `docs/ARCHITECTURE.md`.
 

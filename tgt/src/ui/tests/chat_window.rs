@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    app::action::{Action, Modifiers},
+    app::action::{Action, MessageCommand, Modifiers},
     ui::tests::{create_mock_message, create_test_app_context},
 };
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -63,27 +63,81 @@ fn test_chat_window_sort_actions_no_op() {
     assert_eq!(window.message_list.len(), 0);
 }
 
+fn with_action_rx(window: &mut ChatWindow) -> tokio::sync::mpsc::UnboundedReceiver<Action> {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    window.register_action_handler(tx).unwrap();
+    rx
+}
+
+fn sent(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Action>) -> Vec<Action> {
+    std::iter::from_fn(|| rx.try_recv().ok()).collect()
+}
+
 /// Edit on someone else's message must be a no-op (does not send EditMessage, does not bug the chat).
 /// create_mock_message uses sender user_id 1; test app context has me() = 0, so all mock messages are "others".
 #[test]
 fn test_edit_on_others_message_is_no_op() {
     let mut window = create_test_chat_window();
-    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-    window.register_action_handler(tx).unwrap();
+    let mut rx = with_action_rx(&mut window);
     let messages = vec![
         create_mock_message(100, "Other's message"),
         create_mock_message(200, "Another other"),
     ];
     setup_messages(&mut window, messages);
     window.message_list_state.select(Some(0));
-    let selected_before = window.message_list_state.selected();
-    let selected_id_before =
-        selected_before.and_then(|i| window.message_list.get(i).map(|m| m.id()));
-    window.update(Action::ChatWindowEdit);
-    // Selection unchanged; no EditMessage is sent (we can't easily assert no event without mock event_tx).
-    assert_eq!(window.message_list_state.selected(), selected_before);
+    window.update(Action::SelectedMessage(MessageCommand::Edit));
+    assert_eq!(window.message_list_state.selected(), Some(0));
+    assert!(sent(&mut rx).is_empty());
+}
+
+#[test]
+fn reply_focuses_the_prompt_with_the_message() {
+    let mut window = create_test_chat_window();
+    let mut rx = with_action_rx(&mut window);
+    setup_messages(&mut window, vec![create_mock_message(100, "hi")]);
+    window.update(Action::RunMessageCommand(MessageCommand::Reply, 100));
     assert_eq!(
-        selected_before.and_then(|i| window.message_list.get(i).map(|m| m.id())),
-        selected_id_before
+        sent(&mut rx),
+        vec![
+            Action::FocusComponent(ComponentName::Prompt),
+            Action::ReplyMessage(100, "hi".into()),
+        ]
     );
+}
+
+#[test]
+fn media_commands_need_media() {
+    let mut window = create_test_chat_window();
+    let mut rx = with_action_rx(&mut window);
+    setup_messages(&mut window, vec![create_mock_message(100, "text only")]);
+    for command in [
+        MessageCommand::OpenMedia,
+        MessageCommand::ViewMedia,
+        MessageCommand::DownloadMedia,
+    ] {
+        window.update(Action::RunMessageCommand(command, 100));
+        assert_eq!(
+            sent(&mut rx),
+            vec![Action::StatusMessage("This message has no media.".into())]
+        );
+    }
+}
+
+#[test]
+fn message_actions_open_for_the_selected_message() {
+    let mut window = create_test_chat_window();
+    let mut rx = with_action_rx(&mut window);
+    window.update(Action::ShowMessageActions);
+    assert_eq!(
+        sent(&mut rx),
+        vec![Action::StatusMessage("Select a message first.".into())]
+    );
+
+    setup_messages(
+        &mut window,
+        vec![create_mock_message(1, "a"), create_mock_message(2, "b")],
+    );
+    window.message_list_state.select(Some(1));
+    window.update(Action::ShowMessageActions);
+    assert_eq!(sent(&mut rx), vec![Action::ShowMessageActionsFor(2)]);
 }

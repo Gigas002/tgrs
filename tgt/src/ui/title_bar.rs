@@ -9,7 +9,6 @@ use {
         text::{Line, Span},
         widgets::{Block, Borders, Paragraph, Wrap},
     },
-    ratatui_image::picker::Picker,
     std::{io, sync::Arc},
     tokio::sync::mpsc,
 };
@@ -25,8 +24,6 @@ pub struct TitleBar {
     command_tx: Option<mpsc::UnboundedSender<Action>>,
     /// Indicates whether the `TitleBar` is focused or not.
     focused: bool,
-    // The image of the `TitleBar`.
-    // _image_state: Box<dyn Protocol>, // Box<dyn StatefulProtocol>,
 }
 /// Implementation of `TitleBar` struct.
 impl TitleBar {
@@ -35,15 +32,11 @@ impl TitleBar {
         let name = "".to_string();
         let focused = false;
 
-        let mut _picker = Picker::from_query_stdio();
-        // TODO: Add image to TUI (see https://docs.rs/ratatui-image/latest/ratatui_image/)
-
         TitleBar {
             app_context,
             command_tx,
             name,
             focused,
-            // _image_state: image_state,
         }
     }
     /// Set the name of the `TitleBar`.

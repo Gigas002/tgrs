@@ -33,11 +33,10 @@ pub struct KeymapFile {
     pub chat: Option<KeymapMode>,
     pub prompt: Option<KeymapMode>,
     pub command_guide: Option<KeymapMode>,
-    pub theme_selector: Option<KeymapMode>,
     pub search_overlay: Option<KeymapMode>,
-    pub photo_viewer: Option<KeymapMode>,
+    pub message_actions: Option<KeymapMode>,
+    pub media_viewer: Option<KeymapMode>,
     pub file_upload_explorer: Option<KeymapMode>,
-    pub file_download_explorer: Option<KeymapMode>,
     pub pinned_messages_popup: Option<KeymapMode>,
 }
 

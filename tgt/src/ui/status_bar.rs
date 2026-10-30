@@ -178,48 +178,24 @@ impl Component for StatusBar {
             self.status_message = None;
             self.status_message_set_at = None;
         }
-        // Line 1: key hints, key pressed, size. Line 2: voice playback (while playing) else status message (for 5s) else "Open chat" (default).
+        // Line 1: key hints, key pressed, size. Line 2: status message (for 5s) else "Open chat" (default).
         let line1 = Line::from(spans);
-        let line2_spans: Vec<Span<'_>> = {
-            #[cfg(feature = "audio")]
-            let show_voice = {
-                let state = self.app_context.voice_playback_state();
-                state.is_playing && state.message_id.is_some()
-            };
-            #[cfg(not(feature = "audio"))]
-            let show_voice = false;
-            if show_voice {
-                #[cfg(feature = "audio")]
-                {
-                    let state = self.app_context.voice_playback_state();
-                    let m = state.position_secs / 60;
-                    let s = state.position_secs % 60;
-                    let dm = state.duration_secs / 60;
-                    let ds = state.duration_secs % 60;
-                    vec![Span::styled(
-                        format!("V: {}:{:02}/{}:{:02}", m, s, dm, ds),
-                        self.app_context.style_status_bar_size_info_numbers(),
-                    )]
-                }
-                #[cfg(not(feature = "audio"))]
-                vec![]
-            } else if let Some(ref msg) = self.status_message {
-                vec![Span::styled(
-                    msg.as_str(),
-                    self.app_context.style_status_bar_message_quit_key(),
-                )]
-            } else {
-                vec![
-                    Span::styled(
-                        "Open chat: ",
-                        self.app_context.style_status_bar_open_chat_text(),
-                    ),
-                    Span::styled(
-                        selected_chat,
-                        self.app_context.style_status_bar_open_chat_name(),
-                    ),
-                ]
-            }
+        let line2_spans: Vec<Span<'_>> = if let Some(ref msg) = self.status_message {
+            vec![Span::styled(
+                msg.as_str(),
+                self.app_context.style_status_bar_message_quit_key(),
+            )]
+        } else {
+            vec![
+                Span::styled(
+                    "Open chat: ",
+                    self.app_context.style_status_bar_open_chat_text(),
+                ),
+                Span::styled(
+                    selected_chat,
+                    self.app_context.style_status_bar_open_chat_name(),
+                ),
+            ]
         };
         let mut text = vec![line1];
         text.push(Line::from(line2_spans));

@@ -51,14 +51,10 @@ const SECTIONS: &[(ComponentName, &str)] = &[
     (ComponentName::Chat, "chat"),
     (ComponentName::Prompt, "prompt"),
     (ComponentName::CommandGuide, "command_guide"),
-    (ComponentName::ThemeSelector, "theme_selector"),
     (ComponentName::SearchOverlay, "search_overlay"),
-    (ComponentName::PhotoViewer, "photo_viewer"),
+    (ComponentName::MessageActions, "message_actions"),
+    (ComponentName::MediaViewer, "media_viewer"),
     (ComponentName::FileUploadExplorer, "file_upload_explorer"),
-    (
-        ComponentName::FileDownloadExplorer,
-        "file_download_explorer",
-    ),
     (ComponentName::PinnedMessagesPopup, "pinned_messages_popup"),
 ];
 
@@ -68,11 +64,10 @@ fn section(file: &KeymapFile, component: ComponentName) -> Option<&KeymapMode> {
         ComponentName::Chat => file.chat.as_ref(),
         ComponentName::Prompt => file.prompt.as_ref(),
         ComponentName::CommandGuide => file.command_guide.as_ref(),
-        ComponentName::ThemeSelector => file.theme_selector.as_ref(),
         ComponentName::SearchOverlay => file.search_overlay.as_ref(),
-        ComponentName::PhotoViewer => file.photo_viewer.as_ref(),
+        ComponentName::MessageActions => file.message_actions.as_ref(),
+        ComponentName::MediaViewer => file.media_viewer.as_ref(),
         ComponentName::FileUploadExplorer => file.file_upload_explorer.as_ref(),
-        ComponentName::FileDownloadExplorer => file.file_download_explorer.as_ref(),
         ComponentName::PinnedMessagesPopup => file.pinned_messages_popup.as_ref(),
         _ => file.core_window.as_ref(),
     }

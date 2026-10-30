@@ -71,6 +71,9 @@ fn defaults_follow_xdg() {
     assert_eq!(settings.app.frame_rate, DEFAULT_FRAME_RATE);
     assert_eq!(settings.logging.level, LogLevel::Info);
     assert_eq!(settings.theme.name, DEFAULT_THEME);
+    assert_eq!(settings.app.download_dir, home.join("Downloads"));
+    assert_eq!(settings.credentials, CredentialStore::Auto);
+    assert!(settings.telegram.database_encryption_key.is_empty());
     assert_eq!(settings.command, Command::Tui);
 }
 
@@ -81,11 +84,13 @@ fn xdg_variables_are_respected() {
     let env = env
         .set("XDG_CONFIG_HOME", xdg.join("config"))
         .set("XDG_DATA_HOME", xdg.join("data"))
-        .set("XDG_STATE_HOME", xdg.join("state"));
+        .set("XDG_STATE_HOME", xdg.join("state"))
+        .set("XDG_DOWNLOAD_DIR", xdg.join("downloads"));
     let settings = env.resolve(CliOverrides::default()).unwrap();
     assert_eq!(settings.dirs.config, xdg.join("config/tgt"));
     assert_eq!(settings.dirs.data, xdg.join("data/tgt"));
     assert_eq!(settings.dirs.state, xdg.join("state/tgt"));
+    assert_eq!(settings.app.download_dir, xdg.join("downloads"));
 }
 
 #[test]
@@ -103,7 +108,11 @@ fn config_file_values_apply() {
         [app]
         frame_rate = 30.0
         use_emoji_icons = true
-        photo_viewer_popup_size = 5.0
+        media_viewer_popup_size = 5.0
+        download_dir = "~/dl"
+
+        [credentials]
+        store = "plain"
 
         [logger]
         level = "debug"
@@ -128,7 +137,9 @@ fn config_file_values_apply() {
 
     assert_eq!(settings.app.frame_rate, 30.0);
     assert!(settings.app.use_emoji_icons);
-    assert_eq!(settings.app.photo_viewer_popup_size, 1.0);
+    assert_eq!(settings.app.media_viewer_popup_size, 1.0);
+    assert_eq!(settings.app.download_dir, home.join("dl"));
+    assert_eq!(settings.credentials, CredentialStore::Plain);
     assert_eq!(settings.logging.level, LogLevel::Debug);
     assert_eq!(settings.logging.dir, home.join("logs"));
     assert_eq!(settings.logging.rotation, Rotation::Never);
@@ -260,14 +271,11 @@ fn send_disables_the_message_database() {
 }
 
 #[test]
-fn theme_precedence_is_cli_config_state_default() {
+fn theme_precedence_is_cli_config_default() {
     let env = Env::new();
-    let state_file = env.home().join(".local/state/tgt").join(THEME_STATE_FILE);
-    std::fs::create_dir_all(state_file.parent().unwrap()).unwrap();
-    std::fs::write(&state_file, "tokyo\n").unwrap();
     assert_eq!(
         env.resolve(CliOverrides::default()).unwrap().theme.name,
-        "tokyo"
+        DEFAULT_THEME
     );
 
     env.write_config("config.toml", "[app]\ntheme = \"nord\"\n");
@@ -284,16 +292,8 @@ fn theme_precedence_is_cli_config_state_default() {
 }
 
 #[test]
-fn unknown_explicit_theme_is_an_error_but_stale_state_is_not() {
+fn unknown_explicit_theme_is_an_error() {
     let env = Env::new();
-    let state_file = env.home().join(".local/state/tgt").join(THEME_STATE_FILE);
-    std::fs::create_dir_all(state_file.parent().unwrap()).unwrap();
-    std::fs::write(&state_file, "deleted").unwrap();
-    assert_eq!(
-        env.resolve(CliOverrides::default()).unwrap().theme.name,
-        DEFAULT_THEME
-    );
-
     let cli = CliOverrides {
         theme: Some("missing".into()),
         ..CliOverrides::default()
@@ -301,6 +301,19 @@ fn unknown_explicit_theme_is_an_error_but_stale_state_is_not() {
     assert!(matches!(
         env.resolve(cli),
         Err(SettingsError::Theme(ThemeError::Unknown(name))) if name == "missing"
+    ));
+}
+
+#[test]
+fn relative_download_dir_is_rejected() {
+    let env = Env::new();
+    env.write_config("config.toml", "[app]\ndownload_dir = \"dl\"\n");
+    assert!(matches!(
+        env.resolve(CliOverrides::default()),
+        Err(SettingsError::RelativePath {
+            key: "app.download_dir",
+            ..
+        })
     ));
 }
 

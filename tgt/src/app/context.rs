@@ -9,7 +9,6 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
     app::action::Action,
-    config::theme::ThemeSource,
     settings::{App, Dirs, Keymap, Settings, Theme},
     ui::component_name::ComponentName,
 };
@@ -39,10 +38,7 @@ pub struct AppContext {
     app: App,
     keymap: Keymap,
     dirs: Dirs,
-    /// Themes the UI can switch to.
-    themes: Vec<(String, ThemeSource)>,
-    /// The active theme; replaced when the user switches themes.
-    theme: Mutex<Theme>,
+    theme: Theme,
     /// Actions from components and background tasks to the run loop.
     action_tx: UnboundedSender<Action>,
     action_rx: Mutex<UnboundedReceiver<Action>>,
@@ -51,17 +47,8 @@ pub struct AppContext {
     needs_render: AtomicBool,
     store: Arc<Store>,
     /// The focused component, for context-aware keymap lookup in the run loop.
-    /// Encoded as: 0 = None, 1-14 = ComponentName variants.
+    /// Encoded as: 0 = None, n = `ComponentName::ALL[n - 1]`.
     focused_component: AtomicU8,
-    /// Result of background photo decode; consumed by PhotoViewer on PhotoDecoded(i64).
-    pending_photo_decoded: Mutex<Option<(i64, Result<image::DynamicImage, String>)>>,
-
-    #[cfg(feature = "audio")]
-    /// Current voice/audio playback state. Updated by the playback thread.
-    voice_playback_state: Mutex<crate::audio::VoicePlaybackState>,
-    #[cfg(feature = "audio")]
-    /// Sender to the voice playback thread; None if audio output is unavailable.
-    voice_playback_tx: Mutex<Option<std::sync::mpsc::Sender<crate::audio::VoicePlaybackCommand>>>,
 }
 
 impl AppContext {
@@ -71,19 +58,13 @@ impl AppContext {
             app: settings.app.clone(),
             keymap: settings.keymap.clone(),
             dirs: settings.dirs.clone(),
-            themes: settings.themes.clone(),
-            theme: Mutex::new(settings.theme.clone()),
+            theme: settings.theme.clone(),
             action_tx,
             action_rx: Mutex::new(action_rx),
             quit: AtomicBool::new(false),
             needs_render: AtomicBool::new(false),
             store,
             focused_component: AtomicU8::new(0),
-            pending_photo_decoded: Mutex::new(None),
-            #[cfg(feature = "audio")]
-            voice_playback_state: Mutex::new(crate::audio::VoicePlaybackState::default()),
-            #[cfg(feature = "audio")]
-            voice_playback_tx: Mutex::new(None),
         }
     }
 
@@ -99,16 +80,8 @@ impl AppContext {
         &self.dirs
     }
 
-    pub fn themes(&self) -> &[(String, ThemeSource)] {
-        &self.themes
-    }
-
-    pub fn theme(&self) -> MutexGuard<'_, Theme> {
-        self.theme.lock().unwrap()
-    }
-
-    pub fn set_theme(&self, theme: Theme) {
-        *self.theme() = theme;
+    pub fn theme(&self) -> &Theme {
+        &self.theme
     }
 
     /// Get the action receiver.
@@ -174,104 +147,25 @@ impl AppContext {
         self.needs_render.swap(false, Ordering::SeqCst)
     }
 
-    /// Set decoded photo from background thread; run loop calls this before sending PhotoDecoded(i64).
-    pub fn set_pending_photo_decoded(
-        &self,
-        message_id: i64,
-        result: Result<image::DynamicImage, String>,
-    ) {
-        *self.pending_photo_decoded.lock().unwrap() = Some((message_id, result));
-    }
-
-    /// Take decoded photo for PhotoViewer; returns None if message_id does not match or slot empty.
-    pub fn take_pending_photo_decoded(
-        &self,
-        message_id: i64,
-    ) -> Option<Result<image::DynamicImage, String>> {
-        let mut guard = self.pending_photo_decoded.lock().unwrap();
-        let taken = guard.take()?;
-        if taken.0 == message_id {
-            Some(taken.1)
-        } else {
-            *guard = Some(taken);
-            None
-        }
-    }
-
-    #[cfg(feature = "audio")]
-    /// Voice playback state (for status bar counter). Lock and read.
-    pub fn voice_playback_state(&self) -> MutexGuard<'_, crate::audio::VoicePlaybackState> {
-        self.voice_playback_state.lock().unwrap()
-    }
-
-    #[cfg(feature = "audio")]
-    /// Set the command sender for the voice playback thread (called from run when thread is spawned).
-    pub fn set_voice_playback_tx(
-        &self,
-        tx: std::sync::mpsc::Sender<crate::audio::VoicePlaybackCommand>,
-    ) {
-        *self.voice_playback_tx.lock().unwrap() = Some(tx);
-    }
-
-    #[cfg(feature = "audio")]
-    /// Send a command to the voice playback thread. Returns false if channel disconnected (thread exited).
-    pub fn voice_playback_send(&self, cmd: crate::audio::VoicePlaybackCommand) -> bool {
-        if let Some(ref tx) = *self.voice_playback_tx.lock().unwrap() {
-            tx.send(cmd).is_ok()
-        } else {
-            false
-        }
-    }
-
     /// The Telegram store shared with the client.
     pub fn store(&self) -> &Arc<Store> {
         &self.store
     }
 
     /// Encodes `Option<ComponentName>` to a `u8` for atomic storage.
-    /// Encoding: 0 = None, 1-14 = ComponentName variants.
     #[inline]
     fn encode_component(component: Option<ComponentName>) -> u8 {
-        match component {
-            None => 0,
-            Some(ComponentName::CoreWindow) => 1,
-            Some(ComponentName::ChatList) => 2,
-            Some(ComponentName::Chat) => 3,
-            Some(ComponentName::Prompt) => 4,
-            Some(ComponentName::ReplyMessage) => 5,
-            Some(ComponentName::TitleBar) => 6,
-            Some(ComponentName::StatusBar) => 7,
-            Some(ComponentName::CommandGuide) => 8,
-            Some(ComponentName::ThemeSelector) => 9,
-            Some(ComponentName::SearchOverlay) => 10,
-            Some(ComponentName::PhotoViewer) => 11,
-            Some(ComponentName::FileUploadExplorer) => 12,
-            Some(ComponentName::FileDownloadExplorer) => 13,
-            Some(ComponentName::PinnedMessagesPopup) => 14,
-        }
+        component
+            .and_then(|component| ComponentName::ALL.iter().position(|c| *c == component))
+            .map_or(0, |index| index as u8 + 1)
     }
 
     /// Decodes a `u8` to `Option<ComponentName>` from atomic storage.
     #[inline]
     fn decode_component(encoded: u8) -> Option<ComponentName> {
-        match encoded {
-            0 => None,
-            1 => Some(ComponentName::CoreWindow),
-            2 => Some(ComponentName::ChatList),
-            3 => Some(ComponentName::Chat),
-            4 => Some(ComponentName::Prompt),
-            5 => Some(ComponentName::ReplyMessage),
-            6 => Some(ComponentName::TitleBar),
-            7 => Some(ComponentName::StatusBar),
-            8 => Some(ComponentName::CommandGuide),
-            9 => Some(ComponentName::ThemeSelector),
-            10 => Some(ComponentName::SearchOverlay),
-            11 => Some(ComponentName::PhotoViewer),
-            12 => Some(ComponentName::FileUploadExplorer),
-            13 => Some(ComponentName::FileDownloadExplorer),
-            14 => Some(ComponentName::PinnedMessagesPopup),
-            _ => None, // Invalid encoding, treat as None
-        }
+        (encoded as usize)
+            .checked_sub(1)
+            .and_then(|index| ComponentName::ALL.get(index).copied())
     }
 
     /// Returns the currently focused UI component for context-aware keymap lookup.

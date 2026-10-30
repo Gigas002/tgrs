@@ -179,16 +179,30 @@ impl CommandGuide {
             lines.push(Line::from(line));
         }
 
-        // Photo Viewer (open from Chat with keybinding when a photo message is selected)
-        let photo_viewer_lines = self.get_keybindings_section(
-            "Photo Viewer",
-            keymap_config
-                .section(ComponentName::PhotoViewer)
-                .unwrap_or(&empty),
-        );
-        for line in photo_viewer_lines {
-            lines.push(Line::from(line));
+        // Popups opened from the chat
+        for (title, component) in [
+            ("Message Actions", ComponentName::MessageActions),
+            ("Media Viewer", ComponentName::MediaViewer),
+            ("Pinned Messages", ComponentName::PinnedMessagesPopup),
+        ] {
+            let section_lines = self
+                .get_keybindings_section(title, keymap_config.section(component).unwrap_or(&empty));
+            lines.extend(section_lines.into_iter().map(Line::from));
         }
+
+        lines.push(Line::from(vec![Span::styled(
+            "Media",
+            self.app_context.style_title_bar(),
+        )]));
+        lines.push(Line::from(""));
+        lines.push(Line::from(
+            "  Media is opened with the default application (xdg-open), e.g. mpv or an image viewer.",
+        ));
+        lines.push(Line::from(format!(
+            "  Downloads are saved to {}.",
+            self.app_context.app_config().download_dir.display()
+        )));
+        lines.push(Line::from(""));
 
         // Mouse
         lines.push(Line::from(""));
@@ -227,7 +241,7 @@ impl CommandGuide {
         lines.push(Line::from("  ]"));
         lines.push(Line::from(""));
         lines.push(Line::from(
-            "Available components: core_window, chat_list, chat, prompt, photo_viewer",
+            "Available components: core_window, chat_list, chat, prompt, command_guide, search_overlay, message_actions, media_viewer, file_upload_explorer, pinned_messages_popup",
         ));
         lines.push(Line::from(""));
         lines.push(Line::from("Example:"));

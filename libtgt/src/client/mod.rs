@@ -22,6 +22,9 @@ use crate::store::Store;
 mod auth;
 mod updates;
 
+#[cfg(test)]
+mod tests;
+
 pub use auth::{Authenticator, Proxy, ProxyKind, TdLogging, TdParams};
 pub use updates::Notification;
 
@@ -38,6 +41,8 @@ pub struct Client {
     auth_rx: UnboundedReceiver<AuthorizationState>,
     auth_tx: UnboundedSender<AuthorizationState>,
     have_authorization: bool,
+    /// Whether the database was opened with [`TdParams::database_encryption_key`].
+    database_encrypted: bool,
     can_quit: Arc<AtomicBool>,
     full_chats_list: bool,
     updates: Option<JoinHandle<()>>,
@@ -57,6 +62,7 @@ impl Client {
             auth_rx,
             auth_tx,
             have_authorization: false,
+            database_encrypted: false,
             can_quit: Arc::new(AtomicBool::new(false)),
             full_chats_list: false,
             updates: None,
@@ -73,6 +79,19 @@ impl Client {
 
     pub fn is_authorized(&self) -> bool {
         self.have_authorization
+    }
+
+    /// Whether the TDLib database is encrypted. False when no key was given,
+    /// or when the given key didn't match and the database was opened unencrypted.
+    pub fn is_database_encrypted(&self) -> bool {
+        self.database_encrypted
+    }
+
+    /// A handle for downloading files that can be moved into other tasks.
+    pub fn files(&self) -> Files {
+        Files {
+            client_id: self.client_id,
+        }
     }
 
     /// Starts the TDLib update loop; changes are announced on `notify`.
@@ -121,27 +140,25 @@ impl Client {
         while let Some(state) = self.auth_rx.recv().await {
             match state {
                 AuthorizationState::WaitTdlibParameters => {
-                    let params = &self.params;
-                    let response = functions::set_tdlib_parameters(
-                        false,
-                        params.database_dir.to_string_lossy().into_owned(),
-                        String::new(),
-                        String::new(),
-                        params.use_file_database,
-                        params.use_chat_info_database,
-                        params.use_message_database,
-                        false,
-                        params.api_id,
-                        params.api_hash.clone(),
-                        params.system_language_code.clone(),
-                        params.device_model.clone(),
-                        String::new(),
-                        params.application_version.clone(),
-                        self.client_id,
-                    )
-                    .await;
+                    let key = self.params.database_encryption_key.clone();
+                    let mut response = self.set_tdlib_parameters(key.clone()).await;
+                    // The key doesn't match an existing unencrypted database
+                    // (e.g. a previous re-encryption failed): open it without
+                    // one, so the caller can encrypt it again.
+                    if let Err(e) = &response
+                        && !key.is_empty()
+                    {
+                        tracing::warn!("Opening the TDLib database with its key failed: {e:?}");
+                        response = self.set_tdlib_parameters(String::new()).await;
+                        self.database_encrypted = false;
+                    } else {
+                        self.database_encrypted = !key.is_empty();
+                    }
                     if let Err(e) = response {
                         auth.report_error(&e.message);
+                        // Nothing more can happen without parameters
+                        self.close().await;
+                        continue;
                     }
                     // Before TDLib establishes connections
                     if let Some(proxy) = &self.params.proxy {
@@ -230,6 +247,36 @@ impl Client {
                 }
             }
         }
+    }
+
+    async fn set_tdlib_parameters(&self, database_encryption_key: String) -> Result<(), TdError> {
+        let params = &self.params;
+        functions::set_tdlib_parameters(
+            false,
+            params.database_dir.to_string_lossy().into_owned(),
+            String::new(),
+            database_encryption_key,
+            params.use_file_database,
+            params.use_chat_info_database,
+            params.use_message_database,
+            false,
+            params.api_id,
+            params.api_hash.clone(),
+            params.system_language_code.clone(),
+            params.device_model.clone(),
+            String::new(),
+            params.application_version.clone(),
+            self.client_id,
+        )
+        .await
+    }
+
+    /// Re-encrypts the TDLib database with `key` (base64; empty decrypts it).
+    pub async fn set_database_encryption_key(&mut self, key: String) -> Result<(), TdError> {
+        let encrypted = !key.is_empty();
+        functions::set_database_encryption_key(key, self.client_id).await?;
+        self.database_encrypted = encrypted;
+        Ok(())
     }
 
     async fn add_proxy(&self, proxy: &Proxy) {
@@ -450,20 +497,6 @@ impl Client {
         pins
     }
 
-    /// Downloads a file synchronously and returns its local path.
-    pub async fn download_file(&self, file_id: i32, priority: i32) -> Result<String, TdError> {
-        match functions::download_file(file_id, priority, 0, 0, true, self.client_id).await {
-            Ok(enums::File::File(file)) => {
-                tracing::info!("File downloaded: {:?}", file.local.path);
-                Ok(file.local.path)
-            }
-            Err(e) => {
-                tracing::error!("Failed to download file {file_id}: {e:?}");
-                Err(e)
-            }
-        }
-    }
-
     /// Sends a text message and clears the pending reply.
     pub async fn send_message(
         &self,
@@ -564,6 +597,28 @@ impl Client {
         {
             Ok(()) => tracing::info!("Set option {name} = {value}"),
             Err(e) => tracing::error!("Failed to set option {name}: {e:?}"),
+        }
+    }
+}
+
+/// Downloads files; cheap to copy into background tasks.
+#[derive(Debug, Clone, Copy)]
+pub struct Files {
+    client_id: i32,
+}
+
+impl Files {
+    /// Downloads a file completely and returns its local path.
+    pub async fn download(&self, file_id: i32) -> Result<String, TdError> {
+        match functions::download_file(file_id, 32, 0, 0, true, self.client_id).await {
+            Ok(enums::File::File(file)) => {
+                tracing::info!("File downloaded: {:?}", file.local.path);
+                Ok(file.local.path)
+            }
+            Err(e) => {
+                tracing::error!("Failed to download file {file_id}: {e:?}");
+                Err(e)
+            }
         }
     }
 }

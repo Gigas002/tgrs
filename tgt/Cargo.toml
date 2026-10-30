@@ -17,28 +17,26 @@ name = "tgt"
 path = "src/main.rs"
 
 [features]
-default = ["audio", "voice-message"]
-# Audio playback (MP3, FLAC, WAV, ...) via rodio.
-audio = ["dep:rodio"]
-# Telegram voice notes (OGG Opus); links the system libopus.
-voice-message = ["audio", "dep:ogg", "dep:audiopus"]
-# chafa-based image rendering in the photo viewer; links the system chafa.
-chafa-dyn = ["ratatui-image/chafa-dyn"]
+default = ["keychain", "media-preview"]
+# Keep the key of the encrypted TDLib database in the system keychain (Secret Service).
+keychain = ["dep:keyring-core", "dep:dbus-secret-service-keyring-store", "dep:getrandom"]
+# Image previews of photos, videos, GIFs and stickers in the media viewer.
+media-preview = ["dep:image", "dep:ratatui-image"]
 
 [dependencies]
 libtgt = { path = "../libtgt", version = "1.0.0" }
 arboard.workspace = true
-audiopus = { workspace = true, optional = true }
 clap.workspace = true
 crossterm.workspace = true
+dbus-secret-service-keyring-store = { workspace = true, optional = true }
 futures.workspace = true
-image.workspace = true
+getrandom = { workspace = true, optional = true }
+image = { workspace = true, optional = true }
+keyring-core = { workspace = true, optional = true }
 nucleo-matcher.workspace = true
-ogg = { workspace = true, optional = true }
 ratatui.workspace = true
 ratatui-explorer.workspace = true
-ratatui-image.workspace = true
-rodio = { workspace = true, optional = true }
+ratatui-image = { workspace = true, optional = true }
 serde.workspace = true
 signal-hook.workspace = true
 thiserror.workspace = true

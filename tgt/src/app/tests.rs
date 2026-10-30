@@ -1,17 +1,10 @@
 use std::path::PathBuf;
 
 use super::*;
-use crate::{
-    app::{commands, themes::ThemeSwitcher},
-    settings::Dirs,
-};
+use crate::{app::commands, settings::Dirs};
 
 fn test_app_context() -> Arc<AppContext> {
     AppContext::for_tests()
-}
-
-fn themes(names: &[&str]) -> ThemeSwitcher {
-    ThemeSwitcher::with_themes(names.iter().map(|name| (*name).to_owned()).collect())
 }
 
 fn temp_dirs(root: &std::path::Path) -> Dirs {
@@ -98,45 +91,6 @@ fn clear_render_flag_returns_previous_and_clears() {
     ctx.mark_dirty();
     assert!(ctx.clear_render_flag());
     assert!(!ctx.needs_render());
-}
-
-#[test]
-fn theme_switcher_cycles_forward_and_back() {
-    let mut switcher = themes(&["theme", "nord", "tokyo"]);
-    assert_eq!(switcher.current_theme(), Some("theme"));
-    assert_eq!(switcher.next_theme(), Some("nord"));
-    assert_eq!(switcher.next_theme(), Some("tokyo"));
-    assert_eq!(switcher.next_theme(), Some("theme"));
-    assert_eq!(switcher.previous_theme(), Some("tokyo"));
-}
-
-#[test]
-fn theme_switcher_empty_has_no_theme() {
-    let mut switcher = themes(&[]);
-    assert_eq!(switcher.current_theme(), None);
-    assert_eq!(switcher.next_theme(), None);
-    assert_eq!(switcher.previous_theme(), None);
-}
-
-#[test]
-fn theme_switcher_switch_to_is_case_sensitive() {
-    let mut switcher = themes(&["theme", "nord"]);
-    assert!(switcher.switch_to_theme("nord").is_ok());
-    assert_eq!(switcher.current_theme(), Some("nord"));
-    assert!(switcher.switch_to_theme("Nord").is_err());
-    assert_eq!(switcher.current_theme(), Some("nord"));
-}
-
-#[test]
-fn theme_switcher_from_context_lists_bundled_themes() {
-    let ctx = test_app_context();
-    let switcher = ThemeSwitcher::from_context(&ctx);
-    assert_eq!(
-        switcher.available_themes().first().map(String::as_str),
-        Some("theme")
-    );
-    assert_eq!(switcher.current_theme(), Some("theme"));
-    assert!(switcher.available_themes().iter().any(|t| t == "nord"));
 }
 
 #[test]

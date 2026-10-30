@@ -56,7 +56,7 @@ fn test_alt_r_activates_message_search_when_chat_focused() {
         "Search overlay should be focused after ChatWindowSearch"
     );
     assert!(
-        window.show_search_overlay,
+        window.is_popup_visible(ComponentName::SearchOverlay),
         "Search overlay should be visible"
     );
 }
@@ -80,7 +80,7 @@ fn test_alt_r_switches_from_message_search_to_chat_list_search() {
         "Should switch to ChatList search when Alt+R pressed during message search"
     );
     assert!(
-        !window.show_search_overlay,
+        !window.is_popup_visible(ComponentName::SearchOverlay),
         "Search overlay should be closed"
     );
 }
@@ -151,7 +151,7 @@ fn test_chat_window_search_opens_overlay() {
         Some(ComponentName::SearchOverlay),
         "Search overlay should be focused"
     );
-    assert!(window.show_search_overlay);
+    assert!(window.is_popup_visible(ComponentName::SearchOverlay));
 }
 
 #[test]
@@ -189,41 +189,44 @@ fn test_showing_popup_hides_other_popups() {
 
     // Show command guide
     window.update(Action::ShowCommandGuide);
-    assert!(window.show_command_guide, "Command guide should be visible");
+    assert!(
+        window.is_popup_visible(ComponentName::CommandGuide),
+        "Command guide should be visible"
+    );
     assert_eq!(
         window.component_focused,
         Some(ComponentName::CommandGuide),
         "Command guide should be focused"
     );
 
-    // Show theme selector - should hide command guide (both show action and focus change)
-    window.update(Action::ShowThemeSelector);
+    // Show upload explorer - should hide command guide (both show action and focus change)
+    window.update(Action::ShowFileUploadExplorer);
     assert!(
-        window.show_theme_selector,
-        "Theme selector should be visible"
+        window.is_popup_visible(ComponentName::FileUploadExplorer),
+        "Upload explorer should be visible"
     );
     assert!(
-        !window.show_command_guide,
-        "Command guide should be hidden when theme selector is shown"
+        !window.is_popup_visible(ComponentName::CommandGuide),
+        "Command guide should be hidden when upload explorer is shown"
     );
     assert_eq!(
         window.component_focused,
-        Some(ComponentName::ThemeSelector),
-        "Theme selector should be focused"
+        Some(ComponentName::FileUploadExplorer),
+        "Upload explorer should be focused"
     );
 
-    // Show search overlay - should hide theme selector
+    // Show search overlay - should hide upload explorer
     window.update(Action::ChatWindowSearch);
     assert!(
-        window.show_search_overlay,
+        window.is_popup_visible(ComponentName::SearchOverlay),
         "Search overlay should be visible"
     );
     assert!(
-        !window.show_theme_selector,
-        "Theme selector should be hidden when search overlay is shown"
+        !window.is_popup_visible(ComponentName::FileUploadExplorer),
+        "Upload explorer should be hidden when search overlay is shown"
     );
     assert!(
-        !window.show_command_guide,
+        !window.is_popup_visible(ComponentName::CommandGuide),
         "Command guide should still be hidden"
     );
     assert_eq!(
@@ -239,21 +242,24 @@ fn test_popup_to_popup_focus_hides_previous() {
 
     // Show and focus command guide
     window.update(Action::ShowCommandGuide);
-    assert!(window.show_command_guide, "Command guide should be visible");
+    assert!(
+        window.is_popup_visible(ComponentName::CommandGuide),
+        "Command guide should be visible"
+    );
 
-    // Manually show theme selector and focus it (simulating direct focus)
-    window.show_theme_selector = true;
-    window.update(Action::FocusComponent(ComponentName::ThemeSelector));
+    // Manually show upload explorer and focus it (simulating direct focus)
+    window.active_popup = Some(ComponentName::FileUploadExplorer);
+    window.update(Action::FocusComponent(ComponentName::FileUploadExplorer));
 
     // Command guide should be hidden because we focused away from it (popup to popup)
     assert!(
-        !window.show_command_guide,
-        "Command guide should be hidden when focusing theme selector"
+        !window.is_popup_visible(ComponentName::CommandGuide),
+        "Command guide should be hidden when focusing upload explorer"
     );
     assert_eq!(
         window.component_focused,
-        Some(ComponentName::ThemeSelector),
-        "Theme selector should be focused"
+        Some(ComponentName::FileUploadExplorer),
+        "Upload explorer should be focused"
     );
 }
 
@@ -263,7 +269,10 @@ fn test_focus_component_hides_previous_popup() {
 
     // Show command guide
     window.update(Action::ShowCommandGuide);
-    assert!(window.show_command_guide, "Command guide should be visible");
+    assert!(
+        window.is_popup_visible(ComponentName::CommandGuide),
+        "Command guide should be visible"
+    );
     assert_eq!(
         window.component_focused,
         Some(ComponentName::CommandGuide),
@@ -273,7 +282,7 @@ fn test_focus_component_hides_previous_popup() {
     // Focus ChatList - should hide command guide since it was a popup
     window.update(Action::FocusComponent(ComponentName::ChatList));
     assert!(
-        !window.show_command_guide,
+        !window.is_popup_visible(ComponentName::CommandGuide),
         "Command guide should be hidden when focusing another component"
     );
     assert_eq!(
@@ -282,18 +291,18 @@ fn test_focus_component_hides_previous_popup() {
         "ChatList should be focused"
     );
 
-    // Show theme selector
-    window.update(Action::ShowThemeSelector);
+    // Show upload explorer
+    window.update(Action::ShowFileUploadExplorer);
     assert!(
-        window.show_theme_selector,
-        "Theme selector should be visible"
+        window.is_popup_visible(ComponentName::FileUploadExplorer),
+        "Upload explorer should be visible"
     );
 
-    // Focus Chat - should hide theme selector
+    // Focus Chat - should hide upload explorer
     window.update(Action::FocusComponent(ComponentName::Chat));
     assert!(
-        !window.show_theme_selector,
-        "Theme selector should be hidden when focusing Chat"
+        !window.is_popup_visible(ComponentName::FileUploadExplorer),
+        "Upload explorer should be hidden when focusing Chat"
     );
     assert_eq!(
         window.component_focused,
@@ -322,4 +331,47 @@ fn test_focus_non_popup_does_not_hide_non_popup() {
         "Chat should be focused"
     );
     // No assertions about hiding because ChatList is not a popup component
+}
+
+#[test]
+fn message_actions_and_media_viewer_return_focus_to_the_chat() {
+    let mut window = create_test_core_window();
+    window.update(Action::FocusComponent(ComponentName::Chat));
+
+    window.update(Action::ShowMessageActionsFor(1));
+    assert!(window.is_popup_visible(ComponentName::MessageActions));
+    assert_eq!(
+        window.component_focused,
+        Some(ComponentName::MessageActions)
+    );
+
+    // Picking "view media" in the menu: the menu closes, the viewer opens
+    window.update(Action::HideMessageActions);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+    window.update(Action::ShowMediaViewer(1));
+    assert!(window.is_popup_visible(ComponentName::MediaViewer));
+    assert_eq!(window.component_focused, Some(ComponentName::MediaViewer));
+
+    window.update(Action::HideMediaViewer);
+    assert_eq!(window.active_popup, None);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+}
+
+#[test]
+fn unfocus_hides_the_popup() {
+    let mut window = create_test_core_window();
+    window.update(Action::ShowMediaViewer(1));
+    window.update(Action::UnfocusComponent);
+    assert_eq!(window.active_popup, None);
+    assert_eq!(window.component_focused, None);
+}
+
+#[test]
+fn command_guide_toggles() {
+    let mut window = create_test_core_window();
+    window.update(Action::ShowCommandGuide);
+    assert!(window.is_popup_visible(ComponentName::CommandGuide));
+    window.update(Action::ShowCommandGuide);
+    assert_eq!(window.active_popup, None);
+    assert_eq!(window.component_focused, None);
 }

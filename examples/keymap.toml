@@ -37,8 +37,6 @@ keymap = [
   { keys = ["alt+r"], command = "chat_list_search", description = "Start searching chats"},
   # Show command guide with keybindings
   { keys = ["alt+f1"], command = "show_command_guide", description = "Show command guide with all keybindings"},
-  # Show theme selector
-  { keys = ["alt+t"], command = "show_theme_selector", description = "Show theme selector"},
 
   # Upload file (opens the file explorer popup)
   { keys = ["alt+u"], command = "show_file_upload_explorer", description = "Upload file"},
@@ -90,12 +88,14 @@ keymap = [
   { keys = ["e"], command = "chat_window_edit", description = "Edit the selected message"},
   # Reply to the selected message
   { keys = ["r"], command = "chat_window_reply", description = "Reply to the selected message"},
-  # View photo message
-  { keys = ["alt+v"], command = "view_photo_message", description = "View photo from selected message"},
-  # Play or stop voice/audio message (selected message must be voice note or audio file)
-  { keys = ["alt+p"], command = "play_voice_message", description = "Play or stop voice/audio from selected message"},
-  # Save photo or document attachment to disk (opens save-as popup)
-  { keys = ["alt+s"], command = "start_file_download", description = "Save photo or document to disk"},
+  # Open the actions menu of the selected message
+  { keys = ["enter"], command = "show_message_actions", description = "Open message actions"},
+  # Open the media (photo, video, GIF, audio, voice, file, ...) in its default application, e.g. mpv
+  { keys = ["o"], command = "open_message_media", description = "Open media in the default application"},
+  # Show the media in the media viewer (details, and a preview with the media-preview feature)
+  { keys = ["v"], command = "view_message_media", description = "View media"},
+  # Save the media or file to the download directory (app.download_dir)
+  { keys = ["s"], command = "download_message_media", description = "Download media or file"},
   # Move focus to the prompt and set its state to search messages in the chat window.
   { keys = ["alt+r"], command = "chat_window_search", description = "Focus on prompt to start searching messages"},
   # Restore the default message ordering in the chat window.
@@ -131,15 +131,6 @@ keymap = [
   { keys = ["f1"], command = "hide_command_guide", description = "Close the command guide"},
 ]
 
-# The theme_selector key bindings are only usable when the theme selector popup is focused.
-# When the theme selector is focused, core_window bindings apply too (e.g. Alt+1/2/3).
-# Only list theme selector-specific bindings here.
-[theme_selector]
-keymap = [
-  # Close the theme selector popup
-  { keys = ["esc"], command = "hide_theme_selector", description = "Close the theme selector"},
-]
-
 # The search_overlay key bindings are only usable when the search overlay popup is focused.
 # When the search overlay is focused, core_window bindings apply too (e.g. Alt+1/2/3).
 # Only list search overlay-specific bindings here.
@@ -151,18 +142,31 @@ keymap = [
   { keys = ["enter"], command = "search_overlay_submit", description = "Submit search or confirm selection"},
 ]
 
-# The photo_viewer key bindings are only usable when the photo viewer popup is focused.
-# When the photo viewer is focused, core_window bindings apply too (e.g. Alt+1/2/3).
-# Only list photo viewer-specific bindings here.
-[photo_viewer]
+# The message_actions key bindings are only usable when the message actions menu is open.
+# Besides these, the chat keys of each action (e.g. "e" to edit) run it directly.
+[message_actions]
 keymap = [
-  # Close the photo viewer popup
-  { keys = ["esc"], command = "hide_photo_viewer", description = "Close the photo viewer"},
-  # Navigate to previous/next message
-  { keys = ["up"], command = "photo_viewer_previous", description = "View previous message"},
-  { keys = ["down"], command = "photo_viewer_next", description = "View next message"},
-  { keys = ["k"], command = "photo_viewer_previous", description = "View previous message"},
-  { keys = ["j"], command = "photo_viewer_next", description = "View next message"},
+  { keys = ["esc"], command = "hide_message_actions", description = "Close message actions"},
+  { keys = ["q"], command = "hide_message_actions", description = "Close message actions"},
+  { keys = ["enter"], command = "message_actions_confirm", description = "Run the highlighted action"},
+  { keys = ["up"], command = "message_actions_previous", description = "Previous action"},
+  { keys = ["k"], command = "message_actions_previous", description = "Previous action"},
+  { keys = ["down"], command = "message_actions_next", description = "Next action"},
+  { keys = ["j"], command = "message_actions_next", description = "Next action"},
+]
+
+# The media_viewer key bindings are only usable when the media viewer popup is open.
+[media_viewer]
+keymap = [
+  { keys = ["esc"], command = "hide_media_viewer", description = "Close the media viewer"},
+  { keys = ["q"], command = "hide_media_viewer", description = "Close the media viewer"},
+  { keys = ["o"], command = "media_viewer_open", description = "Open in the default application"},
+  { keys = ["enter"], command = "media_viewer_open", description = "Open in the default application"},
+  { keys = ["d"], command = "media_viewer_download", description = "Download"},
+  { keys = ["up"], command = "media_viewer_previous", description = "Previous media"},
+  { keys = ["k"], command = "media_viewer_previous", description = "Previous media"},
+  { keys = ["down"], command = "media_viewer_next", description = "Next media"},
+  { keys = ["j"], command = "media_viewer_next", description = "Next media"},
 ]
 
 [file_upload_explorer]
@@ -170,11 +174,6 @@ keymap = [
   # Close the file upload explorer popup
   { keys = ["esc"], command = "hide_file_upload_explorer", description = "Close file upload explorer"},
   { keys = ["q"], command = "hide_file_upload_explorer", description = "Close file upload explorer"},
-]
-
-[file_download_explorer]
-keymap = [
-  { keys = ["esc"], command = "hide_file_download_explorer", description = "Cancel save file"},
 ]
 
 # Pinned messages popup (browse all pins in the open chat).
@@ -186,7 +185,7 @@ keymap = [
   { keys = ["down"], command = "pinned_popup_next", description = "Newer pinned message"},
   { keys = ["k"], command = "pinned_popup_previous", description = "Older pinned message"},
   { keys = ["j"], command = "pinned_popup_next", description = "Newer pinned message"},
-  { keys = ["alt+v"], command = "pinned_popup_view_photo", description = "View photo from current pin"},
-  { keys = ["alt+p"], command = "pinned_popup_play_voice", description = "Play voice/audio from current pin"},
+  { keys = ["v"], command = "pinned_popup_view_media", description = "View media of the current pin"},
+  { keys = ["o"], command = "pinned_popup_open_media", description = "Open media of the current pin"},
 ]
 

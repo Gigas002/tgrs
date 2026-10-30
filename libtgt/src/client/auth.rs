@@ -1,11 +1,13 @@
-use std::path::PathBuf;
+use std::{fmt, path::PathBuf};
 
 /// TDLib parameters, resolved by the caller.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct TdParams {
     pub api_id: i32,
     pub api_hash: String,
     pub database_dir: PathBuf,
+    /// Key the TDLib database is encrypted with; empty means unencrypted.
+    pub database_encryption_key: String,
     pub use_file_database: bool,
     pub use_chat_info_database: bool,
     pub use_message_database: bool,
@@ -13,6 +15,34 @@ pub struct TdParams {
     pub device_model: String,
     pub application_version: String,
     pub proxy: Option<Proxy>,
+}
+
+/// Leaves out the secrets: the database key, the API hash and proxy credentials.
+impl fmt::Debug for TdParams {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TdParams")
+            .field("api_id", &self.api_id)
+            .field("api_hash", &"<redacted>")
+            .field("database_dir", &self.database_dir)
+            .field(
+                "database_encrypted",
+                &!self.database_encryption_key.is_empty(),
+            )
+            .field("use_file_database", &self.use_file_database)
+            .field("use_chat_info_database", &self.use_chat_info_database)
+            .field("use_message_database", &self.use_message_database)
+            .field("system_language_code", &self.system_language_code)
+            .field("device_model", &self.device_model)
+            .field("application_version", &self.application_version)
+            .field(
+                "proxy",
+                &self
+                    .proxy
+                    .as_ref()
+                    .map(|p| format!("{}:{}", p.server, p.port)),
+            )
+            .finish()
+    }
 }
 
 /// TDLib's own log, separate from the application log.

@@ -1,5 +1,5 @@
 use crate::{
-    app::action::Action,
+    app::action::{Action, MessageCommand},
     app::context::AppContext,
     ui::component_name::ComponentName,
     ui::component_traits::{Component, HandleFocus},
@@ -193,40 +193,84 @@ impl ChatWindow {
         self.message_list_state.select(None);
     }
 
-    /// Delete the selected message item in the list.
-    ///
-    /// # Arguments
-    /// * `revoke` - A boolean flag indicating whether the message should be revoked or not.
-    fn delete_selected(&mut self, revoke: bool) {
-        if let Some(selected) = self.message_list_state.selected() {
-            let sender_id = self.message_list[selected].sender_id();
-            if sender_id != self.app_context.store().me() {
-                return;
-            }
-            let message_id = self.message_list[selected].id();
-            let _ = self
-                .app_context
-                .action_tx()
-                .send(Action::DeleteMessages(vec![message_id], revoke));
-            self.app_context.store().delete_message(message_id);
+    /// The id of the selected message.
+    fn selected_message_id(&self) -> Option<i64> {
+        self.message_list_state
+            .selected()
+            .and_then(|i| self.message_list.get(i))
+            .map(MessageEntry::id)
+    }
+
+    /// A message of the open chat, loaded or not (e.g. a pinned one).
+    fn message(&self, message_id: i64) -> Option<MessageEntry> {
+        self.message_list
+            .iter()
+            .find(|m| m.id() == message_id)
+            .cloned()
+            .or_else(|| self.app_context.store().get_message(message_id))
+    }
+
+    fn send(&self, action: Action) {
+        if let Some(tx) = self.action_tx.as_ref() {
+            let _ = tx.send(action);
         }
     }
 
-    /// Copy the selected message item in the list.
-    fn copy_selected(&self) {
-        let Some(selected) = self.message_list_state.selected() else {
+    /// Runs `command` on the selected message.
+    fn run_on_selected(&mut self, command: MessageCommand) {
+        match self.selected_message_id() {
+            Some(message_id) => self.run_command(command, message_id),
+            None => self.send(Action::StatusMessage("Select a message first.".into())),
+        }
+    }
+
+    fn run_command(&mut self, command: MessageCommand, message_id: i64) {
+        let Some(entry) = self.message(message_id) else {
             return;
         };
-        let Some(entry) = self.message_list.get(selected) else {
+        match command {
+            MessageCommand::Reply => self.reply(&entry),
+            MessageCommand::Edit => self.edit(&entry),
+            MessageCommand::Copy => self.copy(&entry),
+            MessageCommand::DeleteForEveryone => self.delete(&entry, true),
+            MessageCommand::DeleteForMe => self.delete(&entry, false),
+            MessageCommand::OpenMedia if entry.media().is_some() => {
+                self.send(Action::OpenMedia(message_id));
+            }
+            MessageCommand::ViewMedia if entry.media().is_some() => {
+                self.send(Action::ShowMediaViewer(message_id));
+            }
+            MessageCommand::DownloadMedia if entry.media().is_some() => {
+                self.send(Action::DownloadMedia(message_id));
+            }
+            MessageCommand::OpenMedia
+            | MessageCommand::ViewMedia
+            | MessageCommand::DownloadMedia => {
+                self.send(Action::StatusMessage("This message has no media.".into()));
+            }
+        }
+    }
+
+    /// Deletes one of our messages.
+    ///
+    /// # Arguments
+    /// * `revoke` - A boolean flag indicating whether the message should be revoked or not.
+    fn delete(&self, entry: &MessageEntry, revoke: bool) {
+        if entry.sender_id() != self.app_context.store().me() {
             return;
-        };
+        }
+        let message_id = entry.id();
+        self.send(Action::DeleteMessages(vec![message_id], revoke));
+        self.app_context.store().delete_message(message_id);
+    }
+
+    /// Copies the text of a message to the clipboard.
+    fn copy(&self, entry: &MessageEntry) {
         let message = entry.message_content_to_string();
         match Clipboard::new() {
             Ok(mut clipboard) => {
                 if clipboard.set_text(&message).is_ok() {
-                    if let Some(tx) = self.action_tx.as_ref() {
-                        let _ = tx.send(Action::StatusMessage("Message yanked".into()));
-                    }
+                    self.send(Action::StatusMessage("Message yanked".into()));
                 } else {
                     tracing::warn!("Clipboard set_text failed");
                 }
@@ -237,124 +281,28 @@ impl ChatWindow {
         }
     }
 
-    /// Edit the selected message item in the list. Only our own messages can be edited.
-    fn edit_selected(&self) {
-        let Some(selected) = self.message_list_state.selected() else {
-            return;
-        };
-        let Some(entry) = self.message_list.get(selected) else {
-            return;
-        };
+    /// Edits a message. Only our own messages can be edited.
+    fn edit(&self, entry: &MessageEntry) {
         if entry.sender_id() != self.app_context.store().me() {
             // Not our message: do nothing to avoid bugging the chat.
             return;
         }
-        let message_id = entry.id();
-        let message = entry.message_content_to_string();
         // The prompt must be focused first: actions go to the focused component.
-        let _ = self
-            .app_context
-            .action_tx()
-            .send(Action::FocusComponent(ComponentName::Prompt));
-        let _ = self
-            .app_context
-            .action_tx()
-            .send(Action::EditMessage(message_id, message));
+        self.send(Action::FocusComponent(ComponentName::Prompt));
+        self.send(Action::EditMessage(
+            entry.id(),
+            entry.message_content_to_string(),
+        ));
     }
 
-    /// Reply to the selected message item in the list.
+    /// Replies to a message.
     /// Focuses the prompt and sets reply mode so the user can type in the same prompt used for sending/editing.
-    fn reply_selected(&self) {
-        if let Some(selected) = self.message_list_state.selected() {
-            let message_id = self.message_list[selected].id();
-            let text = self.message_list[selected].message_content_to_string();
-            if let Some(tx) = self.action_tx.as_ref() {
-                let _ = tx.send(Action::FocusComponent(ComponentName::Prompt));
-                let _ = tx.send(Action::ReplyMessage(message_id, text));
-            }
-        }
-    }
-
-    /// Open save-as flow for a photo or document on the selected message.
-    fn start_file_download_selected(&self) {
-        let Some(selected) = self.message_list_state.selected() else {
-            if let Some(tx) = self.action_tx.as_ref() {
-                let _ = tx.send(Action::StatusMessage(
-                    "Select a message to save a file from.".into(),
-                ));
-            }
-            return;
-        };
-        let Some(entry) = self.message_list.get(selected) else {
-            return;
-        };
-        if entry.save_as_candidate().is_none() {
-            if let Some(tx) = self.action_tx.as_ref() {
-                let _ = tx.send(Action::StatusMessage(
-                    "Only photos and documents can be saved to disk.".into(),
-                ));
-            }
-            return;
-        }
-        let message_id = entry.id();
-        if let Some(tx) = self.action_tx.as_ref() {
-            let _ = tx.send(Action::ShowFileDownloadExplorer(message_id));
-        }
-    }
-
-    /// View photo from the selected message.
-    fn view_photo_selected(&self) {
-        if let Some(selected) = self.message_list_state.selected() {
-            let message_id = self.message_list[selected].id();
-            if let Some(tx) = self.action_tx.as_ref() {
-                let _ = tx.send(Action::ViewPhotoMessage(message_id));
-            }
-        }
-    }
-
-    /// Toggle voice/audio playback for the selected message (start from beginning or stop playback).
-    fn play_voice_selected(&self) {
-        if let Some(selected) = self.message_list_state.selected() {
-            let entry = &self.message_list[selected];
-            if entry.voice_audio_file_info().is_some() {
-                let message_id = entry.id();
-                if let Some(tx) = self.action_tx.as_ref() {
-                    let _ = tx.send(Action::PlayVoiceMessage(message_id));
-                }
-            }
-        }
-    }
-
-    /// Navigate to previous message and view its photo (up = towards newer messages).
-    fn view_photo_previous(&mut self) {
-        // Reuse the existing navigation logic with lazy loading
-        self.next();
-
-        // After navigation, send action to view the photo of the selected message
-        if let Some(selected) = self.message_list_state.selected()
-            && let Some(message) = self.message_list.get(selected)
-        {
-            let message_id = message.id();
-            if let Some(tx) = self.action_tx.as_ref() {
-                let _ = tx.send(Action::ViewPhotoMessage(message_id));
-            }
-        }
-    }
-
-    /// Navigate to next message and view its photo (down = towards older messages).
-    fn view_photo_next(&mut self) {
-        // Reuse the existing navigation logic with lazy loading
-        self.previous();
-
-        // After navigation, send action to view the photo of the selected message
-        if let Some(selected) = self.message_list_state.selected()
-            && let Some(message) = self.message_list.get(selected)
-        {
-            let message_id = message.id();
-            if let Some(tx) = self.action_tx.as_ref() {
-                let _ = tx.send(Action::ViewPhotoMessage(message_id));
-            }
-        }
+    fn reply(&self, entry: &MessageEntry) {
+        self.send(Action::FocusComponent(ComponentName::Prompt));
+        self.send(Action::ReplyMessage(
+            entry.id(),
+            entry.message_content_to_string(),
+        ));
     }
 
     /// Wraps each line with a border span on one side only (reply-target border-only highlight).
@@ -423,32 +371,14 @@ impl Component for ChatWindow {
             Action::ChatWindowNext => self.next(),
             Action::ChatWindowPrevious => self.previous(),
             Action::ChatWindowUnselect => self.unselect(),
-            Action::ChatWindowDeleteForEveryone => self.delete_selected(true),
-            Action::ChatWindowDeleteForMe => self.delete_selected(false),
-            Action::ChatWindowCopy => self.copy_selected(),
-            Action::ChatWindowEdit => self.edit_selected(),
-            Action::ShowChatWindowReply => self.reply_selected(),
-            Action::StartFileDownload => {
-                self.start_file_download_selected();
+            Action::SelectedMessage(command) => self.run_on_selected(command),
+            Action::RunMessageCommand(command, message_id) => {
+                self.run_command(command, message_id);
             }
-            Action::ShowPhotoViewer => {
-                self.view_photo_selected();
-            }
-            Action::ToggleVoicePlayback => {
-                self.play_voice_selected();
-            }
-            Action::PhotoViewerPrevious => {
-                self.view_photo_previous();
-            }
-            Action::PhotoViewerNext => {
-                self.view_photo_next();
-            }
-            Action::ViewPhotoMessage(message_id) => {
-                // Forward to CoreWindow to show the photo viewer
-                if let Some(tx) = self.action_tx.as_ref() {
-                    let _ = tx.send(Action::ViewPhotoMessage(message_id));
-                }
-            }
+            Action::ShowMessageActions => match self.selected_message_id() {
+                Some(message_id) => self.send(Action::ShowMessageActionsFor(message_id)),
+                None => self.send(Action::StatusMessage("Select a message first.".into())),
+            },
             Action::JumpCompleted(_message_id) => {
                 // Selection by message_id is applied in draw() when jump_target_message_id is set
             }

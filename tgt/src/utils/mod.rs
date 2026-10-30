@@ -30,6 +30,8 @@ pub struct XdgDirs {
     pub data_home: PathBuf,
     /// `$XDG_STATE_HOME`, fallback `~/.local/state`.
     pub state_home: PathBuf,
+    /// `$XDG_DOWNLOAD_DIR`, fallback `~/Downloads`.
+    pub download_dir: PathBuf,
 }
 
 impl XdgDirs {
@@ -47,6 +49,7 @@ impl XdgDirs {
             config_home: base("XDG_CONFIG_HOME", ".config"),
             data_home: base("XDG_DATA_HOME", ".local/share"),
             state_home: base("XDG_STATE_HOME", ".local/state"),
+            download_dir: base("XDG_DOWNLOAD_DIR", "Downloads"),
             home,
         })
     }
@@ -59,7 +62,7 @@ pub struct AppDirs {
     pub config: PathBuf,
     /// TDLib database and downloaded files.
     pub data: PathBuf,
-    /// Logs and remembered UI choices.
+    /// Logs.
     pub state: PathBuf,
 }
 

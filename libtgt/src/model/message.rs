@@ -2,8 +2,10 @@ use std::path::Path;
 use std::time::{Duration, UNIX_EPOCH};
 
 use chrono::{DateTime, Local};
-use tdlib_rs::enums::{MessageContent, MessageReplyTo, MessageSender, TextEntityType};
-use tdlib_rs::types::FormattedText;
+use tdlib_rs::enums::{
+    MessageContent, MessageReplyTo, MessageSender, StickerFormat, TextEntityType, ThumbnailFormat,
+};
+use tdlib_rs::types::{FormattedText, Thumbnail};
 
 use super::td_enums::{TdMessageReplyTo, TdMessageSender};
 
@@ -94,31 +96,196 @@ impl TextSpan {
 /// One logical line of message content.
 pub type TextLine = Vec<TextSpan>;
 
+/// What kind of file a [`Media`] attachment is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MediaKind {
+    Photo,
+    Video,
+    /// GIF-like animation (TDLib usually stores these as MP4).
+    Animation,
+    Audio,
+    Voice,
+    /// Round video message.
+    VideoNote,
+    Sticker,
+    Document,
+}
+
+impl MediaKind {
+    /// Human-readable name, e.g. for popup titles.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Photo => "Photo",
+            Self::Video => "Video",
+            Self::Animation => "GIF",
+            Self::Audio => "Audio",
+            Self::Voice => "Voice message",
+            Self::VideoNote => "Video message",
+            Self::Sticker => "Sticker",
+            Self::Document => "File",
+        }
+    }
+}
+
+/// A TDLib file: its id and, once downloaded, where it lives on disk.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MediaFile {
+    pub id: i32,
+    /// Local path; empty or partial until TDLib finished downloading.
+    pub local_path: String,
+    pub is_downloaded: bool,
+    /// Size in bytes, 0 when unknown.
+    pub size: i64,
+}
+
+impl MediaFile {
+    /// The local path when the file is completely on disk.
+    pub fn downloaded_path(&self) -> Option<&str> {
+        (self.is_downloaded && !self.local_path.is_empty() && Path::new(&self.local_path).is_file())
+            .then_some(self.local_path.as_str())
+    }
+}
+
+impl From<&tdlib_rs::types::File> for MediaFile {
+    fn from(file: &tdlib_rs::types::File) -> Self {
+        Self {
+            id: file.id,
+            local_path: file.local.path.clone(),
+            is_downloaded: file.local.is_downloading_completed,
+            size: if file.size > 0 {
+                file.size
+            } else {
+                file.expected_size
+            },
+        }
+    }
+}
+
+/// The file attached to a message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Media {
+    pub kind: MediaKind,
+    pub file: MediaFile,
+    /// Original file name; may be empty (photos, voice messages, ...).
+    pub file_name: String,
+    pub mime_type: String,
+    /// Playback length in seconds; 0 for still media.
+    pub duration_secs: i32,
+    /// A still image (JPEG, PNG, WebP or GIF) that represents the media, if any.
+    /// For photos and static stickers this is the file itself.
+    pub preview: Option<MediaFile>,
+}
+
+impl Media {
+    /// A file name to save the media under: the original name, else one
+    /// derived from the kind, file id and MIME type.
+    pub fn suggested_file_name(&self) -> String {
+        if !self.file_name.is_empty() {
+            return self.file_name.clone();
+        }
+        if let Some(name) = path_file_basename(&self.file.local_path) {
+            return name;
+        }
+        let stem = match self.kind {
+            MediaKind::Photo => "photo",
+            MediaKind::Video => "video",
+            MediaKind::Animation => "animation",
+            MediaKind::Audio => "audio",
+            MediaKind::Voice => "voice",
+            MediaKind::VideoNote => "video_note",
+            MediaKind::Sticker => "sticker",
+            MediaKind::Document => "file",
+        };
+        let extension = match self.kind {
+            MediaKind::Photo => Some("jpg"),
+            MediaKind::Voice => Some("ogg"),
+            MediaKind::VideoNote => Some("mp4"),
+            _ => extension_for_mime(&self.mime_type),
+        };
+        match extension {
+            Some(extension) => format!("{stem}_{}.{extension}", self.file.id),
+            None => format!("{stem}_{}", self.file.id),
+        }
+    }
+
+    /// One-line description for the chat, e.g. `🎥 Video (0:12)`.
+    pub fn summary(&self) -> String {
+        let icon = match self.kind {
+            MediaKind::Photo => "📷",
+            MediaKind::Video => "🎥",
+            MediaKind::Animation => "🎞️",
+            MediaKind::Audio => "🎵",
+            MediaKind::Voice => "🎤",
+            MediaKind::VideoNote => "⏺️",
+            MediaKind::Sticker => "🎨",
+            MediaKind::Document => "📄",
+        };
+        let name = match self.kind {
+            MediaKind::Audio | MediaKind::Document if !self.file_name.is_empty() => {
+                self.file_name.as_str()
+            }
+            kind => kind.label(),
+        };
+        let mut summary = format!("{icon} {name}");
+        if self.duration_secs > 0 {
+            summary.push_str(&format!(" ({})", format_duration(self.duration_secs)));
+        } else if self.kind == MediaKind::Document && self.file.size > 0 {
+            summary.push_str(&format!(" ({})", format_size(self.file.size)));
+        }
+        summary
+    }
+}
+
+/// `m:ss`, or `h:mm:ss` from one hour.
+pub fn format_duration(secs: i32) -> String {
+    let secs = secs.max(0);
+    let (h, m, s) = (secs / 3600, secs % 3600 / 60, secs % 60);
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m}:{s:02}")
+    }
+}
+
+/// Byte count with a binary unit, e.g. `1.5 MiB`.
+pub fn format_size(bytes: i64) -> String {
+    const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
+    let mut value = bytes.max(0) as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} B")
+    } else {
+        format!("{value:.1} {}", UNITS[unit])
+    }
+}
+
+fn extension_for_mime(mime_type: &str) -> Option<&'static str> {
+    Some(match mime_type {
+        "image/jpeg" => "jpg",
+        "image/png" => "png",
+        "image/webp" => "webp",
+        "image/gif" => "gif",
+        "video/mp4" => "mp4",
+        "video/webm" => "webm",
+        "video/quicktime" => "mov",
+        "audio/mpeg" => "mp3",
+        "audio/ogg" => "ogg",
+        "audio/mp4" | "audio/x-m4a" => "m4a",
+        "audio/flac" | "audio/x-flac" => "flac",
+        "application/pdf" => "pdf",
+        "application/zip" => "zip",
+        _ => return None,
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MessageContentType {
     Text,
-    Photo {
-        file_id: i32,
-        file_path: String,
-    },
-    /// Attached document (general file): TDLib file id, local cache path when downloaded, original file name.
-    Document {
-        file_id: i32,
-        file_path: String,
-        file_name: String,
-    },
-    /// Voice note or voice message (file_id for download, file_path when local, duration in seconds).
-    VoiceNote {
-        file_id: i32,
-        file_path: String,
-        duration_secs: i32,
-    },
-    /// Audio file message (file_id, file_path, duration in seconds).
-    Audio {
-        file_id: i32,
-        file_path: String,
-        duration_secs: i32,
-    },
+    Media(Media),
     Other,
 }
 
@@ -142,6 +309,19 @@ impl MessageEntry {
             sender_id,
             content: vec![vec![TextSpan::plain(text)]],
             content_type: MessageContentType::Text,
+            reply_to: None,
+            timestamp,
+            is_edited: false,
+        }
+    }
+
+    /// A media message without caption, e.g. for tests.
+    pub fn with_media(id: i64, sender_id: TdMessageSender, media: Media, timestamp: i32) -> Self {
+        Self {
+            id,
+            sender_id,
+            content: single_line(media.summary()),
+            content_type: MessageContentType::Media(media),
             reply_to: None,
             timestamp,
             is_edited: false,
@@ -192,6 +372,14 @@ impl MessageEntry {
             .join("\n")
     }
 
+    /// The attached file, if the message has one.
+    pub fn media(&self) -> Option<&Media> {
+        match &self.content_type {
+            MessageContentType::Media(media) => Some(media),
+            _ => None,
+        }
+    }
+
     /// One-line preview for the pinned strip (handles media where `message_content_to_string` is empty).
     pub fn pinned_strip_preview(&self, max_chars: usize) -> String {
         let text = self.message_content_to_string();
@@ -205,18 +393,7 @@ impl MessageEntry {
             return format!("{}…", trimmed.chars().take(take).collect::<String>());
         }
         match self.content_type() {
-            MessageContentType::Photo { .. } => "Photo".to_string(),
-            MessageContentType::Document { file_name, .. } => {
-                if file_name.is_empty() {
-                    "Document".to_string()
-                } else {
-                    file_name.clone()
-                }
-            }
-            MessageContentType::VoiceNote { duration_secs, .. } => {
-                format!("Voice message ({duration_secs}s)")
-            }
-            MessageContentType::Audio { .. } => "Audio file".to_string(),
+            MessageContentType::Media(media) => media.summary(),
             MessageContentType::Text => "[Empty]".to_string(),
             MessageContentType::Other => "Attachment".to_string(),
         }
@@ -230,75 +407,6 @@ impl MessageEntry {
 
     pub fn set_is_edited(&mut self, is_edited: bool) {
         self.is_edited = is_edited;
-    }
-
-    /// Update the local file path for VoiceNote or Audio content (e.g. after download).
-    pub fn set_audio_file_path(&mut self, path: String) {
-        match &mut self.content_type {
-            MessageContentType::VoiceNote { file_path, .. }
-            | MessageContentType::Audio { file_path, .. } => {
-                *file_path = path;
-            }
-            _ => {}
-        }
-    }
-
-    /// True if this message is a Telegram voice note (OGG Opus). False for audio files (MP3, etc.) and other content.
-    pub fn is_voice_note(&self) -> bool {
-        matches!(self.content_type(), MessageContentType::VoiceNote { .. })
-    }
-
-    /// If this message is voice or audio, returns (file_id, file_path, duration_secs).
-    pub fn voice_audio_file_info(&self) -> Option<(i32, String, i32)> {
-        match self.content_type() {
-            MessageContentType::VoiceNote {
-                file_id,
-                file_path,
-                duration_secs,
-            }
-            | MessageContentType::Audio {
-                file_id,
-                file_path,
-                duration_secs,
-            } => Some((*file_id, file_path.clone(), *duration_secs)),
-            _ => None,
-        }
-    }
-
-    /// Photo or document messages that can be saved to disk: TDLib `file_id` and a default base file name.
-    pub fn save_as_candidate(&self) -> Option<(i32, String)> {
-        match self.content_type() {
-            MessageContentType::Photo { file_id, file_path } => {
-                let base = path_file_basename(file_path).unwrap_or_else(|| "photo.jpg".to_string());
-                Some((*file_id, base))
-            }
-            MessageContentType::Document {
-                file_id, file_name, ..
-            } => {
-                let base = if file_name.is_empty() {
-                    "document".to_string()
-                } else {
-                    file_name.clone()
-                };
-                Some((*file_id, base))
-            }
-            _ => None,
-        }
-    }
-
-    /// If the Telegram file is already on disk, returns its local path.
-    pub fn local_telegram_file_path(&self) -> Option<String> {
-        match self.content_type() {
-            MessageContentType::Photo { file_path, .. }
-            | MessageContentType::Document { file_path, .. } => {
-                if !file_path.is_empty() && Path::new(file_path).is_file() {
-                    Some(file_path.clone())
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
     }
 }
 
@@ -327,6 +435,28 @@ fn single_line(text: impl Into<String>) -> Vec<TextLine> {
     vec![vec![TextSpan::plain(text)]]
 }
 
+/// The media summary line followed by the caption.
+fn media_content(caption: &FormattedText, media: Media) -> (Vec<TextLine>, MessageContentType) {
+    let mut lines = single_line(media.summary());
+    lines.extend(format_message_content(caption));
+    (lines, MessageContentType::Media(media))
+}
+
+/// Thumbnails in formats that decode to a still image.
+fn still_thumbnail(thumbnail: Option<&Thumbnail>) -> Option<MediaFile> {
+    thumbnail
+        .filter(|thumbnail| {
+            matches!(
+                thumbnail.format,
+                ThumbnailFormat::Jpeg
+                    | ThumbnailFormat::Png
+                    | ThumbnailFormat::Webp
+                    | ThumbnailFormat::Gif
+            )
+        })
+        .map(|thumbnail| MediaFile::from(&thumbnail.file))
+}
+
 fn message_content_with_type(content: &MessageContent) -> (Vec<TextLine>, MessageContentType) {
     match content {
         MessageContent::MessageText(m) => {
@@ -334,62 +464,123 @@ fn message_content_with_type(content: &MessageContent) -> (Vec<TextLine>, Messag
         }
         MessageContent::MessagePhoto(photo) => {
             // The last size is usually the largest
-            let (file_id, file_path) = photo
+            let file = photo
                 .photo
                 .sizes
                 .last()
-                .map(|size| (size.photo.id, size.photo.local.path.clone()))
-                .unwrap_or((0, String::new()));
-            (
-                single_line("📷 Photo (press Alt+V to view)"),
-                MessageContentType::Photo { file_id, file_path },
+                .map(|size| MediaFile::from(&size.photo))
+                .unwrap_or_default();
+            media_content(
+                &photo.caption,
+                Media {
+                    kind: MediaKind::Photo,
+                    preview: Some(file.clone()),
+                    file,
+                    file_name: String::new(),
+                    mime_type: "image/jpeg".into(),
+                    duration_secs: 0,
+                },
             )
         }
+        MessageContent::MessageVideo(video) => media_content(
+            &video.caption,
+            Media {
+                kind: MediaKind::Video,
+                file: MediaFile::from(&video.video.video),
+                file_name: video.video.file_name.clone(),
+                mime_type: video.video.mime_type.clone(),
+                duration_secs: video.video.duration,
+                preview: still_thumbnail(video.video.thumbnail.as_ref()),
+            },
+        ),
+        MessageContent::MessageAnimation(animation) => media_content(
+            &animation.caption,
+            Media {
+                kind: MediaKind::Animation,
+                file: MediaFile::from(&animation.animation.animation),
+                file_name: animation.animation.file_name.clone(),
+                mime_type: animation.animation.mime_type.clone(),
+                duration_secs: animation.animation.duration,
+                preview: still_thumbnail(animation.animation.thumbnail.as_ref()),
+            },
+        ),
         MessageContent::MessageAudio(audio) => {
-            let duration_secs = audio.audio.duration;
-            (
-                single_line(format!("🎵 Audio ({duration_secs}s) — Alt+P play/stop")),
-                MessageContentType::Audio {
-                    file_id: audio.audio.audio.id,
-                    file_path: audio.audio.audio.local.path.clone(),
-                    duration_secs,
-                },
-            )
-        }
-        MessageContent::MessageSticker(_) => (single_line("🎨 Sticker"), MessageContentType::Other),
-        MessageContent::MessageVideo(_) => (single_line("🎥 Video"), MessageContentType::Other),
-        MessageContent::MessageAnimation(_) => {
-            (single_line("🎞️ Animation"), MessageContentType::Other)
-        }
-        MessageContent::MessageVoiceNote(voice) => {
-            let duration_secs = voice.voice_note.duration;
-            (
-                single_line(format!(
-                    "🎤 Voice note ({duration_secs}s) — Alt+P play/stop"
-                )),
-                MessageContentType::VoiceNote {
-                    file_id: voice.voice_note.voice.id,
-                    file_path: voice.voice_note.voice.local.path.clone(),
-                    duration_secs,
-                },
-            )
-        }
-        MessageContent::MessageDocument(doc) => {
-            let file_name = doc.document.file_name.clone();
-            let label = if file_name.is_empty() {
-                "📄 Document".to_string()
-            } else {
-                format!("📄 {file_name}")
+            let audio_info = &audio.audio;
+            let file_name = match (audio_info.performer.is_empty(), audio_info.title.is_empty()) {
+                (false, false) => format!("{} – {}", audio_info.performer, audio_info.title),
+                (true, false) => audio_info.title.clone(),
+                _ => audio_info.file_name.clone(),
             };
-            (
-                single_line(label),
-                MessageContentType::Document {
-                    file_id: doc.document.document.id,
-                    file_path: doc.document.document.local.path.clone(),
+            media_content(
+                &audio.caption,
+                Media {
+                    kind: MediaKind::Audio,
+                    file: MediaFile::from(&audio_info.audio),
                     file_name,
+                    mime_type: audio_info.mime_type.clone(),
+                    duration_secs: audio_info.duration,
+                    preview: still_thumbnail(audio_info.album_cover_thumbnail.as_ref()),
                 },
             )
         }
+        MessageContent::MessageVoiceNote(voice) => media_content(
+            &voice.caption,
+            Media {
+                kind: MediaKind::Voice,
+                file: MediaFile::from(&voice.voice_note.voice),
+                file_name: String::new(),
+                mime_type: voice.voice_note.mime_type.clone(),
+                duration_secs: voice.voice_note.duration,
+                preview: None,
+            },
+        ),
+        MessageContent::MessageVideoNote(note) => media_content(
+            &FormattedText::default(),
+            Media {
+                kind: MediaKind::VideoNote,
+                file: MediaFile::from(&note.video_note.video),
+                file_name: String::new(),
+                mime_type: "video/mp4".into(),
+                duration_secs: note.video_note.duration,
+                preview: still_thumbnail(note.video_note.thumbnail.as_ref()),
+            },
+        ),
+        MessageContent::MessageSticker(sticker) => {
+            let sticker = &sticker.sticker;
+            let file = MediaFile::from(&sticker.sticker);
+            let (mime_type, preview) = match sticker.format {
+                StickerFormat::Webp => ("image/webp", Some(file.clone())),
+                StickerFormat::Tgs => (
+                    "application/x-tgsticker",
+                    still_thumbnail(sticker.thumbnail.as_ref()),
+                ),
+                StickerFormat::Webm => ("video/webm", still_thumbnail(sticker.thumbnail.as_ref())),
+            };
+            let media = Media {
+                kind: MediaKind::Sticker,
+                file,
+                file_name: String::new(),
+                mime_type: mime_type.into(),
+                duration_secs: 0,
+                preview,
+            };
+            let summary = format!("{} {}", media.summary(), sticker.emoji);
+            (
+                single_line(summary.trim_end()),
+                MessageContentType::Media(media),
+            )
+        }
+        MessageContent::MessageDocument(doc) => media_content(
+            &doc.caption,
+            Media {
+                kind: MediaKind::Document,
+                file: MediaFile::from(&doc.document.document),
+                file_name: doc.document.file_name.clone(),
+                mime_type: doc.document.mime_type.clone(),
+                duration_secs: 0,
+                preview: still_thumbnail(doc.document.thumbnail.as_ref()),
+            },
+        ),
         MessageContent::MessageCall(call) => {
             let call_type = if call.is_video {
                 "📹 Video Call"

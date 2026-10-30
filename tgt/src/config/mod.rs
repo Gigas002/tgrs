@@ -70,6 +70,7 @@ pub struct FileConfig {
     pub app: AppFile,
     pub logger: LoggerFile,
     pub telegram: TelegramFile,
+    pub credentials: CredentialsFile,
 }
 
 /// `[app]`: terminal and UI behavior.
@@ -85,8 +86,10 @@ pub struct AppFile {
     /// Theme name, i.e. a file stem in `themes/`.
     pub theme: Option<String>,
     pub use_emoji_icons: Option<bool>,
-    pub photo_max_dimension: Option<u32>,
-    pub photo_viewer_popup_size: Option<f32>,
+    /// Where downloaded media is saved.
+    pub download_dir: Option<PathBuf>,
+    pub preview_max_dimension: Option<u32>,
+    pub media_viewer_popup_size: Option<f32>,
 }
 
 /// `[logger]`: tgt's own log.
@@ -128,6 +131,26 @@ pub struct ProxyFile {
     pub password: Option<String>,
     pub http_only: Option<bool>,
     pub secret: Option<String>,
+}
+
+/// `[credentials]`: where secrets are kept.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct CredentialsFile {
+    pub store: Option<CredentialStore>,
+}
+
+/// Where the key of the encrypted TDLib database is kept.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CredentialStore {
+    /// The system keychain when available, else an unencrypted database.
+    #[default]
+    Auto,
+    /// Only the system keychain; fail when it is unavailable.
+    Keychain,
+    /// No keychain: the database is not encrypted.
+    Plain,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]

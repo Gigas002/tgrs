@@ -20,34 +20,50 @@ pub enum ComponentName {
     StatusBar,
     /// The command guide popup.
     CommandGuide,
-    /// The theme selector popup.
-    ThemeSelector,
     /// The search overlay (server-side chat message search).
     SearchOverlay,
-    /// The photo viewer popup.
-    PhotoViewer,
+    /// The actions menu of a chat message.
+    MessageActions,
+    /// The media viewer popup.
+    MediaViewer,
     /// The file upload explorer popup.
     FileUploadExplorer,
-    /// The file download / save-as explorer popup.
-    FileDownloadExplorer,
     /// Pinned messages browser popup (open chat).
     PinnedMessagesPopup,
 }
 
 impl ComponentName {
+    /// Every component, in a fixed order.
+    pub const ALL: [Self; 13] = [
+        Self::CoreWindow,
+        Self::ChatList,
+        Self::Chat,
+        Self::Prompt,
+        Self::ReplyMessage,
+        Self::TitleBar,
+        Self::StatusBar,
+        Self::CommandGuide,
+        Self::SearchOverlay,
+        Self::MessageActions,
+        Self::MediaViewer,
+        Self::FileUploadExplorer,
+        Self::PinnedMessagesPopup,
+    ];
+
+    /// The popups (modal overlays); only one is shown at a time.
+    pub const POPUPS: [Self; 6] = [
+        Self::CommandGuide,
+        Self::SearchOverlay,
+        Self::MessageActions,
+        Self::MediaViewer,
+        Self::FileUploadExplorer,
+        Self::PinnedMessagesPopup,
+    ];
+
     /// Returns true if this component is a popup (overlay) component.
     /// Popup components are modal overlays that should hide other popups when shown.
     pub fn is_popup(&self) -> bool {
-        matches!(
-            self,
-            ComponentName::CommandGuide
-                | ComponentName::ThemeSelector
-                | ComponentName::SearchOverlay
-                | ComponentName::PhotoViewer
-                | ComponentName::FileUploadExplorer
-                | ComponentName::FileDownloadExplorer
-                | ComponentName::PinnedMessagesPopup
-        )
+        Self::POPUPS.contains(self)
     }
 }
 
@@ -62,11 +78,10 @@ impl Display for ComponentName {
             ComponentName::StatusBar => write!(f, "Status Bar"),
             ComponentName::ReplyMessage => write!(f, "Reply Message"),
             ComponentName::CommandGuide => write!(f, "Command Guide"),
-            ComponentName::ThemeSelector => write!(f, "Theme Selector"),
             ComponentName::SearchOverlay => write!(f, "Search Overlay"),
-            ComponentName::PhotoViewer => write!(f, "Photo Viewer"),
+            ComponentName::MessageActions => write!(f, "Message Actions"),
+            ComponentName::MediaViewer => write!(f, "Media Viewer"),
             ComponentName::FileUploadExplorer => write!(f, "File Upload Explorer"),
-            ComponentName::FileDownloadExplorer => write!(f, "File Download Explorer"),
             ComponentName::PinnedMessagesPopup => write!(f, "Pinned Messages"),
         }
     }
