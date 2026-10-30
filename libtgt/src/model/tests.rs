@@ -293,6 +293,54 @@ mod message {
         );
     }
 
+    /// Reactions keep their order and count; non-emoji ones get a symbol.
+    #[test]
+    fn reactions_come_from_interaction_info() {
+        use tdlib_rs::enums::ReactionType;
+        use tdlib_rs::types::{
+            MessageInteractionInfo, MessageReaction, MessageReactions, ReactionTypeCustomEmoji,
+            ReactionTypeEmoji,
+        };
+        let reaction = |r#type, total_count, is_chosen| MessageReaction {
+            r#type,
+            total_count,
+            is_chosen,
+            used_sender_id: None,
+            recent_sender_ids: vec![],
+        };
+        let info = MessageInteractionInfo {
+            reactions: Some(MessageReactions {
+                reactions: vec![
+                    reaction(
+                        ReactionType::Emoji(ReactionTypeEmoji {
+                            emoji: "👍".into()
+                        }),
+                        3,
+                        true,
+                    ),
+                    reaction(
+                        ReactionType::CustomEmoji(ReactionTypeCustomEmoji { custom_emoji_id: 1 }),
+                        1,
+                        false,
+                    ),
+                ],
+                ..MessageReactions::default()
+            }),
+            ..MessageInteractionInfo::default()
+        };
+        let mut entry = MessageEntry::from(&message_with_entities("hi", vec![]));
+        assert!(entry.reactions().is_empty());
+        entry.set_interaction_info(Some(&info));
+        let reactions = entry.reactions();
+        assert_eq!(reactions.len(), 2);
+        assert_eq!((reactions[0].emoji.as_str(), reactions[0].count), ("👍", 3));
+        assert!(reactions[0].chosen && reactions[0].is_emoji());
+        assert_eq!(reactions[1].emoji, crate::model::Reaction::CUSTOM);
+        assert!(!reactions[1].is_emoji());
+        entry.set_interaction_info(None);
+        assert!(entry.reactions().is_empty());
+    }
+
     /// Call messages should display with duration.
     #[test]
     fn format_message_content_call_with_duration() {

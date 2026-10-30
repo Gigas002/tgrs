@@ -38,6 +38,7 @@ pub struct KeymapFile {
     pub media_viewer: Option<KeymapMode>,
     pub file_upload_explorer: Option<KeymapMode>,
     pub pinned_messages_popup: Option<KeymapMode>,
+    pub picker: Option<KeymapMode>,
 }
 
 /// Loads `keymap.toml` from `config_dir`; a missing file is `Ok(None)`.

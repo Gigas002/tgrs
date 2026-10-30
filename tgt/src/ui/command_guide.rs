@@ -184,6 +184,7 @@ impl CommandGuide {
             ("Message Actions", ComponentName::MessageActions),
             ("Media Viewer", ComponentName::MediaViewer),
             ("Pinned Messages", ComponentName::PinnedMessagesPopup),
+            ("Reaction and URL Picker", ComponentName::Picker),
         ] {
             let section_lines = self
                 .get_keybindings_section(title, keymap_config.section(component).unwrap_or(&empty));
@@ -241,7 +242,7 @@ impl CommandGuide {
         lines.push(Line::from("  ]"));
         lines.push(Line::from(""));
         lines.push(Line::from(
-            "Available components: core_window, chat_list, chat, prompt, command_guide, search_overlay, message_actions, media_viewer, file_upload_explorer, pinned_messages_popup",
+            "Available components: core_window, chat_list, chat, prompt, command_guide, search_overlay, message_actions, media_viewer, file_upload_explorer, pinned_messages_popup, picker",
         ));
         lines.push(Line::from(""));
         lines.push(Line::from("Example:"));

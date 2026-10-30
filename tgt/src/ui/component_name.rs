@@ -30,11 +30,13 @@ pub enum ComponentName {
     FileUploadExplorer,
     /// Pinned messages browser popup (open chat).
     PinnedMessagesPopup,
+    /// Popup to pick a reaction or a link.
+    Picker,
 }
 
 impl ComponentName {
     /// Every component, in a fixed order.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::CoreWindow,
         Self::ChatList,
         Self::Chat,
@@ -48,16 +50,18 @@ impl ComponentName {
         Self::MediaViewer,
         Self::FileUploadExplorer,
         Self::PinnedMessagesPopup,
+        Self::Picker,
     ];
 
     /// The popups (modal overlays); only one is shown at a time.
-    pub const POPUPS: [Self; 6] = [
+    pub const POPUPS: [Self; 7] = [
         Self::CommandGuide,
         Self::SearchOverlay,
         Self::MessageActions,
         Self::MediaViewer,
         Self::FileUploadExplorer,
         Self::PinnedMessagesPopup,
+        Self::Picker,
     ];
 
     /// Returns true if this component is a popup (overlay) component.
@@ -83,6 +87,7 @@ impl Display for ComponentName {
             ComponentName::MediaViewer => write!(f, "Media Viewer"),
             ComponentName::FileUploadExplorer => write!(f, "File Upload Explorer"),
             ComponentName::PinnedMessagesPopup => write!(f, "Pinned Messages"),
+            ComponentName::Picker => write!(f, "Picker"),
         }
     }
 }

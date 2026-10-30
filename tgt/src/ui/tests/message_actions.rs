@@ -4,6 +4,7 @@ use crate::{
     ui::tests::{create_mock_media_message, create_mock_message, create_test_app_context},
 };
 use crossterm::event::{KeyCode, KeyModifiers};
+use libtgt::model::{TdMessageSender, TextSpan, TextStyle};
 use tokio::sync::mpsc;
 
 fn menu_with(messages: Vec<MessageEntry>) -> (MessageActions, mpsc::UnboundedReceiver<Action>) {
@@ -79,14 +80,14 @@ fn own_media_message_enables_media_and_delete() {
 fn confirm_closes_the_menu_then_runs_the_command() {
     let (mut menu, mut rx) = menu_with(vec![create_mock_message(1, "hello")]);
     menu.update(Action::ShowMessageActionsFor(1));
-    // Reply is first and always available
+    // Copy is first, like concord's menu, and the message has text
     assert_eq!(menu.selected, 0);
     menu.update(Action::MessageActionsConfirm);
     assert_eq!(
         sent(&mut rx),
         vec![
             Action::HideMessageActions,
-            Action::RunMessageCommand(MessageCommand::Reply, 1),
+            Action::RunMessageCommand(MessageCommand::Copy, 1),
         ]
     );
 }
@@ -149,4 +150,77 @@ fn unknown_message_does_not_open() {
     let (mut menu, _rx) = menu_with(vec![]);
     menu.update(Action::ShowMessageActionsFor(42));
     assert!(!menu.visible);
+}
+
+fn label(menu: &MessageActions, command: MessageCommand) -> &'static str {
+    menu.items
+        .iter()
+        .find(|item| item.command == command)
+        .unwrap()
+        .label
+}
+
+fn message_with_link(id: i64) -> MessageEntry {
+    let link = TextStyle {
+        link: true,
+        ..TextStyle::default()
+    };
+    MessageEntry::formatted(
+        id,
+        TdMessageSender::User(2),
+        vec![vec![
+            TextSpan::plain("see "),
+            TextSpan::styled("example.org", link),
+        ]],
+        0,
+    )
+}
+
+#[test]
+fn open_url_needs_a_link_and_go_to_needs_a_reply() {
+    let (mut menu, _rx) = menu_with(vec![create_mock_message(1, "hi"), message_with_link(2)]);
+    menu.update(Action::ShowMessageActionsFor(1));
+    assert_eq!(disabled(&menu, MessageCommand::OpenLink), Some("no links"));
+    assert_eq!(
+        disabled(&menu, MessageCommand::GoToReply),
+        Some("not a reply")
+    );
+    assert_eq!(disabled(&menu, MessageCommand::React), None);
+    menu.update(Action::ShowMessageActionsFor(2));
+    assert_eq!(disabled(&menu, MessageCommand::OpenLink), None);
+}
+
+#[test]
+fn pinned_messages_offer_unpin() {
+    let (mut menu, _rx) = menu_with(vec![create_mock_message(1, "hi")]);
+    menu.update(Action::ShowMessageActionsFor(1));
+    assert_eq!(label(&menu, MessageCommand::TogglePin), "pin message");
+    menu.app_context
+        .store()
+        .open_chat_messages()
+        .get_message_mut(1)
+        .unwrap()
+        .set_is_pinned(true);
+    menu.update(Action::ShowMessageActionsFor(1));
+    assert_eq!(label(&menu, MessageCommand::TogglePin), "unpin message");
+}
+
+#[test]
+fn concord_keys_react_and_reply() {
+    let (mut menu, mut rx) = menu_with(vec![create_mock_message(1, "hello")]);
+    for (key, command) in [('r', MessageCommand::React), ('R', MessageCommand::Reply)] {
+        menu.update(Action::ShowMessageActionsFor(1));
+        menu.update(Action::Key(
+            KeyCode::Char(key),
+            Modifiers::from(KeyModifiers::NONE),
+        ));
+        assert_eq!(
+            sent(&mut rx),
+            vec![
+                Action::HideMessageActions,
+                Action::RunMessageCommand(command, 1),
+            ],
+            "{key}"
+        );
+    }
 }

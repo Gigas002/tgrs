@@ -28,18 +28,28 @@ Build features can be combined (e.g. `cargo build --release --no-default-feature
 | `keychain`      | Encrypt the TDLib database (your login session) with a key kept in the system keychain (Secret Service). See `[credentials]` in `config.toml`.              |
 | `media-preview` | Image previews in the chat and the media viewer: photos, static stickers and the thumbnails of videos, GIFs, video messages and files.                       |
 
-### Media
+### Messages
 
-`tgt` doesn't play media itself. With `media-preview`, images (and the thumbnails of videos, GIFs and files) are previewed under their messages in the chat; select a message and:
+Select a message in the chat (`up`/`down`) and press a key, or `Enter` for the actions menu, which lists every action with its key and dims the ones that don't apply. The keys follow [concord](https://github.com/chojs23/concord)'s:
 
-| Key     | Action                                                                                                               |
-| ------- | -------------------------------------------------------------------------------------------------------------------- |
-| `o`     | Open the media (photo, video, GIF, audio, voice message, sticker or file) in its default application via `xdg-open`. |
-| `v`     | Open the media viewer: file details and a preview. There `o` opens, `d` downloads.                                   |
-| `s`     | Download the media or file (archives, documents, ...) to `app.download_dir`.                                         |
-| `Enter` | Open the message actions menu, listing every action with its key.                                                    |
+| Key | Action                                                                                         |
+| --- | ---------------------------------------------------------------------------------------------- |
+| `y` | Copy the text.                                                                                 |
+| `r` | React: pick an emoji the chat allows; picking one of yours removes it. `1`-`9`, `0` pick directly. |
+| `R` | Reply.                                                                                         |
+| `e` | Edit your message.                                                                             |
+| `d` | Delete your message for everyone (`D`: only for you).                                          |
+| `o` | Open a link of the message in the browser, picked from a list when there are several.         |
+| `x` | Open the media (photo, video, GIF, audio, voice message, sticker or file) via `xdg-open`.     |
+| `v` | Open the media viewer: file details and a preview. There `o` opens, `d` downloads.             |
+| `s` | Download the media or file (archives, documents, ...) to `app.download_dir`.                   |
+| `g` | Go to the message it replies to.                                                               |
+| `P` | Pin or unpin the message for everyone.                                                         |
+| `L` | Copy the message's link (supergroups and channels).                                            |
 
-Files are fetched from Telegram first when needed; progress and errors are shown in the status bar. Downloads never overwrite: `file.zip` becomes `file (1).zip`. Programs and scripts (`.sh`, `.desktop`, `.AppImage`, `.jar`, ...) are never opened, only downloaded.
+Reactions are shown under their messages, yours highlighted, and pinned messages get a 📌.
+
+`tgt` doesn't play media itself. With `media-preview`, images (and the thumbnails of videos, GIFs and files) are previewed under their messages. Files are fetched from Telegram first when needed; progress and errors are shown in the status bar. Downloads never overwrite: `file.zip` becomes `file (1).zip`. Programs and scripts (`.sh`, `.desktop`, `.AppImage`, `.jar`, ...) are never opened, only downloaded. Only web, e-mail, phone and `tg:` links are opened; others, like `file:` links, are refused.
 
 ### Configuration
 

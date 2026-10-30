@@ -75,3 +75,37 @@ fn save_to_dir_reports_a_missing_source() {
     let tmp = tempfile::tempdir().unwrap();
     assert!(save_to_dir(&tmp.path().join("missing"), tmp.path(), "x").is_err());
 }
+
+#[test]
+fn links_open_only_as_web_mail_or_phone_addresses() {
+    assert_eq!(
+        link_url("https://example.org/a?b").as_deref(),
+        Some("https://example.org/a?b")
+    );
+    assert_eq!(
+        link_url("example.org/page").as_deref(),
+        Some("https://example.org/page")
+    );
+    assert_eq!(
+        link_url("ann@example.org").as_deref(),
+        Some("mailto:ann@example.org")
+    );
+    assert_eq!(
+        link_url("+1 (555) 010-99").as_deref(),
+        Some("tel:+155501099")
+    );
+    assert_eq!(
+        link_url("tg://resolve?domain=x").as_deref(),
+        Some("tg://resolve?domain=x")
+    );
+    // Local files, scripts and option-like arguments are never handed over
+    for refused in [
+        "file:///etc/passwd",
+        "javascript:alert(1)",
+        "ssh://host",
+        "-x",
+        "two words",
+    ] {
+        assert_eq!(link_url(refused), None, "{refused}");
+    }
+}

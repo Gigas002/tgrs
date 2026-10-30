@@ -15,7 +15,9 @@ pub mod file_upload_explorer;
 pub mod media_viewer;
 pub mod message;
 pub mod message_actions;
+pub mod picker;
 pub mod pinned_messages_popup;
+pub mod popup_list;
 #[cfg(feature = "media-preview")]
 pub mod preview;
 pub mod prompt_window;

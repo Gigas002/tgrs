@@ -28,7 +28,10 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
     app::{
-        action::Action, auth::StdinAuthenticator, context::AppContext, error::AppError,
+        action::{Action, PickerKind, ReactionChoice},
+        auth::StdinAuthenticator,
+        context::AppContext,
+        error::AppError,
         event::Event,
     },
     settings::{ActionBinding, Command, Settings},
@@ -181,6 +184,38 @@ async fn run_tui(
     result
 }
 
+/// The reaction picker for a message: our reactions first (picking one
+/// removes it), then the ones the chat allows.
+fn reaction_picker(app_context: &AppContext, message_id: i64, available: Vec<String>) -> Action {
+    let mut reactions: Vec<ReactionChoice> = app_context
+        .store()
+        .get_message(message_id)
+        .map(|message| {
+            message
+                .reactions()
+                .iter()
+                .filter(|reaction| reaction.chosen && reaction.is_emoji())
+                .map(|reaction| ReactionChoice {
+                    emoji: reaction.emoji.clone(),
+                    chosen: true,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    for emoji in available {
+        if !reactions.iter().any(|reaction| reaction.emoji == emoji) {
+            reactions.push(ReactionChoice {
+                emoji,
+                chosen: false,
+            });
+        }
+    }
+    Action::ShowPicker(PickerKind::Reactions {
+        message_id,
+        reactions,
+    })
+}
+
 /// Turns a store change into the actions the UI reacts to.
 fn handle_notification(
     app_context: &AppContext,
@@ -196,6 +231,7 @@ fn handle_notification(
             action_tx.send(Action::ChatHistoryAppended)?;
             action_tx.send(Action::ViewAllMessages)?;
         }
+        Notification::OpenChatMessageChanged(_) => app_context.mark_dirty(),
         Notification::OpenChatPinsChanged => action_tx.send(Action::LoadPinnedMessages)?,
         Notification::OpenChatHistoryInvalidated => action_tx.send(Action::GetChatHistory)?,
     }
@@ -360,6 +396,10 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::HideMessageActions
             | Action::MessageActionsPrevious
             | Action::MessageActionsNext
+            | Action::ShowPicker(_)
+            | Action::HidePicker
+            | Action::PickerPrevious
+            | Action::PickerNext
             | Action::ShowMediaViewer(_)
             | Action::HideMediaViewer
             | Action::MediaViewerPrevious
@@ -498,6 +538,52 @@ async fn handle_app_actions(
             }
             Action::OpenMedia(message_id) => {
                 media::open(&app_context, client.files(), *message_id);
+            }
+            Action::OpenUrl(url) => media::open_url(&app_context, url),
+            Action::LoadReactions(message_id) => {
+                let chat_id = app_context.store().open_chat_id().as_i64();
+                match client.available_reactions(chat_id, *message_id).await {
+                    Ok(available) => {
+                        let picker = reaction_picker(&app_context, *message_id, available);
+                        app_context.action_tx().send(picker)?;
+                    }
+                    Err(e) => media::status(&app_context, format!("Can't react: {}", e.message)),
+                }
+            }
+            Action::SetReaction(message_id, emoji, add) => {
+                let chat_id = app_context.store().open_chat_id().as_i64();
+                if let Err(e) = client
+                    .set_reaction(chat_id, *message_id, emoji.clone(), *add)
+                    .await
+                {
+                    media::status(&app_context, format!("Can't react: {}", e.message));
+                }
+            }
+            Action::SetPinned(message_id, pinned) => {
+                let chat_id = app_context.store().open_chat_id().as_i64();
+                let (verb, done) = if *pinned {
+                    ("pin", "pinned")
+                } else {
+                    ("unpin", "unpinned")
+                };
+                match client.set_pinned(chat_id, *message_id, *pinned).await {
+                    Ok(()) => media::status(&app_context, format!("Message {done}")),
+                    Err(e) => media::status(&app_context, format!("Can't {verb}: {}", e.message)),
+                }
+            }
+            Action::CopyMessageLink(message_id) => {
+                let chat_id = app_context.store().open_chat_id().as_i64();
+                match client.message_link(chat_id, *message_id).await {
+                    Ok(link) => {
+                        match arboard::Clipboard::new().and_then(|mut c| c.set_text(link)) {
+                            Ok(()) => media::status(&app_context, "Message link copied".to_owned()),
+                            Err(e) => {
+                                media::status(&app_context, format!("Can't copy the link: {e}"))
+                            }
+                        }
+                    }
+                    Err(e) => media::status(&app_context, format!("No link: {}", e.message)),
+                }
             }
             Action::DownloadMedia(message_id) => {
                 media::download(&app_context, client.files(), *message_id);

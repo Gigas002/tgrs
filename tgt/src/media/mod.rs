@@ -2,6 +2,7 @@
 //! application and saving them to the download directory.
 
 use std::{
+    ffi::OsStr,
     fs, io,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -59,6 +60,64 @@ pub fn is_executable_type(path: &Path) -> bool {
         })
 }
 
+/// Schemes of links from messages that are opened. Others, like `file:` or
+/// custom handlers, could open local files or start programs.
+const URL_SCHEMES: &[&str] = &["http", "https", "mailto", "tel", "tg"];
+
+/// What to open for a link in a message: bare domains get `https://`, e-mail
+/// addresses `mailto:` and phone numbers `tel:`. `None` when the link has
+/// another scheme or isn't a single address.
+pub fn link_url(target: &str) -> Option<String> {
+    let target = target.trim();
+    if target.is_empty() || target.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return phone_url(target);
+    }
+    if let Some((scheme, _)) = target.split_once("://") {
+        return URL_SCHEMES
+            .iter()
+            .any(|known| known.eq_ignore_ascii_case(scheme))
+            .then(|| target.to_owned());
+    }
+    if let Some((scheme, rest)) = target.split_once(':')
+        && !scheme.is_empty()
+        && scheme.chars().all(|c| c.is_ascii_alphabetic())
+    {
+        // `scheme:...` without `//`, like `mailto:` or `javascript:`
+        let known = ["mailto", "tel", "tg"]
+            .iter()
+            .any(|known| known.eq_ignore_ascii_case(scheme));
+        return (known && !rest.is_empty()).then(|| target.to_owned());
+    }
+    if target.contains('@') && !target.contains('/') {
+        return Some(format!("mailto:{target}"));
+    }
+    if let Some(phone) = phone_url(target) {
+        return Some(phone);
+    }
+    // A bare domain; `-` first could be read as an option by the opener
+    (!target.starts_with('-')).then(|| format!("https://{target}"))
+}
+
+/// `tel:` for phone numbers like `+1 (555) 010-99`.
+fn phone_url(target: &str) -> Option<String> {
+    let digits = target.chars().filter(char::is_ascii_digit).count();
+    let only_phone_chars = target
+        .chars()
+        .all(|c| c.is_ascii_digit() || " +-().".contains(c));
+    (digits >= 3 && only_phone_chars).then(|| {
+        let number: String = target
+            .chars()
+            .filter(|c| c.is_ascii_digit() || *c == '+')
+            .collect();
+        format!("tel:{number}")
+    })
+}
+
+/// Opens `url` in the default browser (or mail/phone application).
+pub fn open_url(url: &str) -> io::Result<()> {
+    run_opener(url.as_ref())
+}
+
 /// Opens `path` with the default application (e.g. mpv for videos, an image
 /// viewer for photos). Blocks until the opener hands the file over.
 /// Programs and scripts are refused: received files must not run with a
@@ -70,8 +129,13 @@ pub fn open_with_default_app(path: &Path) -> io::Result<()> {
             "programs and scripts aren't opened, download the file instead",
         ));
     }
+    run_opener(path.as_os_str())
+}
+
+/// Runs the opener on `target` and waits for it to hand it over.
+fn run_opener(target: &OsStr) -> io::Result<()> {
     let status = Command::new(OPENER)
-        .arg(path)
+        .arg(target)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

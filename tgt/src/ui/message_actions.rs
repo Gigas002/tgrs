@@ -2,17 +2,13 @@ use crate::{
     app::action::{Action, MessageCommand},
     app::context::AppContext,
     app::event::Event,
+    settings::HighlightGroup,
     ui::component_name::ComponentName,
     ui::component_traits::{Component, HandleFocus},
+    ui::popup_list::{self, PopupRow},
 };
-use libtgt::model::MessageEntry;
-use ratatui::{
-    Frame,
-    layout::{Alignment, Rect},
-    style::{Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph},
-};
+use libtgt::model::{MessageEntry, TdMessageReplyTo};
+use ratatui::{Frame, layout::Rect, text::Span};
 use std::{io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -20,6 +16,7 @@ use tokio::sync::mpsc::UnboundedSender;
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MenuItem {
     command: MessageCommand,
+    label: &'static str,
     /// Why the action doesn't apply to the message, if it doesn't.
     disabled: Option<&'static str>,
 }
@@ -56,23 +53,23 @@ impl MessageActions {
         self
     }
 
-    fn items_for(message: &MessageEntry, mine: bool) -> Vec<MenuItem> {
+    fn items_for(message: &MessageEntry, mine: bool, open_chat_id: i64) -> Vec<MenuItem> {
+        let has_text = !message.message_content_to_string().is_empty();
+        let replies_here = matches!(
+            message.reply_to(),
+            Some(TdMessageReplyTo::Message(reply)) if reply.chat_id == open_chat_id
+        );
         MessageCommand::ALL
             .into_iter()
             .map(|command| {
                 let disabled = match command {
-                    MessageCommand::Reply => None,
+                    MessageCommand::Copy if !has_text => Some("no text"),
                     MessageCommand::Edit if !mine => Some("not your message"),
                     MessageCommand::Edit if message.media().is_some() => Some("media message"),
-                    MessageCommand::Edit => None,
-                    MessageCommand::Copy if message.message_content_to_string().is_empty() => {
-                        Some("no text")
-                    }
-                    MessageCommand::Copy => None,
                     MessageCommand::DeleteForEveryone | MessageCommand::DeleteForMe if !mine => {
                         Some("not your message")
                     }
-                    MessageCommand::DeleteForEveryone | MessageCommand::DeleteForMe => None,
+                    MessageCommand::OpenLink if message.links().is_empty() => Some("no links"),
                     MessageCommand::OpenMedia
                     | MessageCommand::ViewMedia
                     | MessageCommand::DownloadMedia
@@ -80,11 +77,18 @@ impl MessageActions {
                     {
                         Some("no media")
                     }
-                    MessageCommand::OpenMedia
-                    | MessageCommand::ViewMedia
-                    | MessageCommand::DownloadMedia => None,
+                    MessageCommand::GoToReply if !replies_here => Some("not a reply"),
+                    _ => None,
                 };
-                MenuItem { command, disabled }
+                let label = match command {
+                    MessageCommand::TogglePin if message.is_pinned() => "unpin message",
+                    _ => command.label(),
+                };
+                MenuItem {
+                    command,
+                    label,
+                    disabled,
+                }
             })
             .collect()
     }
@@ -96,7 +100,7 @@ impl MessageActions {
             return;
         };
         let mine = message.sender_id() == store.me();
-        self.items = Self::items_for(&message, mine);
+        self.items = Self::items_for(&message, mine, store.open_chat_id().as_i64());
         self.message_id = Some(message_id);
         // Start on the first action that applies
         self.selected = self
@@ -141,7 +145,7 @@ impl MessageActions {
         if let Some(reason) = item.disabled {
             let _ = tx.send(Action::StatusMessage(format!(
                 "Can't {}: {reason}.",
-                item.command.label()
+                item.label
             )));
             return;
         }
@@ -210,56 +214,34 @@ impl Component for MessageActions {
         if !self.visible || self.items.is_empty() {
             return Ok(());
         }
-
-        let rows: Vec<(String, &MenuItem)> = self
+        let theme = self.app_context.theme();
+        let rows: Vec<PopupRow> = self
             .items
             .iter()
-            .map(|item| (self.shortcut_label(item.command), item))
-            .collect();
-        let key_width = rows.iter().map(|(key, _)| key.len()).max().unwrap_or(0);
-        let lines: Vec<Line<'_>> = rows
-            .iter()
-            .enumerate()
-            .map(|(index, (key, item))| {
-                let mut style = Style::default();
-                if item.disabled.is_some() {
-                    style = style.add_modifier(Modifier::DIM);
+            .map(|item| {
+                let mut label = vec![Span::raw(item.label)];
+                if let Some(reason) = item.disabled {
+                    label.push(Span::styled(
+                        format!(" ({reason})"),
+                        theme.style(HighlightGroup::Muted),
+                    ));
                 }
-                if index == self.selected {
-                    style = style.patch(self.app_context.style_item_selected());
+                PopupRow {
+                    key: self.shortcut_label(item.command),
+                    label,
+                    disabled: item.disabled.is_some(),
                 }
-                let label = match item.disabled {
-                    Some(reason) => format!("{} ({reason})", item.command.label()),
-                    None => item.command.label().to_owned(),
-                };
-                Line::from(vec![
-                    Span::styled(
-                        format!(" {key:>key_width$} "),
-                        self.app_context.style_timestamp(),
-                    ),
-                    Span::styled(format!(" {label} "), style),
-                ])
             })
             .collect();
-
-        let content_width = lines.iter().map(Line::width).max().unwrap_or(0) as u16;
-        let width = (content_width + 2).max(24).min(area.width);
-        let height = (lines.len() as u16 + 2).min(area.height);
-        let popup_area = Rect::new(
-            area.x + area.width.saturating_sub(width) / 2,
-            area.y + area.height.saturating_sub(height) / 2,
-            width,
-            height,
+        popup_list::draw(
+            frame,
+            area,
+            theme,
+            "Message actions",
+            &rows,
+            self.selected,
+            28,
         );
-        frame.render_widget(Clear, popup_area);
-
-        let block = Block::new()
-            .borders(Borders::ALL)
-            .title("Message actions")
-            .title_alignment(Alignment::Center)
-            .border_style(self.app_context.style_border_component_focused())
-            .style(self.app_context.style_chat());
-        frame.render_widget(Paragraph::new(lines).block(block), popup_area);
         Ok(())
     }
 }

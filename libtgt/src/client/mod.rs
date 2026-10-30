@@ -6,12 +6,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use tdlib_rs::enums::{
     self, AuthorizationState, ChatList, FoundChatMessages, InputMessageContent,
-    InputMessageReplyTo, LogStream, Messages, OptionValue, SearchMessagesFilter, User,
+    InputMessageReplyTo, LogStream, Messages, OptionValue, ReactionType, SearchMessagesFilter,
+    User,
 };
 use tdlib_rs::functions;
 use tdlib_rs::types::{
     FormattedText, InputFileLocal, InputMessageDocument, InputMessageText, LogStreamFile,
-    OptionValueBoolean,
+    OptionValueBoolean, ReactionTypeEmoji,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
@@ -572,6 +573,92 @@ impl Client {
             Ok(()) => tracing::info!("Messages deleted"),
             Err(e) => tracing::error!("Failed to delete messages: {e:?}"),
         }
+    }
+
+    /// Emoji reactions that can be added to a message, the most used first.
+    /// Custom emoji and paid reactions are left out.
+    pub async fn available_reactions(
+        &self,
+        chat_id: i64,
+        message_id: i64,
+    ) -> Result<Vec<String>, TdError> {
+        let enums::AvailableReactions::AvailableReactions(available) =
+            functions::get_message_available_reactions(chat_id, message_id, 8, self.client_id)
+                .await?;
+        if available.unavailability_reason.is_some() {
+            return Err(TdError {
+                code: 400,
+                message: "reactions aren't available to you here".to_owned(),
+            });
+        }
+        let mut emoji: Vec<String> = Vec::new();
+        for reaction in available
+            .top_reactions
+            .iter()
+            .chain(&available.recent_reactions)
+            .chain(&available.popular_reactions)
+        {
+            if let ReactionType::Emoji(reaction) = &reaction.r#type
+                && !emoji.contains(&reaction.emoji)
+            {
+                emoji.push(reaction.emoji.clone());
+            }
+        }
+        Ok(emoji)
+    }
+
+    /// Adds or removes our emoji reaction on a message.
+    pub async fn set_reaction(
+        &self,
+        chat_id: i64,
+        message_id: i64,
+        emoji: String,
+        add: bool,
+    ) -> Result<(), TdError> {
+        let reaction = ReactionType::Emoji(ReactionTypeEmoji { emoji });
+        if add {
+            functions::add_message_reaction(
+                chat_id,
+                message_id,
+                reaction,
+                false,
+                true,
+                self.client_id,
+            )
+            .await
+        } else {
+            functions::remove_message_reaction(chat_id, message_id, reaction, self.client_id).await
+        }
+    }
+
+    /// Pins or unpins a message, for everyone in the chat.
+    pub async fn set_pinned(
+        &self,
+        chat_id: i64,
+        message_id: i64,
+        pinned: bool,
+    ) -> Result<(), TdError> {
+        if pinned {
+            functions::pin_chat_message(chat_id, message_id, false, false, self.client_id).await
+        } else {
+            functions::unpin_chat_message(chat_id, message_id, self.client_id).await
+        }
+    }
+
+    /// An HTTPS link to a message; only supergroups and channels have them.
+    pub async fn message_link(&self, chat_id: i64, message_id: i64) -> Result<String, TdError> {
+        let enums::MessageLink::MessageLink(link) = functions::get_message_link(
+            chat_id,
+            message_id,
+            0,
+            0,
+            String::new(),
+            false,
+            false,
+            self.client_id,
+        )
+        .await?;
+        Ok(link.link)
     }
 
     pub async fn use_quick_ack(&self) {

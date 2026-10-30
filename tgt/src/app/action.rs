@@ -9,44 +9,84 @@ use crate::{app::error::AppError, ui::component_name::ComponentName};
 /// Something to do with one chat message, from a chat key or the message actions menu.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum MessageCommand {
-    Reply,
-    Edit,
     Copy,
+    /// Add or remove a reaction, picked from the reactions the chat allows.
+    React,
+    Reply,
     DeleteForEveryone,
-    DeleteForMe,
+    Edit,
+    /// Open a link in the message, picked when there are several.
+    OpenLink,
     /// Open the attached media with the default application.
     OpenMedia,
     /// Show the attached media in the media viewer.
     ViewMedia,
     /// Save the attached media to the download directory.
     DownloadMedia,
+    /// Select the message this one replies to.
+    GoToReply,
+    /// Pin the message, or unpin it if it's pinned.
+    TogglePin,
+    /// Copy the message's link (supergroups and channels).
+    CopyLink,
+    DeleteForMe,
 }
 
 impl MessageCommand {
     /// Every command, in the order of the message actions menu.
-    pub const ALL: [Self; 8] = [
-        Self::Reply,
-        Self::Edit,
+    pub const ALL: [Self; 13] = [
         Self::Copy,
+        Self::React,
+        Self::Reply,
+        Self::DeleteForEveryone,
+        Self::Edit,
+        Self::OpenLink,
         Self::OpenMedia,
         Self::ViewMedia,
         Self::DownloadMedia,
-        Self::DeleteForEveryone,
+        Self::GoToReply,
+        Self::TogglePin,
+        Self::CopyLink,
         Self::DeleteForMe,
     ];
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Reply => "reply",
-            Self::Edit => "edit message",
             Self::Copy => "copy message",
+            Self::React => "react",
+            Self::Reply => "reply",
             Self::DeleteForEveryone => "delete for everyone",
-            Self::DeleteForMe => "delete for me",
+            Self::Edit => "edit message",
+            Self::OpenLink => "open URL",
             Self::OpenMedia => "open media",
             Self::ViewMedia => "view media",
             Self::DownloadMedia => "download file",
+            Self::GoToReply => "go to replied message",
+            Self::TogglePin => "pin message",
+            Self::CopyLink => "copy message link",
+            Self::DeleteForMe => "delete for me",
         }
     }
+}
+
+/// A list to pick one entry from, shown in the picker popup.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PickerKind {
+    /// Reactions to toggle on a message.
+    Reactions {
+        message_id: i64,
+        reactions: Vec<ReactionChoice>,
+    },
+    /// Links of a message, to open one.
+    Links(Vec<String>),
+}
+
+/// One emoji in the reaction picker.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReactionChoice {
+    pub emoji: String,
+    /// Whether we already reacted with it; picking it removes it then.
+    pub chosen: bool,
 }
 
 /// Where a preview image is shown, which also sets how large it is decoded.
@@ -306,6 +346,27 @@ pub enum Action {
     /// Highlight the next action in the message actions menu.
     MessageActionsNext,
 
+    /// Load the reactions a message can get, then show them in the picker.
+    LoadReactions(i64),
+    /// Add (`true`) or remove our reaction on a message.
+    SetReaction(i64, String, bool),
+    /// Pin (`true`) or unpin a message.
+    SetPinned(i64, bool),
+    /// Copy the link of a message to the clipboard.
+    CopyMessageLink(i64),
+    /// Open a link from a message in the default browser.
+    OpenUrl(String),
+    /// Show the picker popup.
+    ShowPicker(PickerKind),
+    /// Close the picker popup.
+    HidePicker,
+    /// Highlight the previous entry of the picker.
+    PickerPrevious,
+    /// Highlight the next entry of the picker.
+    PickerNext,
+    /// Pick the highlighted entry.
+    PickerConfirm,
+
     /// Open the media of a message with the default application (downloads it first).
     OpenMedia(i64),
     /// Save the media of a message to the download directory (downloads it first).
@@ -412,6 +473,15 @@ impl FromStr for Action {
             "chat_window_copy" => Ok(Action::SelectedMessage(MessageCommand::Copy)),
             "chat_window_edit" => Ok(Action::SelectedMessage(MessageCommand::Edit)),
             "chat_window_reply" => Ok(Action::SelectedMessage(MessageCommand::Reply)),
+            "react_message" => Ok(Action::SelectedMessage(MessageCommand::React)),
+            "open_message_url" => Ok(Action::SelectedMessage(MessageCommand::OpenLink)),
+            "go_to_replied_message" => Ok(Action::SelectedMessage(MessageCommand::GoToReply)),
+            "toggle_message_pin" => Ok(Action::SelectedMessage(MessageCommand::TogglePin)),
+            "copy_message_link" => Ok(Action::SelectedMessage(MessageCommand::CopyLink)),
+            "hide_picker" => Ok(Action::HidePicker),
+            "picker_previous" => Ok(Action::PickerPrevious),
+            "picker_next" => Ok(Action::PickerNext),
+            "picker_confirm" => Ok(Action::PickerConfirm),
             "open_message_media" => Ok(Action::SelectedMessage(MessageCommand::OpenMedia)),
             "view_message_media" => Ok(Action::SelectedMessage(MessageCommand::ViewMedia)),
             "download_message_media" => Ok(Action::SelectedMessage(MessageCommand::DownloadMedia)),

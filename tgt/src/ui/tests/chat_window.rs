@@ -123,6 +123,63 @@ fn media_commands_need_media() {
     }
 }
 
+fn message_with_links(id: i64, links: &[&str]) -> MessageEntry {
+    use libtgt::model::{TdMessageSender, TextSpan, TextStyle};
+    let link = TextStyle {
+        link: true,
+        ..TextStyle::default()
+    };
+    let spans = links
+        .iter()
+        .map(|target| TextSpan::styled(*target, link))
+        .collect();
+    MessageEntry::formatted(id, TdMessageSender::User(2), vec![spans], 0)
+}
+
+#[test]
+fn one_link_opens_and_several_are_picked() {
+    use crate::app::action::PickerKind;
+    let mut window = create_test_chat_window();
+    let mut rx = with_action_rx(&mut window);
+    setup_messages(
+        &mut window,
+        vec![
+            message_with_links(1, &["a.example"]),
+            message_with_links(2, &["a.example", "b.example"]),
+        ],
+    );
+    window.update(Action::RunMessageCommand(MessageCommand::OpenLink, 1));
+    assert_eq!(sent(&mut rx), vec![Action::OpenUrl("a.example".into())]);
+    window.update(Action::RunMessageCommand(MessageCommand::OpenLink, 2));
+    assert_eq!(
+        sent(&mut rx),
+        vec![Action::ShowPicker(PickerKind::Links(vec![
+            "a.example".into(),
+            "b.example".into()
+        ]))]
+    );
+}
+
+#[test]
+fn react_pin_and_link_commands_go_to_telegram() {
+    let mut window = create_test_chat_window();
+    let mut rx = with_action_rx(&mut window);
+    setup_messages(&mut window, vec![create_mock_message(5, "hi")]);
+    for (command, expected) in [
+        (MessageCommand::React, Action::LoadReactions(5)),
+        (MessageCommand::TogglePin, Action::SetPinned(5, true)),
+        (MessageCommand::CopyLink, Action::CopyMessageLink(5)),
+    ] {
+        window.update(Action::RunMessageCommand(command, 5));
+        assert_eq!(sent(&mut rx), vec![expected], "{command:?}");
+    }
+    window.update(Action::RunMessageCommand(MessageCommand::GoToReply, 5));
+    assert!(matches!(
+        sent(&mut rx).as_slice(),
+        [Action::StatusMessage(_)]
+    ));
+}
+
 #[test]
 fn message_actions_open_for_the_selected_message() {
     let mut window = create_test_chat_window();
@@ -293,6 +350,32 @@ mod layout {
             3,
             "one header per group:\n{text}"
         );
+    }
+
+    #[test]
+    fn reactions_and_the_pin_are_shown_under_the_message() {
+        use libtgt::model::Reaction;
+        let mut window = create_test_chat_window();
+        let mut pinned = message(1, 1, "vote", T).with_reactions(vec![
+            Reaction {
+                emoji: "👍".into(),
+                count: 3,
+                chosen: true,
+            },
+            Reaction {
+                emoji: "🔥".into(),
+                count: 1,
+                chosen: false,
+            },
+        ]);
+        pinned.set_is_pinned(true);
+        setup_messages(&mut window, vec![pinned]);
+        let rows = screen(&mut window, 40, 12);
+        let text = rows.join("\n");
+        let vote = rows.iter().position(|row| row.contains("vote")).unwrap();
+        // Wide emoji take two cells in the buffer, so compare without spaces
+        let chips = rows[vote + 1].replace(' ', "");
+        assert!(chips.contains("📌👍3🔥1"), "{text}");
     }
 
     #[test]

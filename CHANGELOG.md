@@ -32,6 +32,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Changed
 
+- Message keys follow concord's: `r` reacts (was reply, now `R`), `o` opens a URL (opening media moved to `x`). The actions menu starts with copy and uses the concord-style list (selection marker, key column, modal border).
+- Edited messages and reaction changes are redrawn right away.
 - Split into a workspace: `libtgt` (TDLib client, store and models, no UI) and the `tgt` binary.
 - Restructured `tgt` into `cli`, `config`, `settings`, `logger`, `app`, `credentials`, `media`, `ui` and `utils` modules with a single settings resolver (`CLI > environment > config.toml > defaults`).
 - Images, videos, GIFs and stickers are previewed under their messages in the chat and in the media viewer with the new `media-preview` feature (on by default; build with `--no-default-features` to drop it), rendered by `ratatui-image` without chafa; `image` and `ratatui-image` are optional.
@@ -52,6 +54,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - Subcommand `logout`; options `--config-dir`, `--log-dir`, `--log-level` and `-v`/`-q`.
 - Concord-style theme: the UI follows the terminal's colors (default foreground/background and ANSI palette, dim for secondary text). `theme.toml` overrides named Highlight Groups that inherit from each other, border shapes per surface (`[ui.border]`) and the selection marker (`[ui.indicator]`); invalid entries are skipped with a warning.
 - Concord-style message layout: consecutive messages from one sender within 7 minutes share a header (name, time, `(edited)`, ✓/✓✓ for sent/read), day separators, a ` New ` divider before the first unread message, replies as a muted `↪ Name preview` line, attachments as `[photo] 1.2 MiB` labels, and the selected message framed by a rounded card instead of a highlighted background. Links, mentions and code are drawn with the `MessageLink`, `MentionOther` and `InlineCode` groups.
+- Reactions: shown under their messages (yours highlighted, custom emoji as `✦`), and `r` opens a picker of the emoji the chat allows; picking one of yours removes it, `1`-`9` and `0` pick directly.
+- Message actions like concord's: open URL (`o`, picked from a list when there are several), go to the replied message (`g`), pin/unpin (`P`), copy the message link (`L`). Pinned messages show 📌. Only web, e-mail, phone and `tg:` links are opened.
+- `[picker]` keymap section for the reaction and URL picker.
 - `docs/ARCHITECTURE.md`.
 
 - `static` feature to statically link `tdjson` (use with `download-tdlib` or `local-tdlib`); no runtime `tdjson` dependency needed. Powered by **tdlib-rs v1.4.0**.

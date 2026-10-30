@@ -1,5 +1,5 @@
 use crate::{
-    app::action::{Action, MessageCommand},
+    app::action::{Action, MessageCommand, PickerKind},
     app::context::AppContext,
     settings::HighlightGroup,
     ui::component_name::ComponentName,
@@ -8,7 +8,7 @@ use crate::{
 };
 use arboard::Clipboard;
 use crossterm::event::{KeyCode, MouseEventKind};
-use libtgt::model::MessageEntry;
+use libtgt::model::{MessageEntry, TdMessageReplyTo};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     symbols::{
@@ -258,6 +258,26 @@ impl ChatWindow {
             | MessageCommand::DownloadMedia => {
                 self.send(Action::StatusMessage("This message has no media.".into()));
             }
+            MessageCommand::React => self.send(Action::LoadReactions(message_id)),
+            MessageCommand::OpenLink => match entry.links().as_slice() {
+                [] => self.send(Action::StatusMessage("This message has no links.".into())),
+                [link] => self.send(Action::OpenUrl(link.clone())),
+                links => self.send(Action::ShowPicker(PickerKind::Links(links.to_vec()))),
+            },
+            MessageCommand::GoToReply => match entry.reply_to() {
+                Some(TdMessageReplyTo::Message(reply))
+                    if reply.chat_id == self.app_context.store().open_chat_id().as_i64() =>
+                {
+                    self.send(Action::JumpToMessage(reply.message_id));
+                }
+                _ => self.send(Action::StatusMessage(
+                    "This message isn't a reply in this chat.".into(),
+                )),
+            },
+            MessageCommand::TogglePin => {
+                self.send(Action::SetPinned(message_id, !entry.is_pinned()));
+            }
+            MessageCommand::CopyLink => self.send(Action::CopyMessageLink(message_id)),
         }
     }
 

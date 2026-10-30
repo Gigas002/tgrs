@@ -87,11 +87,21 @@ keymap = [
   # Edit the selected message
   { keys = ["e"], command = "chat_window_edit", description = "Edit the selected message"},
   # Reply to the selected message
-  { keys = ["r"], command = "chat_window_reply", description = "Reply to the selected message"},
+  { keys = ["R"], command = "chat_window_reply", description = "Reply to the selected message"},
+  # Add or remove a reaction on the selected message
+  { keys = ["r"], command = "react_message", description = "React to the selected message"},
+  # Open a link of the selected message in the browser (picked when there are several)
+  { keys = ["o"], command = "open_message_url", description = "Open a URL of the selected message"},
+  # Select the message the selected one replies to
+  { keys = ["g"], command = "go_to_replied_message", description = "Go to the replied message"},
+  # Pin the selected message for everyone, or unpin it
+  { keys = ["P"], command = "toggle_message_pin", description = "Pin or unpin the selected message"},
+  # Copy the link of the selected message (supergroups and channels)
+  { keys = ["L"], command = "copy_message_link", description = "Copy the message link"},
   # Open the actions menu of the selected message
   { keys = ["enter"], command = "show_message_actions", description = "Open message actions"},
   # Open the media (photo, video, GIF, audio, voice, file, ...) in its default application, e.g. mpv
-  { keys = ["o"], command = "open_message_media", description = "Open media in the default application"},
+  { keys = ["x"], command = "open_message_media", description = "Open media in the default application"},
   # Show the media in the media viewer (details, and a preview with the media-preview feature)
   { keys = ["v"], command = "view_message_media", description = "View media"},
   # Save the media or file to the download directory (app.download_dir)
@@ -153,6 +163,19 @@ keymap = [
   { keys = ["k"], command = "message_actions_previous", description = "Previous action"},
   { keys = ["down"], command = "message_actions_next", description = "Next action"},
   { keys = ["j"], command = "message_actions_next", description = "Next action"},
+]
+
+# The picker key bindings are only usable when the reaction or URL picker is open.
+# Besides these, 1-9 and 0 pick the first ten entries directly.
+[picker]
+keymap = [
+  { keys = ["esc"], command = "hide_picker", description = "Close the picker"},
+  { keys = ["q"], command = "hide_picker", description = "Close the picker"},
+  { keys = ["enter"], command = "picker_confirm", description = "Pick the highlighted entry"},
+  { keys = ["up"], command = "picker_previous", description = "Previous entry"},
+  { keys = ["k"], command = "picker_previous", description = "Previous entry"},
+  { keys = ["down"], command = "picker_next", description = "Next entry"},
+  { keys = ["j"], command = "picker_next", description = "Next entry"},
 ]
 
 # The media_viewer key bindings are only usable when the media viewer popup is open.

@@ -154,3 +154,42 @@ mod masked_input {
         assert_eq!(read_masked(input, &mut Vec::new()), None);
     }
 }
+
+#[test]
+fn changed_messages_are_redrawn() {
+    let ctx = test_app_context();
+    ctx.clear_render_flag();
+    handle_notification(&ctx, Notification::OpenChatMessageChanged(1)).unwrap();
+    assert!(ctx.needs_render());
+}
+
+#[test]
+fn the_reaction_picker_lists_our_reactions_first() {
+    use libtgt::model::{MessageEntry, Reaction, TdMessageSender};
+    let ctx = test_app_context();
+    let reaction = |emoji: &str, chosen| Reaction {
+        emoji: emoji.into(),
+        count: 1,
+        chosen,
+    };
+    let message = MessageEntry::plain(3, TdMessageSender::User(1), "hi", 0).with_reactions(vec![
+        reaction("🔥", false),
+        reaction("🎉", true),
+        reaction(Reaction::CUSTOM, true),
+    ]);
+    ctx.store().open_chat_messages().insert_messages([message]);
+
+    let picker = reaction_picker(&ctx, 3, vec!["👍".into(), "🎉".into()]);
+    let choice = |emoji: &str, chosen| ReactionChoice {
+        emoji: emoji.into(),
+        chosen,
+    };
+    // Custom emoji can't be sent back by their symbol, so they're left out
+    assert_eq!(
+        picker,
+        Action::ShowPicker(PickerKind::Reactions {
+            message_id: 3,
+            reactions: vec![choice("🎉", true), choice("👍", false)],
+        })
+    );
+}

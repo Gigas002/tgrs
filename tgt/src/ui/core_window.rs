@@ -14,6 +14,7 @@ use crate::{
         file_upload_explorer::FileUploadExplorer,
         media_viewer::MediaViewer,
         message_actions::MessageActions,
+        picker::Picker,
         pinned_messages_popup::PinnedMessagesPopup,
         prompt_window::PromptWindow,
         search_overlay::SearchOverlay,
@@ -110,6 +111,12 @@ impl CoreWindow {
                 ComponentName::MessageActions,
                 MessageActions::new(Arc::clone(&app_context))
                     .with_name(ComponentName::MessageActions.to_string())
+                    .new_boxed(),
+            ),
+            (
+                ComponentName::Picker,
+                Picker::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::Picker.to_string())
                     .new_boxed(),
             ),
             (
@@ -224,6 +231,7 @@ impl CoreWindow {
             ComponentName::MediaViewer => Action::HideMediaViewer,
             ComponentName::FileUploadExplorer => Action::HideFileUploadExplorer,
             ComponentName::PinnedMessagesPopup => Action::HidePinnedMessagesPopup,
+            ComponentName::Picker => Action::HidePicker,
             _ => return None,
         })
     }
@@ -435,6 +443,10 @@ impl Component for CoreWindow {
             }
             Action::HideMessageActions => {
                 self.close_popup(ComponentName::MessageActions, Some(ComponentName::Chat));
+            }
+            Action::ShowPicker(_) => self.show_popup(ComponentName::Picker, action),
+            Action::HidePicker => {
+                self.close_popup(ComponentName::Picker, Some(ComponentName::Chat))
             }
             Action::ShowMediaViewer(_) => self.show_popup(ComponentName::MediaViewer, action),
             Action::HideMediaViewer => {

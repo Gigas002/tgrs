@@ -12,8 +12,8 @@ mod tests;
 pub use chat::ChatListEntry;
 pub use ids::{ChatId, MessageId};
 pub use message::{
-    Media, MediaFile, MediaKind, MessageContentType, MessageEntry, TextLine, TextSpan, TextStyle,
-    format_duration, format_size, format_timestamp,
+    Media, MediaFile, MediaKind, MessageContentType, MessageEntry, Reaction, TextLine, TextSpan,
+    TextStyle, format_duration, format_size, format_timestamp, reaction_emoji,
 };
 pub use ordered_chat::OrderedChat;
 pub use td_enums::{TdChatList, TdMessageReplyTo, TdMessageReplyToMessage, TdMessageSender};

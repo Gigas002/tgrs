@@ -397,6 +397,7 @@ pub fn message_lines(
     );
     let preview_row = (row.preview_rows > 0).then_some(body.len());
     body.extend(std::iter::repeat_with(Vec::new).take(usize::from(row.preview_rows)));
+    body.extend(reaction_lines(entry, theme, content_width));
 
     let prefix = if row.reply_target {
         Span::styled("▎ ", theme.style(HighlightGroup::ReplyTargetBorder))
@@ -437,6 +438,43 @@ pub fn message_lines(
         lines: separators,
         preview_row: preview_row.map(|row| (row + offset) as u16),
     }
+}
+
+/// The pin badge and reaction chips like `👍 3`, wrapped to `width`; ours
+/// are highlighted.
+fn reaction_lines(entry: &MessageEntry, theme: &Theme, width: usize) -> Vec<Vec<Span<'static>>> {
+    let mut chips: Vec<Span<'static>> = Vec::new();
+    if entry.is_pinned() {
+        chips.push(Span::styled("📌", theme.style(HighlightGroup::PinnedBadge)));
+    }
+    for reaction in entry.reactions() {
+        let group = if reaction.chosen {
+            HighlightGroup::SelfReaction
+        } else {
+            HighlightGroup::Reaction
+        };
+        chips.push(Span::styled(
+            format!("{} {}", reaction.emoji, reaction.count),
+            theme.style(group),
+        ));
+    }
+    let mut lines: Vec<Vec<Span<'static>>> = Vec::new();
+    let mut used = 0;
+    for chip in chips {
+        let chip_width = chip.width();
+        match lines.last_mut() {
+            Some(line) if used + 2 + chip_width <= width => {
+                line.push(Span::raw("  "));
+                line.push(chip);
+                used += 2 + chip_width;
+            }
+            _ => {
+                lines.push(vec![chip]);
+                used = chip_width;
+            }
+        }
+    }
+    lines
 }
 
 fn header_spans(

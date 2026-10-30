@@ -36,6 +36,24 @@ pub fn open(app_context: &Arc<AppContext>, files: Files, message_id: i64) {
     });
 }
 
+/// Opens a link from a message in the default browser; links with unknown
+/// schemes are refused.
+pub fn open_url(app_context: &Arc<AppContext>, target: &str) {
+    let Some(url) = media::link_url(target) else {
+        status(app_context, format!("Not opened, not a web link: {target}"));
+        return;
+    };
+    let app_context = Arc::clone(app_context);
+    tokio::spawn(async move {
+        let shown = url.clone();
+        match tokio::task::spawn_blocking(move || media::open_url(&url)).await {
+            Ok(Ok(())) => status(&app_context, format!("Opened {shown}")),
+            Ok(Err(e)) => status(&app_context, format!("Failed to open {shown}: {e}")),
+            Err(e) => tracing::error!("open URL task failed: {e}"),
+        }
+    });
+}
+
 /// Copies the media of a message into the download directory.
 pub fn download(app_context: &Arc<AppContext>, files: Files, message_id: i64) {
     let Some(media) = message_media(app_context, message_id) else {
@@ -142,6 +160,6 @@ async fn local_path(
     }
 }
 
-fn status(app_context: &AppContext, message: String) {
+pub(super) fn status(app_context: &AppContext, message: String) {
     let _ = app_context.action_tx().send(Action::StatusMessage(message));
 }

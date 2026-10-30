@@ -18,6 +18,8 @@ pub enum Notification {
     ChatListChanged,
     /// A new message arrived in the open chat (sent or received).
     OpenChatMessageAdded(i64),
+    /// A message in the open chat changed in place, e.g. its reactions.
+    OpenChatMessageChanged(i64),
     /// A message in the open chat was pinned or unpinned.
     OpenChatPinsChanged,
     /// TDLib evicted open chat messages from its cache; history should be reloaded.
@@ -326,10 +328,26 @@ async fn apply(
             {
                 entry.set_message_content(&update.new_content);
                 entry.set_is_edited(true);
+                let _ = notify.send(Notification::OpenChatMessageChanged(update.message_id));
             }
         }
         Update::MessageIsPinned(update) if update.chat_id == open_chat_id => {
+            if let Some(entry) = store
+                .open_chat_messages()
+                .get_message_mut(update.message_id)
+            {
+                entry.set_is_pinned(update.is_pinned);
+            }
             let _ = notify.send(Notification::OpenChatPinsChanged);
+        }
+        Update::MessageInteractionInfo(update) if update.chat_id == open_chat_id => {
+            if let Some(entry) = store
+                .open_chat_messages()
+                .get_message_mut(update.message_id)
+            {
+                entry.set_interaction_info(update.interaction_info.as_ref());
+                let _ = notify.send(Notification::OpenChatMessageChanged(update.message_id));
+            }
         }
         Update::DeleteMessages(update) if update.chat_id == open_chat_id => {
             // from_cache: TDLib evicted messages from its local cache, they were NOT

@@ -3,9 +3,10 @@ use std::time::{Duration, UNIX_EPOCH};
 
 use chrono::{DateTime, Local};
 use tdlib_rs::enums::{
-    MessageContent, MessageReplyTo, MessageSender, StickerFormat, TextEntityType, ThumbnailFormat,
+    MessageContent, MessageReplyTo, MessageSender, ReactionType, StickerFormat, TextEntityType,
+    ThumbnailFormat,
 };
-use tdlib_rs::types::{FormattedText, Thumbnail};
+use tdlib_rs::types::{FormattedText, MessageInteractionInfo, Thumbnail};
 
 use super::td_enums::{TdMessageReplyTo, TdMessageSender};
 
@@ -319,6 +320,54 @@ fn extension_for_mime(mime_type: &str) -> Option<&'static str> {
     })
 }
 
+/// One reaction under a message, with how many added it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reaction {
+    /// The emoji, or [`Reaction::CUSTOM`] / [`Reaction::PAID`] for reactions
+    /// that aren't plain emoji.
+    pub emoji: String,
+    pub count: i32,
+    /// Whether the current user added it.
+    pub chosen: bool,
+}
+
+impl Reaction {
+    /// Shown for custom emoji reactions, which only Telegram can draw.
+    pub const CUSTOM: &'static str = "✦";
+    /// Shown for paid (star) reactions.
+    pub const PAID: &'static str = "⭐";
+
+    /// Whether the user can add or remove this reaction by its emoji.
+    pub fn is_emoji(&self) -> bool {
+        self.emoji != Self::CUSTOM && self.emoji != Self::PAID
+    }
+}
+
+/// The emoji of a reaction type, as shown and as sent back to TDLib.
+pub fn reaction_emoji(reaction: &ReactionType) -> String {
+    match reaction {
+        ReactionType::Emoji(emoji) => emoji.emoji.clone(),
+        ReactionType::CustomEmoji(_) => Reaction::CUSTOM.to_owned(),
+        ReactionType::Paid => Reaction::PAID.to_owned(),
+    }
+}
+
+fn reactions(info: Option<&MessageInteractionInfo>) -> Vec<Reaction> {
+    info.and_then(|info| info.reactions.as_ref())
+        .map(|reactions| {
+            reactions
+                .reactions
+                .iter()
+                .map(|reaction| Reaction {
+                    emoji: reaction_emoji(&reaction.r#type),
+                    count: reaction.total_count,
+                    chosen: reaction.is_chosen,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MessageContentType {
     Text,
@@ -336,6 +385,8 @@ pub struct MessageEntry {
     reply_to: Option<TdMessageReplyTo>,
     timestamp: i32,
     is_edited: bool,
+    is_pinned: bool,
+    reactions: Vec<Reaction>,
 }
 
 impl MessageEntry {
@@ -349,6 +400,21 @@ impl MessageEntry {
             reply_to: None,
             timestamp,
             is_edited: false,
+            is_pinned: false,
+            reactions: Vec::new(),
+        }
+    }
+
+    /// A message with formatted text, e.g. for tests.
+    pub fn formatted(
+        id: i64,
+        sender_id: TdMessageSender,
+        content: Vec<TextLine>,
+        timestamp: i32,
+    ) -> Self {
+        Self {
+            content,
+            ..Self::plain(id, sender_id, "", timestamp)
         }
     }
 
@@ -362,6 +428,8 @@ impl MessageEntry {
             reply_to: None,
             timestamp,
             is_edited: false,
+            is_pinned: false,
+            reactions: Vec::new(),
         }
     }
 
@@ -409,7 +477,14 @@ impl MessageEntry {
             .join("\n")
     }
 
-    /// The attached file, if the message has one.
+    pub fn is_pinned(&self) -> bool {
+        self.is_pinned
+    }
+
+    pub fn reactions(&self) -> &[Reaction] {
+        &self.reactions
+    }
+
     /// Addresses the message links to, in order and without repeats.
     pub fn links(&self) -> Vec<String> {
         let mut links: Vec<String> = Vec::new();
@@ -426,6 +501,7 @@ impl MessageEntry {
         links
     }
 
+    /// The attached file, if the message has one.
     pub fn media(&self) -> Option<&Media> {
         match &self.content_type {
             MessageContentType::Media(media) => Some(media),
@@ -461,6 +537,20 @@ impl MessageEntry {
     pub fn set_is_edited(&mut self, is_edited: bool) {
         self.is_edited = is_edited;
     }
+
+    pub fn set_is_pinned(&mut self, is_pinned: bool) {
+        self.is_pinned = is_pinned;
+    }
+
+    pub fn set_interaction_info(&mut self, info: Option<&MessageInteractionInfo>) {
+        self.reactions = reactions(info);
+    }
+
+    /// Sets the reactions directly, e.g. for tests.
+    pub fn with_reactions(mut self, reactions: Vec<Reaction>) -> Self {
+        self.reactions = reactions;
+        self
+    }
 }
 
 impl From<&tdlib_rs::types::Message> for MessageEntry {
@@ -480,6 +570,8 @@ impl From<&tdlib_rs::types::Message> for MessageEntry {
             }),
             timestamp: message.date,
             is_edited: message.edit_date != 0,
+            is_pinned: message.is_pinned,
+            reactions: reactions(message.interaction_info.as_ref()),
         }
     }
 }
