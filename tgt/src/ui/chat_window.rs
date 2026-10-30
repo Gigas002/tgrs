@@ -1,21 +1,21 @@
 use crate::{
     app::action::{Action, MessageCommand},
     app::context::AppContext,
+    settings::HighlightGroup,
     ui::component_name::ComponentName,
     ui::component_traits::{Component, HandleFocus},
-    ui::message,
+    ui::message::{self, MessageRow},
 };
 use arboard::Clipboard;
 use crossterm::event::{KeyCode, MouseEventKind};
 use libtgt::model::MessageEntry;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::Style,
     symbols::{
         border::{self, Set},
         line,
     },
-    text::{Line, Span, Text},
+    text::{Line, Span},
     widgets::{Block, Borders, List, ListDirection, ListItem, ListState, Paragraph},
 };
 use std::sync::Arc;
@@ -43,9 +43,10 @@ pub struct ChatWindow {
     previews: crate::ui::preview::ChatPreviews,
 }
 
-/// A message's preview in the list: its message id, image and alignment.
+/// A message's preview in the list: its message id, image, and the row in its
+/// item where the preview starts.
 #[cfg(feature = "media-preview")]
-type PreviewSlot = Option<(i64, libtgt::model::MediaFile, Alignment)>;
+type PreviewSlot = Option<(i64, libtgt::model::MediaFile, u16)>;
 /// Implementation of the `ChatWindow` struct.
 impl ChatWindow {
     /// Create a new instance of the `ChatWindow` struct.
@@ -323,6 +324,15 @@ impl ChatWindow {
         entry.media()?.inline_preview()
     }
 
+    /// Rows reserved under a message for its preview.
+    fn preview_rows(_entry: &MessageEntry) -> u16 {
+        #[cfg(feature = "media-preview")]
+        if Self::preview_file(_entry).is_some() {
+            return crate::ui::preview::CHAT_PREVIEW_ROWS;
+        }
+        0
+    }
+
     /// Draws the previews of the messages fully on screen, loading missing
     /// ones. `heights` and `slots` follow the list's items, newest first, as
     /// they're stacked up from the bottom of `inner`.
@@ -336,8 +346,9 @@ impl ChatWindow {
     ) {
         use crate::ui::preview::{CHAT_PREVIEW_COLUMNS, CHAT_PREVIEW_ROWS};
 
-        let width = CHAT_PREVIEW_COLUMNS.min(inner.width);
-        let placeholder_style = self.app_context.style_timestamp();
+        let indent = message::MESSAGE_PREFIX_WIDTH;
+        let width = CHAT_PREVIEW_COLUMNS.min(inner.width.saturating_sub(2 * indent));
+        let placeholder_style = self.app_context.style(HighlightGroup::Placeholder);
         let mut bottom = inner.bottom();
         let offset = self.message_list_state.offset();
         for (height, slot) in heights.iter().zip(slots).skip(offset) {
@@ -345,44 +356,17 @@ impl ChatWindow {
             if *height > bottom - inner.y {
                 break;
             }
-            if let Some((message_id, file, alignment)) = slot {
+            let top = bottom - height;
+            if let Some((message_id, file, row)) = slot {
                 if let Some(action) = self.previews.request(*message_id, file) {
                     self.send(action);
                 }
-                let rows = CHAT_PREVIEW_ROWS.min(*height);
-                let x = match alignment {
-                    Alignment::Right => inner.right() - width,
-                    _ => inner.x,
-                };
-                let area = Rect::new(x, bottom - rows, width, rows);
+                let area = Rect::new(inner.x + indent, top + row, width, CHAT_PREVIEW_ROWS);
                 self.previews
-                    .draw(frame, file.id, area, *alignment, placeholder_style);
+                    .draw(frame, file.id, area, Alignment::Left, placeholder_style);
             }
-            bottom -= height;
+            bottom = top;
         }
-    }
-
-    fn wrap_text_with_reply_border(
-        content: Text,
-        border_style: Style,
-        alignment: Alignment,
-        myself: bool,
-    ) -> Text {
-        let wrapped_lines: Vec<Line> = content
-            .into_iter()
-            .map(|line| {
-                if myself {
-                    let mut spans: Vec<Span> = line.into_iter().collect();
-                    spans.push(Span::styled(" │", border_style));
-                    Line::from(spans)
-                } else {
-                    let mut spans = vec![Span::styled("│ ", border_style)];
-                    spans.extend(line);
-                    Line::from(spans)
-                }
-            })
-            .collect();
-        Text::from(wrapped_lines).alignment(alignment)
     }
 }
 
@@ -585,103 +569,62 @@ impl Component for ChatWindow {
             .style(self.app_context.style_chat());
         let list_area = chat_layout[2];
         let list_inner = block.inner(list_area);
-        // Leave margin so wrapped lines and wide chars don't overflow the right edge
-        let wrap_width = list_inner.width.saturating_sub(2) as i32;
-
-        let reply_message_id = self.app_context.store().reply_message_id().as_i64();
-        let mut is_unread_outbox = true;
-        let mut is_unread_inbox = true;
-        let mut items: Vec<ListItem<'_>> = self
-            .message_list
-            .iter()
-            .map(|message_entry| {
-                let (myself, name_style, content_style, alignment) = if message_entry.sender_id()
-                    == self.app_context.store().me()
-                {
-                    if message_entry.id() == self.app_context.store().last_read_outbox_message_id()
-                    {
-                        is_unread_outbox = false;
-                    }
-                    (
-                        true,
-                        self.app_context.style_chat_message_myself_name(),
-                        self.app_context.style_chat_message_myself_content(),
-                        Alignment::Right,
-                    )
-                } else {
-                    if message_entry.id() == self.app_context.store().last_read_inbox_message_id() {
-                        is_unread_inbox = false;
-                    }
-                    (
-                        false,
-                        self.app_context.style_chat_message_other_name(),
-                        self.app_context.style_chat_message_other_content(),
-                        Alignment::Left,
-                    )
-                };
-                #[allow(unused_mut)]
-                let mut content = message::message_text(
-                    message_entry,
-                    myself,
-                    &self.app_context,
-                    is_unread_outbox,
-                    name_style,
-                    content_style,
-                    wrap_width,
-                )
-                .alignment(alignment);
-                // Room for the preview, drawn over these rows after the list
-                #[cfg(feature = "media-preview")]
-                if Self::preview_file(message_entry).is_some() {
-                    let rows = usize::from(crate::ui::preview::CHAT_PREVIEW_ROWS);
-                    content
-                        .lines
-                        .extend(std::iter::repeat_n(Line::default(), rows));
-                }
-                let is_reply_target =
-                    reply_message_id != 0 && message_entry.id() == reply_message_id;
-                if is_reply_target {
-                    let border_style = self.app_context.style_item_reply_target();
-                    let content_with_border =
-                        Self::wrap_text_with_reply_border(content, border_style, alignment, myself);
-                    // Do not apply border_style to the whole ListItem: only the │ spans
-                    // use it, so the message keeps its original formatting (name, reply-to, content).
-                    ListItem::new(content_with_border)
-                } else {
-                    ListItem::new(content)
-                }
+        let store = self.app_context.store();
+        let reply_message_id = store.reply_message_id().as_i64();
+        let me = store.me();
+        let last_read_inbox = store.last_read_inbox_message_id();
+        let first_unread = (last_read_inbox != 0)
+            .then(|| {
+                self.message_list
+                    .iter()
+                    .position(|m| m.sender_id() != me && m.id() > last_read_inbox)
             })
-            .collect();
+            .flatten();
+        let selected = self.message_list_state.selected();
+        let mut items: Vec<ListItem<'_>> = Vec::with_capacity(self.message_list.len() + 1);
+        #[cfg(feature = "media-preview")]
+        let mut slots: Vec<PreviewSlot> = Vec::with_capacity(self.message_list.len() + 1);
+        for (index, entry) in self.message_list.iter().enumerate() {
+            let previous = index
+                .checked_sub(1)
+                .and_then(|index| self.message_list.get(index));
+            let next = self.message_list.get(index + 1);
+            let row = MessageRow {
+                show_header: message::starts_author_group(previous, entry),
+                bottom_gap: next.is_none_or(|next| message::starts_author_group(Some(entry), next)),
+                new_day: message::starts_new_day(previous, entry),
+                first_unread: first_unread == Some(index),
+                selected: selected == Some(index),
+                reply_target: reply_message_id != 0 && entry.id() == reply_message_id,
+                preview_rows: Self::preview_rows(entry),
+            };
+            let laid_out = message::message_lines(entry, row, &self.app_context, list_inner.width);
+            #[cfg(feature = "media-preview")]
+            slots.push(
+                laid_out
+                    .preview_row
+                    .zip(Self::preview_file(entry))
+                    .map(|(row, file)| (entry.id(), file.clone(), row)),
+            );
+            items.push(ListItem::new(laid_out.lines));
+        }
         if self.app_context.store().is_history_loading() {
             items.push(ListItem::new(Line::from(Span::styled(
                 "Loading…",
-                self.app_context.style_timestamp(),
+                self.app_context.style(HighlightGroup::Loading),
             ))));
         }
 
         #[cfg(feature = "media-preview")]
-        let (mut heights, mut slots): (Vec<u16>, Vec<PreviewSlot>) = (
-            items.iter().map(|item| item.height() as u16).collect(),
-            self.message_list
-                .iter()
-                .map(|entry| {
-                    let myself = entry.sender_id() == self.app_context.store().me();
-                    let alignment = if myself {
-                        Alignment::Right
-                    } else {
-                        Alignment::Left
-                    };
-                    Self::preview_file(entry).map(|file| (entry.id(), file.clone(), alignment))
-                })
-                .chain(std::iter::repeat(None))
-                .take(items.len())
-                .collect(),
-        );
-        #[cfg(feature = "media-preview")]
-        {
-            heights.reverse();
+        let heights: Vec<u16> = {
+            slots.resize(items.len(), None);
             slots.reverse();
-        }
+            items
+                .iter()
+                .rev()
+                .map(|item| item.height() as u16)
+                .collect()
+        };
 
         // Render from bottom to top so content sits at the bottom (above the prompt) when
         // there are fewer messages than fit in the area. Reverse items so the list's
@@ -696,13 +639,10 @@ impl Component for ChatWindow {
         let list_selected = orig_selected.map(|i| item_count.saturating_sub(1).saturating_sub(i));
         self.message_list_state.select(list_selected);
 
-        // Use normal selection highlight so message text keeps its original formatting.
-        // Reply-target is already indicated by the │ border spans only.
-        let highlight_style = self.app_context.style_item_selected();
+        // The selected message is framed by a card instead of a highlight
         let list = List::new(items)
             .block(block)
             .style(self.app_context.style_chat())
-            .highlight_style(highlight_style)
             .repeat_highlight_symbol(true)
             .direction(ListDirection::BottomToTop);
 

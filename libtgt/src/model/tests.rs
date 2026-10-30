@@ -219,6 +219,80 @@ mod message {
         assert_eq!(entry.message_content_to_string(), "hello\nworld");
     }
 
+    fn entity(offset: i32, length: i32, r#type: TextEntityType) -> TextEntity {
+        TextEntity {
+            offset,
+            length,
+            r#type,
+        }
+    }
+
+    /// Text links and mentions keep their text; links remember their target.
+    #[test]
+    fn links_and_mentions_keep_their_text() {
+        use tdlib_rs::types::{TextEntityTypeMentionName, TextEntityTypeTextUrl};
+        let msg = message_with_entities(
+            "see docs, ask Ann or https://a.example",
+            vec![
+                entity(
+                    4,
+                    4,
+                    TextEntityType::TextUrl(TextEntityTypeTextUrl {
+                        url: "https://docs.example".into(),
+                    }),
+                ),
+                entity(
+                    14,
+                    3,
+                    TextEntityType::MentionName(TextEntityTypeMentionName { user_id: 42 }),
+                ),
+                entity(21, 17, TextEntityType::Url),
+            ],
+        );
+        let entry = MessageEntry::from(&msg);
+        assert_eq!(
+            entry.message_content_to_string(),
+            "see docs, ask Ann or https://a.example"
+        );
+        let spans = &entry.content()[0];
+        let docs = spans.iter().find(|span| span.text == "docs").unwrap();
+        assert!(docs.style.link);
+        let ann = spans.iter().find(|span| span.text == "Ann").unwrap();
+        assert!(ann.style.mention && ann.link_target().is_none());
+        assert_eq!(entry.links(), ["https://docs.example", "https://a.example"]);
+    }
+
+    /// Offsets are UTF-16: an emoji before an entity takes two units.
+    #[test]
+    fn entity_offsets_are_utf16() {
+        let msg = message_with_entities("😀 bold", vec![entity(3, 4, TextEntityType::Bold)]);
+        let entry = MessageEntry::from(&msg);
+        let spans = &entry.content()[0];
+        let bold = spans.iter().find(|span| span.style.bold).unwrap();
+        assert_eq!(bold.text, "bold");
+        assert_eq!(entry.message_content_to_string(), "😀 bold");
+    }
+
+    /// Code is marked as code, not just dimmed like quotes.
+    #[test]
+    fn code_and_quotes_are_told_apart() {
+        let msg = message_with_entities(
+            "run x said",
+            vec![
+                entity(4, 1, TextEntityType::Code),
+                entity(6, 4, TextEntityType::BlockQuote),
+            ],
+        );
+        let entry = MessageEntry::from(&msg);
+        let spans = &entry.content()[0];
+        assert!(spans.iter().any(|span| span.text == "x" && span.style.code));
+        assert!(
+            spans
+                .iter()
+                .any(|span| span.text == "said" && span.style.dim)
+        );
+    }
+
     /// Call messages should display with duration.
     #[test]
     fn format_message_content_call_with_duration() {

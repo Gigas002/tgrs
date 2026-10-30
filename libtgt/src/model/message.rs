@@ -36,8 +36,14 @@ pub struct TextStyle {
     pub italic: bool,
     pub underline: bool,
     pub strikethrough: bool,
-    /// Code, pre-formatted blocks and quotes.
+    /// Quotes.
     pub dim: bool,
+    /// Inline code and pre-formatted blocks.
+    pub code: bool,
+    /// URLs, text links, e-mail addresses and phone numbers.
+    pub link: bool,
+    /// `@username` and mentions of users without one.
+    pub mention: bool,
 }
 
 impl TextStyle {
@@ -61,12 +67,27 @@ impl TextStyle {
         dim: true,
         ..Self::PLAIN
     };
+    const CODE: Self = Self {
+        code: true,
+        ..Self::PLAIN
+    };
+    const LINK: Self = Self {
+        link: true,
+        ..Self::PLAIN
+    };
+    const MENTION: Self = Self {
+        mention: true,
+        ..Self::PLAIN
+    };
     const PLAIN: Self = Self {
         bold: false,
         italic: false,
         underline: false,
         strikethrough: false,
         dim: false,
+        code: false,
+        link: false,
+        mention: false,
     };
 }
 
@@ -75,21 +96,29 @@ impl TextStyle {
 pub struct TextSpan {
     pub text: String,
     pub style: TextStyle,
+    /// Where a link points, when it isn't the text itself (text links).
+    pub url: Option<String>,
 }
 
 impl TextSpan {
     pub fn plain(text: impl Into<String>) -> Self {
-        Self {
-            text: text.into(),
-            style: TextStyle::default(),
-        }
+        Self::styled(text, TextStyle::default())
     }
 
     pub fn styled(text: impl Into<String>, style: TextStyle) -> Self {
         Self {
             text: text.into(),
             style,
+            url: None,
         }
+    }
+
+    /// The address this span links to, if it's a link.
+    pub fn link_target(&self) -> Option<&str> {
+        if !self.style.link {
+            return None;
+        }
+        Some(self.url.as_deref().unwrap_or(&self.text))
     }
 }
 
@@ -381,6 +410,22 @@ impl MessageEntry {
     }
 
     /// The attached file, if the message has one.
+    /// Addresses the message links to, in order and without repeats.
+    pub fn links(&self) -> Vec<String> {
+        let mut links: Vec<String> = Vec::new();
+        for target in self
+            .content
+            .iter()
+            .flatten()
+            .filter_map(TextSpan::link_target)
+        {
+            if !links.iter().any(|link| link == target) {
+                links.push(target.to_owned());
+            }
+        }
+        links
+    }
+
     pub fn media(&self) -> Option<&Media> {
         match &self.content_type {
             MessageContentType::Media(media) => Some(media),
@@ -665,32 +710,24 @@ fn text_slice_chars(text: &str, start: usize, end: usize) -> String {
         .collect()
 }
 
-/// Style (and replacement text, for links and mentions) of a TDLib text entity.
+/// Style (and link target, for text links) of a TDLib text entity.
 fn entity_style(entity: &TextEntityType) -> Option<(TextStyle, Option<String>)> {
     let style = match entity {
         TextEntityType::Italic => TextStyle::ITALIC,
-        TextEntityType::Bold
-        | TextEntityType::Mention
-        | TextEntityType::Hashtag
-        | TextEntityType::Cashtag => TextStyle::BOLD,
-        TextEntityType::Underline
-        | TextEntityType::Url
-        | TextEntityType::EmailAddress
-        | TextEntityType::PhoneNumber
-        | TextEntityType::TonAddress
-        | TextEntityType::BankCardNumber => TextStyle::UNDERLINE,
-        TextEntityType::Strikethrough => TextStyle::STRIKETHROUGH,
+        TextEntityType::Bold | TextEntityType::Hashtag | TextEntityType::Cashtag => TextStyle::BOLD,
+        TextEntityType::Mention | TextEntityType::MentionName(_) => TextStyle::MENTION,
+        TextEntityType::Url | TextEntityType::EmailAddress | TextEntityType::PhoneNumber => {
+            TextStyle::LINK
+        }
         TextEntityType::TextUrl(text_url) => {
-            return Some((TextStyle::UNDERLINE, Some(text_url.url.clone())));
+            return Some((TextStyle::LINK, Some(text_url.url.clone())));
         }
-        TextEntityType::MentionName(mention_name) => {
-            return Some((TextStyle::BOLD, Some(mention_name.user_id.to_string())));
+        TextEntityType::Underline | TextEntityType::TonAddress | TextEntityType::BankCardNumber => {
+            TextStyle::UNDERLINE
         }
-        TextEntityType::Code
-        | TextEntityType::Pre
-        | TextEntityType::PreCode(_)
-        | TextEntityType::BlockQuote
-        | TextEntityType::ExpandableBlockQuote => TextStyle::DIM,
+        TextEntityType::Strikethrough => TextStyle::STRIKETHROUGH,
+        TextEntityType::Code | TextEntityType::Pre | TextEntityType::PreCode(_) => TextStyle::CODE,
+        TextEntityType::BlockQuote | TextEntityType::ExpandableBlockQuote => TextStyle::DIM,
         TextEntityType::Spoiler
         | TextEntityType::MediaTimestamp(_)
         | TextEntityType::DateTime(_)
@@ -698,6 +735,17 @@ fn entity_style(entity: &TextEntityType) -> Option<(TextStyle, Option<String>)> 
         | TextEntityType::BotCommand => return None,
     };
     Some((style, None))
+}
+
+/// Char index of every UTF-16 offset in `text` (TDLib's entity offsets),
+/// plus one past the end.
+fn utf16_to_char_indices(text: &str) -> Vec<usize> {
+    let mut indices = Vec::with_capacity(text.len() + 1);
+    for (index, c) in text.chars().enumerate() {
+        indices.extend(std::iter::repeat_n(index, c.len_utf16()));
+    }
+    indices.push(text.chars().count());
+    indices
 }
 
 fn format_message_content(message: &FormattedText) -> Vec<TextLine> {
@@ -713,15 +761,20 @@ fn format_message_content(message: &FormattedText) -> Vec<TextLine> {
         };
     }
 
-    // Disjoint segments (start, end, style, optional replacement text).
-    // TDLib uses UTF-16 offset/length; they are treated as char indices for simplicity.
+    // Disjoint segments (start, end, style, link target), in chars
     type Segment = (usize, usize, TextStyle, Option<String>);
+    let chars = utf16_to_char_indices(text);
+    let char_range = |offset: i32, length: i32| {
+        let to_char = |utf16: usize| chars[utf16.min(chars.len() - 1)];
+        let offset = usize::try_from(offset).unwrap_or(0);
+        let length = usize::try_from(length).unwrap_or(0);
+        (to_char(offset), to_char(offset.saturating_add(length)))
+    };
     let mut segments: Vec<Segment> = entities
         .iter()
         .filter_map(|e| {
-            let offset = e.offset as usize;
-            let end = offset.saturating_add(e.length as usize);
-            entity_style(&e.r#type).map(|(style, url)| (offset, end, style, url))
+            let (start, end) = char_range(e.offset, e.length);
+            entity_style(&e.r#type).map(|(style, url)| (start, end, style, url))
         })
         .collect();
 
@@ -745,10 +798,7 @@ fn format_message_content(message: &FormattedText) -> Vec<TextLine> {
     let code_blocks: Vec<(usize, usize)> = entities
         .iter()
         .filter(|e| matches!(e.r#type, TextEntityType::Pre | TextEntityType::PreCode(_)))
-        .map(|e| {
-            let start = e.offset as usize;
-            (start, start.saturating_add(e.length as usize))
-        })
+        .map(|e| char_range(e.offset, e.length))
         .collect();
 
     // Raw before first, styled(seg), raw between, ... raw after last.
@@ -756,7 +806,7 @@ fn format_message_content(message: &FormattedText) -> Vec<TextLine> {
     let mut spans: Vec<TextSpan> = Vec::new();
     let mut prev_end = 0usize;
 
-    for (start, end, style, url_override) in disjoint {
+    for (start, end, style, url) in disjoint {
         if start > prev_end {
             let raw_slice = text_slice_chars(text, prev_end, start);
             if !raw_slice.is_empty() {
@@ -764,7 +814,7 @@ fn format_message_content(message: &FormattedText) -> Vec<TextLine> {
             }
         }
 
-        let mut content = url_override.unwrap_or_else(|| text_slice_chars(text, start, end));
+        let mut content = text_slice_chars(text, start, end);
 
         if code_blocks.contains(&(start, end)) {
             if !spans.is_empty() {
@@ -776,7 +826,10 @@ fn format_message_content(message: &FormattedText) -> Vec<TextLine> {
         }
 
         if !content.is_empty() {
-            spans.push(TextSpan::styled(content, style));
+            spans.push(TextSpan {
+                url,
+                ..TextSpan::styled(content, style)
+            });
         }
         prev_end = end;
     }

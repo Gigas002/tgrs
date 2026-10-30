@@ -2807,6 +2807,7 @@ name = "tgt"
 version = "1.0.0"
 dependencies = [
  "arboard",
+ "chrono",
  "clap",
  "crossterm",
  "dbus-secret-service-keyring-store",

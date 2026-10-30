@@ -51,6 +51,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - Captions, videos, GIFs, video messages and stickers are shown in the chat with their duration or size.
 - Subcommand `logout`; options `--config-dir`, `--log-dir`, `--log-level` and `-v`/`-q`.
 - Concord-style theme: the UI follows the terminal's colors (default foreground/background and ANSI palette, dim for secondary text). `theme.toml` overrides named Highlight Groups that inherit from each other, border shapes per surface (`[ui.border]`) and the selection marker (`[ui.indicator]`); invalid entries are skipped with a warning.
+- Concord-style message layout: consecutive messages from one sender within 7 minutes share a header (name, time, `(edited)`, ✓/✓✓ for sent/read), day separators, a ` New ` divider before the first unread message, replies as a muted `↪ Name preview` line, attachments as `[photo] 1.2 MiB` labels, and the selected message framed by a rounded card instead of a highlighted background. Links, mentions and code are drawn with the `MessageLink`, `MentionOther` and `InlineCode` groups.
 - `docs/ARCHITECTURE.md`.
 
 - `static` feature to statically link `tdjson` (use with `download-tdlib` or `local-tdlib`); no runtime `tdjson` dependency needed. Powered by **tdlib-rs v1.4.0**.
@@ -82,6 +83,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 - TDLib's start-up log no longer floods the terminal before login: its verbosity and log file are set before the first client is created.
 - Closing the input (Ctrl+D) at a login prompt quits instead of asking again forever.
+- Text links show their text instead of the URL, and mentions of users without a username show the name instead of a user id.
+- Formatting after emoji landing on the wrong characters: TDLib's UTF-16 entity offsets are converted to characters.
+- Senders whose name isn't known yet are shown as `Unknown` instead of an empty header.
 - Stack overflow in the prompt when wrapping at the window edge (`insert_newline` no longer recurses through `insert('\n')`).
 - Occasional startup hangs and chat list refresh hangs.
 - Chat search reliability and clearer failure feedback via the status bar.

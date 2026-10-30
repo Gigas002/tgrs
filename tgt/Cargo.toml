@@ -26,6 +26,7 @@ media-preview = ["dep:image", "dep:ratatui-image"]
 [dependencies]
 libtgt = { path = "../libtgt", version = "1.0.0" }
 arboard.workspace = true
+chrono.workspace = true
 clap.workspace = true
 crossterm.workspace = true
 dbus-secret-service-keyring-store = { workspace = true, optional = true }

@@ -233,3 +233,88 @@ mod previews {
         assert!(sent(&mut rx).is_empty());
     }
 }
+
+mod layout {
+    use super::*;
+    use libtgt::model::TdMessageSender;
+    use ratatui::{Terminal, backend::TestBackend};
+
+    fn screen(window: &mut ChatWindow, width: u16, height: u16) -> Vec<String> {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal
+            .draw(|frame| window.draw(frame, frame.area()).unwrap())
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        buffer
+            .content()
+            .chunks(usize::from(width))
+            .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+            .collect()
+    }
+
+    fn message(id: i64, sender: i64, text: &str, timestamp: i32) -> MessageEntry {
+        MessageEntry::plain(id, TdMessageSender::User(sender), text, timestamp)
+    }
+
+    // 2023-11-14 22:13 UTC
+    const T: i32 = 1_700_000_000;
+
+    #[test]
+    fn messages_are_grouped_by_sender_with_day_separators() {
+        let mut window = create_test_chat_window();
+        setup_messages(
+            &mut window,
+            vec![
+                message(1, 1, "first", T),
+                message(2, 1, "second", T + 120),
+                message(3, 2, "reply", T + 180),
+                message(4, 2, "tomorrow", T + 86_400),
+            ],
+        );
+        let rows = screen(&mut window, 50, 20);
+        let text = rows.join("\n");
+        // One header per sender group; the 2nd message has none
+        assert_eq!(text.matches("first").count(), 1, "{text}");
+        let first = rows.iter().position(|row| row.contains("first")).unwrap();
+        let second = rows.iter().position(|row| row.contains("second")).unwrap();
+        assert_eq!(
+            second,
+            first + 1,
+            "grouped messages follow directly:\n{text}"
+        );
+        // Two day separators: before the first message and before "tomorrow"
+        let separators = rows.iter().filter(|row| row.contains("── 20")).count();
+        assert_eq!(separators, 2, "{text}");
+        // Nothing is read yet: the unread divider comes before the first message
+        let divider = rows.iter().position(|row| row.contains(" New ")).unwrap();
+        assert!(divider < first, "{text}");
+        assert_eq!(
+            text.matches("Unknown").count(),
+            3,
+            "one header per group:\n{text}"
+        );
+    }
+
+    #[test]
+    fn the_selected_message_is_framed_by_a_card() {
+        let mut window = create_test_chat_window();
+        setup_messages(
+            &mut window,
+            vec![message(1, 1, "hello", T), message(2, 1, "world", T + 60)],
+        );
+        window.focus();
+        window.message_list_state.select(Some(1));
+        let rows = screen(&mut window, 40, 16);
+        let text = rows.join("\n");
+        // A grouped continuation gets an empty top border and its time below
+        let world = rows.iter().position(|row| row.contains("world")).unwrap();
+        assert!(rows[world - 1].contains('╭'), "{text}");
+        assert!(rows[world].contains("│ world"), "{text}");
+        assert!(rows[world + 1].contains('╰'), "{text}");
+        assert!(
+            rows[world + 1].contains(':'),
+            "time on the bottom border:\n{text}"
+        );
+        assert!(!rows[world - 2].contains('╭'), "{text}");
+    }
+}
