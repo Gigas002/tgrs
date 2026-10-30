@@ -434,13 +434,15 @@ mod message {
     #[test]
     fn photo_previews_itself() {
         use tdlib_rs::types::{MessagePhoto, Photo, PhotoSize};
-        let size = |id| PhotoSize {
+        let size = |id, width| PhotoSize {
             photo: td_file(id, 0, "", false),
+            width,
+            height: width * 3 / 4,
             ..Default::default()
         };
         let entry = with_content(MessageContent::MessagePhoto(MessagePhoto {
             photo: Photo {
-                sizes: vec![size(1), size(2)],
+                sizes: vec![size(1, 90), size(3, 800), size(4, 320), size(2, 1280)],
                 ..Default::default()
             },
             video: None,
@@ -453,6 +455,8 @@ mod message {
         // The largest size is the last one
         assert_eq!(media.file.id, 2);
         assert_eq!(media.preview, Some(media.file.clone()));
+        // The chat shows the smallest sharp size
+        assert_eq!(media.inline_preview().map(|f| f.id), Some(4));
         assert_eq!(media.suggested_file_name(), "photo_2.jpg");
         assert_eq!(entry.pinned_strip_preview(50), "📷 Photo");
     }
@@ -485,6 +489,7 @@ mod message {
             mime_type: "audio/ogg".into(),
             duration_secs: 3,
             preview: None,
+            thumbnail: None,
         };
         assert_eq!(media.suggested_file_name(), "file_4.oga");
     }

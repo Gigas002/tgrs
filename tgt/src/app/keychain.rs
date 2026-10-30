@@ -102,8 +102,8 @@ fn new_key() -> Result<String, AppError> {
     Err(required(&CredentialsError::Unsupported))
 }
 
-/// Forgets the key of a database that no longer exists (after logging out or
-/// removing the data directory). Failures are only logged.
+/// Forgets the key of a database that no longer exists (TDLib destroys it
+/// when logging out). Failures are only logged.
 pub fn forget_key(store: CredentialStore, database_dir: &Path) {
     if store == CredentialStore::Plain {
         return;

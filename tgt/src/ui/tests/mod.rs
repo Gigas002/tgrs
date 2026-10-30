@@ -28,6 +28,26 @@ pub fn create_mock_media_message(id: i64, file_name: &str) -> MessageEntry {
         mime_type: "application/zip".to_owned(),
         duration_secs: 0,
         preview: None,
+        thumbnail: None,
+    };
+    MessageEntry::with_media(id, TdMessageSender::User(1), media, 0)
+}
+
+/// A photo message from user 1, with a smaller size for the chat preview.
+#[cfg(feature = "media-preview")]
+pub fn create_mock_photo_message(id: i64, thumbnail_id: i32) -> MessageEntry {
+    let file = |id| MediaFile {
+        id,
+        ..MediaFile::default()
+    };
+    let media = Media {
+        kind: MediaKind::Photo,
+        file: file(8),
+        file_name: String::new(),
+        mime_type: "image/jpeg".to_owned(),
+        duration_secs: 0,
+        preview: Some(file(8)),
+        thumbnail: Some(file(thumbnail_id)),
     };
     MessageEntry::with_media(id, TdMessageSender::User(1), media, 0)
 }

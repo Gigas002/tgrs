@@ -26,11 +26,11 @@ Build features can be combined (e.g. `cargo build --release --no-default-feature
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `default`       | Enables `keychain` and `media-preview`.                                                                                                                     |
 | `keychain`      | Encrypt the TDLib database (your login session) with a key kept in the system keychain (Secret Service). See `[credentials]` in `config.toml`.              |
-| `media-preview` | Image previews in the media viewer: photos, static stickers and the thumbnails of videos, GIFs, video messages and files.                                    |
+| `media-preview` | Image previews in the chat and the media viewer: photos, static stickers and the thumbnails of videos, GIFs, video messages and files.                       |
 
 ### Media
 
-`tgt` doesn't play media itself. Select a message in the chat and:
+`tgt` doesn't play media itself. With `media-preview`, images (and the thumbnails of videos, GIFs and files) are previewed under their messages in the chat; select a message and:
 
 | Key     | Action                                                                                                               |
 | ------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -45,24 +45,40 @@ Files are fetched from Telegram first when needed; progress and errors are shown
 
 `tgt` works without any config file: defaults are bundled in the binary. Files are looked up in XDG directories:
 
-| What                                          | Location                                                                       |
-| --------------------------------------------- | ------------------------------------------------------------------------------ |
-| `config.toml`, `keymap.toml`, `themes/*.toml` | `$XDG_CONFIG_HOME/tgt` (`~/.config/tgt`), or `--config-dir` / `TGT_CONFIG_DIR` |
-| TDLib database                                | `$XDG_DATA_HOME/tgt/tdlib` (`~/.local/share/tgt/tdlib`)                        |
-| Logs, TDLib log                               | `$XDG_STATE_HOME/tgt` (`~/.local/state/tgt`)                                   |
-| TDLib database key                            | the system keychain, service `tgt` (see `[credentials]`)                       |
-| Downloads                                     | `app.download_dir`, default `$XDG_DOWNLOAD_DIR` or `~/Downloads`               |
+| What                                       | Location                                                                       |
+| ------------------------------------------ | ------------------------------------------------------------------------------ |
+| `config.toml`, `keymap.toml`, `theme.toml` | `$XDG_CONFIG_HOME/tgt` (`~/.config/tgt`), or `--config-dir` / `TGT_CONFIG_DIR` |
+| TDLib database                             | `$XDG_DATA_HOME/tgt/tdlib` (`~/.local/share/tgt/tdlib`)                        |
+| Logs, TDLib log                            | `$XDG_STATE_HOME/tgt` (`~/.local/state/tgt`)                                   |
+| TDLib database key                         | the system keychain, service `tgt` (see `[credentials]`)                       |
+| Downloads                                  | `app.download_dir`, default `$XDG_DOWNLOAD_DIR` or `~/Downloads`               |
 
 Settings are resolved as `CLI > environment > config.toml > defaults`. They are only changed by editing the files: `tgt` never writes to them and has no settings UI. `API_ID` and `API_HASH` override the Telegram credentials. User keybindings are merged over the defaults: binding a command replaces its default keys, and every other default stays.
 
-| Command                                 | Description                                               |
-| --------------------------------------- | --------------------------------------------------------- |
-| `tgt`                                   | Open the TUI (logs in on the terminal first if needed).   |
-| `tgt send CHAT MESSAGE`                 | Send one message to the only chat matching `CHAT`.        |
-| `tgt logout`                            | Log out of Telegram.                                      |
-| `tgt init-config [--force]`             | Write the default config files into the config directory. |
-| `tgt clear [-c] [-d] [-s] [--all] [-y]` | Remove the config, data and/or state directories.         |
+| Command      | Description                                             |
+| ------------ | ------------------------------------------------------- |
+| `tgt`        | Open the TUI (logs in on the terminal first if needed). |
+| `tgt logout` | Log out of Telegram and remove the database key.        |
 
-Global options: `--config-dir`, `--log-dir`, `--log-level`, `-v`/`-q`, `--theme`.
+Global options: `--config-dir`, `--log-dir`, `--log-level`, `-v`/`-q`.
 
-Default config files, including the bundled themes, live in [`examples/`](examples/).
+Chats are only read and messages only sent from the TUI: there is no command-line or scripting interface to the account.
+
+### Theme
+
+`tgt` follows your terminal's colors: text uses the terminal's default foreground and background, accents use its ANSI palette, and secondary text is dimmed rather than given a fixed color. To change a color, add a `theme.toml` with Highlight Groups, like Vim's:
+
+```toml
+[highlight.FocusBorder]
+foreground = "light_magenta"
+
+[highlight.SelectedRow]
+background = "#303030"
+
+[ui.border]
+default = "rounded"
+```
+
+A group inherits the fields it doesn't set from the group it links to, so changing `Muted` changes timestamps, hints and previews together. [`examples/theme.toml`](examples/theme.toml) lists every group with its default. Invalid entries are skipped with a warning.
+
+To customize, copy the files you want to change from [`examples/`](examples/) into the config directory; missing files keep their defaults. To reset or uninstall, remove the directories above yourself, and the database key with `secret-tool clear service tgt`.

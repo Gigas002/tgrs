@@ -21,6 +21,11 @@ fn main() -> ExitCode {
         }
     };
 
+    for warning in &settings.warnings {
+        tracing::warn!("theme.toml: {warning}");
+        eprintln!("tgt: theme.toml: {warning}");
+    }
+
     // Restore the terminal before the panic message is printed.
     let (mouse, paste) = (settings.app.mouse_support, settings.app.paste_support);
     let default_hook = std::panic::take_hook();

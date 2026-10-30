@@ -58,7 +58,7 @@ impl XdgDirs {
 /// Default tgt directories derived from [`XdgDirs`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppDirs {
-    /// `config.toml`, `keymap.toml` and `themes/`.
+    /// `config.toml`, `keymap.toml` and `theme.toml`.
     pub config: PathBuf,
     /// TDLib database and downloaded files.
     pub data: PathBuf,

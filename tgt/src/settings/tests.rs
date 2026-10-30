@@ -6,7 +6,7 @@ use ratatui::style::{Color, Modifier};
 use super::*;
 use crate::{
     app::{action::Action, event::Event},
-    config::{KeymapFile, ThemeFile, keymap as keymap_file},
+    config::{KeymapFile, keymap as keymap_file},
     ui::component_name::ComponentName,
 };
 
@@ -70,7 +70,8 @@ fn defaults_follow_xdg() {
     assert!(settings.telegram.use_message_database);
     assert_eq!(settings.app.frame_rate, DEFAULT_FRAME_RATE);
     assert_eq!(settings.logging.level, LogLevel::Info);
-    assert_eq!(settings.theme.name, DEFAULT_THEME);
+    assert_eq!(settings.theme, Theme::default());
+    assert!(settings.warnings.is_empty());
     assert_eq!(settings.app.download_dir, home.join("Downloads"));
     assert_eq!(settings.credentials, CredentialStore::Auto);
     assert!(settings.telegram.database_encryption_key.is_empty());
@@ -258,53 +259,6 @@ fn invalid_numbers_are_rejected() {
 }
 
 #[test]
-fn send_disables_the_message_database() {
-    let env = Env::new();
-    let cli = CliOverrides {
-        command: Command::Send {
-            chat: "me".into(),
-            message: "hi".into(),
-        },
-        ..CliOverrides::default()
-    };
-    assert!(!env.resolve(cli).unwrap().telegram.use_message_database);
-}
-
-#[test]
-fn theme_precedence_is_cli_config_default() {
-    let env = Env::new();
-    assert_eq!(
-        env.resolve(CliOverrides::default()).unwrap().theme.name,
-        DEFAULT_THEME
-    );
-
-    env.write_config("config.toml", "[app]\ntheme = \"nord\"\n");
-    assert_eq!(
-        env.resolve(CliOverrides::default()).unwrap().theme.name,
-        "nord"
-    );
-
-    let cli = CliOverrides {
-        theme: Some("gruvbox".into()),
-        ..CliOverrides::default()
-    };
-    assert_eq!(env.resolve(cli).unwrap().theme.name, "gruvbox");
-}
-
-#[test]
-fn unknown_explicit_theme_is_an_error() {
-    let env = Env::new();
-    let cli = CliOverrides {
-        theme: Some("missing".into()),
-        ..CliOverrides::default()
-    };
-    assert!(matches!(
-        env.resolve(cli),
-        Err(SettingsError::Theme(ThemeError::Unknown(name))) if name == "missing"
-    ));
-}
-
-#[test]
 fn relative_download_dir_is_rejected() {
     let env = Env::new();
     env.write_config("config.toml", "[app]\ndownload_dir = \"dl\"\n");
@@ -315,23 +269,6 @@ fn relative_download_dir_is_rejected() {
             ..
         })
     ));
-}
-
-#[test]
-fn user_theme_file_is_loaded() {
-    let env = Env::new();
-    env.write_config(
-        "themes/mine.toml",
-        "[palette]\naccent = \"#ff0000\"\n[common]\ntimestamp = { fg = \"accent\", bold = true }\n",
-    );
-    let cli = CliOverrides {
-        theme: Some("mine".into()),
-        ..CliOverrides::default()
-    };
-    let theme = env.resolve(cli).unwrap().theme;
-    let style = theme.common["timestamp"];
-    assert_eq!(style.fg, Some(Color::Rgb(255, 0, 0)));
-    assert!(style.add_modifier.contains(Modifier::BOLD));
 }
 
 #[test]
@@ -452,28 +389,102 @@ fn get_key_of_single_action_finds_bindings() {
 #[test]
 fn parse_color_formats() {
     assert_eq!(theme::parse_color("red"), Some(Color::Red));
-    assert_eq!(theme::parse_color(""), Some(Color::Reset));
+    assert_eq!(theme::parse_color("dark_gray"), Some(Color::DarkGray));
+    assert_eq!(theme::parse_color("terminal_default"), Some(Color::Reset));
     assert_eq!(theme::parse_color("#ff8000"), Some(Color::Rgb(255, 128, 0)));
-    assert_eq!(theme::parse_color("#f80"), Some(Color::Rgb(255, 136, 0)));
-    assert_eq!(theme::parse_color("1, 2, 3"), Some(Color::Rgb(1, 2, 3)));
-    assert_eq!(theme::parse_color("42"), Some(Color::Indexed(42)));
-    assert_eq!(theme::parse_color("#12345"), None);
-    assert_eq!(theme::parse_color("nope"), None);
+    assert_eq!(theme::parse_color("ff8000"), Some(Color::Rgb(255, 128, 0)));
+    assert_eq!(theme::parse_color("#f80"), None);
+    assert_eq!(theme::parse_color("reset"), None);
+    assert_eq!(theme::parse_color(""), None);
 }
 
 #[test]
-fn theme_resolve_rejects_invalid_colors() {
-    let file: ThemeFile = toml::from_str("[common]\ntimestamp = { fg = \"nope\" }\n").unwrap();
+fn default_theme_follows_the_terminal() {
+    let theme = Theme::default();
+    let normal = theme.style(HighlightGroup::Normal);
     assert_eq!(
-        Theme::resolve("x", file),
-        Err(ThemeError::InvalidColor {
-            theme: "x".into(),
-            color: "nope".into()
-        })
+        (normal.fg, normal.bg),
+        (Some(Color::Reset), Some(Color::Reset))
+    );
+    // Muted text is dimmed terminal text, not a fixed color
+    let timestamp = theme.style(HighlightGroup::Timestamp);
+    assert_eq!(timestamp.fg, None);
+    assert!(timestamp.add_modifier.contains(Modifier::DIM));
+    // Selection keeps the cell background
+    assert!(theme.background_is_cleared(HighlightGroup::SelectedRow));
+    assert_eq!(
+        theme.border_type(BorderSurface::Pane),
+        ratatui::widgets::BorderType::Plain
+    );
+    assert_eq!(
+        theme.border_type(BorderSurface::Message),
+        ratatui::widgets::BorderType::Rounded
+    );
+    assert_eq!(theme.selection_marker(), theme::DEFAULT_SELECTION_MARKER);
+}
+
+#[test]
+fn theme_overrides_inherit_through_links() {
+    let env = Env::new();
+    env.write_config(
+        "theme.toml",
+        r##"
+[highlight.Muted]
+foreground = "#808080"
+
+[highlight.Timestamp]
+italic = true
+
+[highlight.FocusBorder]
+foreground = "light_magenta"
+
+[highlight.Error]
+foreground = "not-a-color"
+
+[ui.border]
+default = "rounded"
+pane = "thick"
+"##,
+    );
+    let settings = env.resolve(CliOverrides::default()).unwrap();
+    let theme = &settings.theme;
+    let timestamp = theme.style(HighlightGroup::Timestamp);
+    assert_eq!(
+        timestamp.fg,
+        Some(Color::Rgb(128, 128, 128)),
+        "linked to Muted"
+    );
+    assert!(
+        timestamp
+            .add_modifier
+            .contains(Modifier::DIM | Modifier::ITALIC)
+    );
+    // A child adds to its parent: bold from FocusedPaneBorder, color from FocusBorder
+    let focused = theme.style(HighlightGroup::FocusedPaneBorder);
+    assert_eq!(focused.fg, Some(Color::LightMagenta));
+    assert!(focused.add_modifier.contains(Modifier::BOLD));
+    assert_eq!(theme.style(HighlightGroup::Error).fg, Some(Color::Red));
+    assert_eq!(settings.warnings.len(), 1, "{:?}", settings.warnings);
+    assert_eq!(
+        theme.border_type(BorderSurface::Pane),
+        ratatui::widgets::BorderType::Thick
+    );
+    assert_eq!(
+        theme.border_type(BorderSurface::Modal),
+        ratatui::widgets::BorderType::Rounded
     );
 }
 
 #[test]
-fn for_tests_uses_the_default_theme() {
-    assert_eq!(Settings::for_tests().theme.name, DEFAULT_THEME);
+fn link_cycles_are_reported_not_fatal() {
+    let table: toml::Table = toml::from_str(
+        "[highlight.Strong]\nlink = \"Title\"\n[highlight.Title]\nlink = \"Strong\"\n",
+    )
+    .unwrap();
+    let (file, parse_warnings) = crate::config::theme::parse(&table);
+    assert!(parse_warnings.is_empty());
+    let mut warnings = Vec::new();
+    let theme = Theme::resolve(&file, &mut warnings);
+    assert!(warnings.iter().any(|w| w.contains("cycle")), "{warnings:?}");
+    assert_eq!(theme.style(HighlightGroup::Normal).fg, Some(Color::Reset));
 }

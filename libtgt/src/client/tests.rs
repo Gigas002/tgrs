@@ -28,3 +28,33 @@ fn td_params_debug_hides_secrets() {
     assert!(debug.contains("database_encrypted: true"), "{debug}");
     assert!(debug.contains("proxy.example:1080"), "{debug}");
 }
+
+#[test]
+fn logging_is_configured_without_a_client() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("tdlib.log");
+    let logging = TdLogging {
+        verbosity_level: 1,
+        path: path.clone(),
+        redirect_stderr: false,
+    };
+    configure_logging(&logging).unwrap();
+
+    let level = execute::execute(&serde_json::json!({"@type": "getLogVerbosityLevel"})).unwrap();
+    assert_eq!(level["verbosity_level"], 1);
+    let stream = execute::execute(&serde_json::json!({"@type": "getLogStream"})).unwrap();
+    assert_eq!(stream["path"], path.to_string_lossy().as_ref());
+
+    // Back to TDLib's defaults for other tests
+    execute::execute(&serde_json::json!({
+        "@type": "setLogStream",
+        "log_stream": {"@type": "logStreamDefault"},
+    }))
+    .unwrap();
+}
+
+#[test]
+fn execute_reports_errors() {
+    let err = execute::execute(&serde_json::json!({"@type": "noSuchRequest"})).unwrap_err();
+    assert!(!err.is_empty());
+}

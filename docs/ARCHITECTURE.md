@@ -9,7 +9,7 @@ This document defines how Rust projects in this workspace are structured, how co
 | Crate | Kind | Responsibility |
 | ----- | ---- | -------------- |
 | `libtgt` | library | Telegram client on top of [tdlib-rs](https://github.com/Gigas002/tdlib-rs): `client/` (TDLib requests, authorization through the `Authenticator` trait, the update loop emitting `Notification`s), `store/` (chats, users and open-chat state shared with the UI), `model/` (UI-agnostic chat and message types). No CLI, settings, logging setup or rendering. |
-| `tgt` | binary | `cli/`, `config/`, `settings/`, `logger/`, `app/` (run loop, subcommands, terminal login, keychain policy, background media tasks), `credentials/` (TDLib database key in the system keychain, behind the `keychain` feature), `media/` (opening files with `xdg-open`, saving downloads), `ui/` (ratatui components; media previews behind the `media-preview` feature), `utils/` (XDG paths). |
+| `tgt` | binary | `cli/`, `config/`, `settings/`, `logger/`, `app/` (run loop, `logout`, terminal login, keychain policy, background media tasks), `credentials/` (TDLib database key in the system keychain, behind the `keychain` feature), `media/` (opening files with `xdg-open`, saving downloads), `ui/` (ratatui components; media previews behind the `media-preview` feature), `utils/` (XDG paths). |
 
 Data flow at runtime:
 
@@ -56,7 +56,7 @@ Do not reach across layers. A UI module must not read environment variables; a l
 1. Parse CLI arguments (raw options, flags, subcommands).
 2. Call the settings resolver with those CLI values.
 3. Initialize logging from the resolved settings.
-4. Construct and run the application (or dispatch to a subcommand handler).
+4. Construct and run the application (the TUI, or `logout`).
 
 Everything else — application loops, protocol handling, rendering, file I/O beyond config — belongs in separate modules (`app/`, `utils/`, domain-specific folders).
 

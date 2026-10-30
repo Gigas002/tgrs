@@ -1,0 +1,126 @@
+# tgt theme: copy to $XDG_CONFIG_HOME/tgt/theme.toml and uncomment what you
+# want to change. Without this file tgt follows your terminal's colors.
+#
+# Each [highlight.<Group>] may set:
+#   link          = "<Group>" to inherit unset fields, or "none" to stop inheriting
+#   foreground    = color
+#   background    = color
+#   bold, italic, dim, underline, strikethrough = true | false
+#
+# Colors: "terminal_default", "none" (leave the cell's color), "#RRGGBB", or an
+# ANSI name: black, red, green, yellow, blue, magenta, cyan, gray, dark_gray,
+# light_red, light_green, light_yellow, light_blue, light_magenta, light_cyan,
+# white. ANSI colors come from your terminal's palette.
+#
+# Invalid entries are skipped with a warning at startup.
+
+# [ui.border]
+# Shapes: plain, rounded, double, thick, light_double_dashed, heavy_double_dashed,
+# light_triple_dashed, heavy_triple_dashed, light_quadruple_dashed,
+# heavy_quadruple_dashed, quadrant_inside, quadrant_outside.
+# default = "plain"
+# pane = "plain"
+# composer = "rounded"
+# modal = "plain"
+# picker = "plain"
+# message = "rounded"
+
+# [ui.indicator]
+# selection = "▸ "
+
+# Groups and their defaults. A group without a link starts from nothing.
+
+## Common
+# [highlight.Normal]        # foreground = "terminal_default", background = "terminal_default"
+# [highlight.Strong]        # bold = true
+# [highlight.Emphasis]      # italic = true
+# [highlight.Muted]         # dim = true
+# [highlight.Title]         # link = "Strong"
+# [highlight.Heading]       # link = "Strong"
+# [highlight.Decoration]    # link = "Muted"
+# [highlight.Hint]          # link = "Muted"
+# [highlight.Description]   # link = "Muted"
+# [highlight.Shortcut]      # link = "Muted"
+# [highlight.ChatTypeMarker] # link = "Muted"
+# [highlight.FieldLabel]    # link = "Muted"
+# [highlight.SearchContext] # link = "Muted"
+# [highlight.Timestamp]     # link = "Muted"
+# [highlight.Placeholder]   # link = "Muted"
+# [highlight.Disabled]      # link = "Muted"
+# [highlight.Loading]       # link = "Muted"
+# [highlight.Edited]        # link = "Muted", italic = true
+# [highlight.Unavailable]   # link = "Muted", strikethrough = true
+
+## Titles and headers
+# [highlight.PaneTitle]     # link = "Title"
+# [highlight.ModalTitle]    # link = "Title"
+# [highlight.ComposerTitle] # link = "Title"
+# [highlight.HeaderTitle]   # link = "Title", foreground = "cyan"
+# [highlight.HeaderLabel]   # link = "Muted"
+# [highlight.HeaderError]   # link = "Error", bold = true
+# [highlight.HeaderWarning] # link = "Warning", bold = true
+
+## Messages
+# [highlight.MessageAuthor]     # link = "Strong"
+# [highlight.SelfMessageAuthor] # link = "MessageAuthor", foreground = "cyan"
+# [highlight.MessageTimestamp]  # link = "Timestamp"
+# [highlight.MessageSecondary]  # link = "Muted"
+# [highlight.MessageBody]       # foreground = "terminal_default"
+# [highlight.MarkdownQuote]     # foreground = "dark_gray"
+# [highlight.MarkdownMarker]    # foreground = "dark_gray"
+# [highlight.MessageAttachment] # foreground = "cyan"
+# [highlight.InlineCode]        # foreground = "#FFA500"
+# [highlight.MessageLink]       # foreground = "cyan", underline = true
+# [highlight.MentionSelf]       # foreground = "yellow", background = "#5C4C23"
+# [highlight.MentionOther]      # foreground = "#C1CEF7", background = "#28325C"
+# [highlight.UnreadDivider]     # foreground = "#ED4245"
+# [highlight.DateDivider]       # link = "Decoration"
+# [highlight.BotBadge]          # link = "Normal", background = "#5865F2", bold = true
+# [highlight.ReadReceipt]       # foreground = "cyan"
+# [highlight.Reaction]          # foreground = "cyan"
+# [highlight.SelfReaction]      # foreground = "yellow"
+
+## Borders and selection
+# [highlight.Border]                # foreground = "dark_gray"
+# [highlight.FocusBorder]           # foreground = "cyan"
+# [highlight.Selection]             # foreground = "cyan", background = "none", bold = true, dim = false
+# [highlight.SelectionBorder]       # foreground = "green", bold = true
+# [highlight.PaneBorder]            # link = "Border"
+# [highlight.FocusedPaneBorder]     # link = "FocusBorder", bold = true
+# [highlight.ComposerBorder]        # link = "Border"
+# [highlight.ActiveComposerBorder]  # link = "FocusBorder", bold = true
+# [highlight.ModalBorder]           # link = "FocusBorder", bold = true
+# [highlight.ComposerPickerBorder]  # link = "FocusBorder"
+# [highlight.SelectedRow]           # link = "Selection"
+# [highlight.SelectionMarker]       # link = "Selection"
+# [highlight.ActiveField]           # foreground = "cyan", bold = true
+# [highlight.ActiveTab]             # link = "Selection"
+# [highlight.MessageSelectedBorder] # link = "SelectionBorder"
+# [highlight.ReplyTargetBorder]     # foreground = "yellow", bold = true
+# [highlight.ScrollbarThumb]        # foreground = "#AAAAAA"
+# [highlight.ScrollbarTrack]        # link = "ScrollbarThumb", dim = true
+
+## Chats and states
+# [highlight.ChatPreview]         # link = "Muted"
+# [highlight.UnreadNotice]        # foreground = "cyan", bold = true
+# [highlight.Editing]             # foreground = "yellow"
+# [highlight.PresenceOnline]      # foreground = "green"
+# [highlight.PresenceOffline]     # link = "Normal", dim = true
+# [highlight.NavigationActive]    # foreground = "green", bold = true
+# [highlight.NavigationMentioned] # foreground = "#FFA500"
+# [highlight.NavigationUnread]    # foreground = "terminal_default"
+# [highlight.MentionBadge]        # foreground = "#FFA500"
+# [highlight.NotificationBadge]   # foreground = "terminal_default"
+# [highlight.MutedChat]           # link = "Muted"
+# [highlight.PinnedBadge]         # foreground = "yellow", bold = true
+# [highlight.Error]               # foreground = "red"
+# [highlight.Warning]             # foreground = "yellow"
+# [highlight.Success]             # foreground = "green"
+# [highlight.Info]                # foreground = "cyan"
+
+# Example: magenta focus, filled selection rows
+# [highlight.FocusBorder]
+# foreground = "light_magenta"
+#
+# [highlight.SelectedRow]
+# background = "#303030"

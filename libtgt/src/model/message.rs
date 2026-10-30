@@ -174,9 +174,17 @@ pub struct Media {
     /// A still image (JPEG, PNG, WebP or GIF) that represents the media, if any.
     /// For photos and static stickers this is the file itself.
     pub preview: Option<MediaFile>,
+    /// A smaller version of [`Self::preview`] for showing in the chat, when
+    /// Telegram has one (photos come in several sizes).
+    pub thumbnail: Option<MediaFile>,
 }
 
 impl Media {
+    /// The image to show in the chat: the thumbnail, else the preview.
+    pub fn inline_preview(&self) -> Option<&MediaFile> {
+        self.thumbnail.as_ref().or(self.preview.as_ref())
+    }
+
     /// A file name to save the media under: the original name, else one
     /// derived from the kind, file id and MIME type.
     pub fn suggested_file_name(&self) -> String {
@@ -443,6 +451,21 @@ fn media_content(caption: &FormattedText, media: Media) -> (Vec<TextLine>, Messa
 }
 
 /// Thumbnails in formats that decode to a still image.
+/// Photo sizes at least this large (in pixels, on the longer side) are sharp
+/// enough for the chat preview.
+const CHAT_PHOTO_SIZE: i32 = 320;
+
+/// The smallest photo size that still looks sharp in the chat, unless that is
+/// the full photo anyway.
+fn chat_photo_size(sizes: &[tdlib_rs::types::PhotoSize]) -> Option<MediaFile> {
+    let (_, smaller) = sizes.split_last()?;
+    smaller
+        .iter()
+        .filter(|size| size.width.max(size.height) >= CHAT_PHOTO_SIZE)
+        .min_by_key(|size| size.width.max(size.height))
+        .map(|size| MediaFile::from(&size.photo))
+}
+
 fn still_thumbnail(thumbnail: Option<&Thumbnail>) -> Option<MediaFile> {
     thumbnail
         .filter(|thumbnail| {
@@ -464,9 +487,8 @@ fn message_content_with_type(content: &MessageContent) -> (Vec<TextLine>, Messag
         }
         MessageContent::MessagePhoto(photo) => {
             // The last size is usually the largest
-            let file = photo
-                .photo
-                .sizes
+            let sizes = &photo.photo.sizes;
+            let file = sizes
                 .last()
                 .map(|size| MediaFile::from(&size.photo))
                 .unwrap_or_default();
@@ -475,6 +497,7 @@ fn message_content_with_type(content: &MessageContent) -> (Vec<TextLine>, Messag
                 Media {
                     kind: MediaKind::Photo,
                     preview: Some(file.clone()),
+                    thumbnail: chat_photo_size(sizes),
                     file,
                     file_name: String::new(),
                     mime_type: "image/jpeg".into(),
@@ -491,6 +514,7 @@ fn message_content_with_type(content: &MessageContent) -> (Vec<TextLine>, Messag
                 mime_type: video.video.mime_type.clone(),
                 duration_secs: video.video.duration,
                 preview: still_thumbnail(video.video.thumbnail.as_ref()),
+                thumbnail: None,
             },
         ),
         MessageContent::MessageAnimation(animation) => media_content(
@@ -502,6 +526,7 @@ fn message_content_with_type(content: &MessageContent) -> (Vec<TextLine>, Messag
                 mime_type: animation.animation.mime_type.clone(),
                 duration_secs: animation.animation.duration,
                 preview: still_thumbnail(animation.animation.thumbnail.as_ref()),
+                thumbnail: None,
             },
         ),
         MessageContent::MessageAudio(audio) => {
@@ -520,6 +545,7 @@ fn message_content_with_type(content: &MessageContent) -> (Vec<TextLine>, Messag
                     mime_type: audio_info.mime_type.clone(),
                     duration_secs: audio_info.duration,
                     preview: still_thumbnail(audio_info.album_cover_thumbnail.as_ref()),
+                    thumbnail: None,
                 },
             )
         }
@@ -532,6 +558,7 @@ fn message_content_with_type(content: &MessageContent) -> (Vec<TextLine>, Messag
                 mime_type: voice.voice_note.mime_type.clone(),
                 duration_secs: voice.voice_note.duration,
                 preview: None,
+                thumbnail: None,
             },
         ),
         MessageContent::MessageVideoNote(note) => media_content(
@@ -543,6 +570,7 @@ fn message_content_with_type(content: &MessageContent) -> (Vec<TextLine>, Messag
                 mime_type: "video/mp4".into(),
                 duration_secs: note.video_note.duration,
                 preview: still_thumbnail(note.video_note.thumbnail.as_ref()),
+                thumbnail: None,
             },
         ),
         MessageContent::MessageSticker(sticker) => {
@@ -563,6 +591,7 @@ fn message_content_with_type(content: &MessageContent) -> (Vec<TextLine>, Messag
                 mime_type: mime_type.into(),
                 duration_secs: 0,
                 preview,
+                thumbnail: None,
             };
             let summary = format!("{} {}", media.summary(), sticker.emoji);
             (
@@ -579,6 +608,7 @@ fn message_content_with_type(content: &MessageContent) -> (Vec<TextLine>, Messag
                 mime_type: doc.document.mime_type.clone(),
                 duration_secs: 0,
                 preview: still_thumbnail(doc.document.thumbnail.as_ref()),
+                thumbnail: None,
             },
         ),
         MessageContent::MessageCall(call) => {

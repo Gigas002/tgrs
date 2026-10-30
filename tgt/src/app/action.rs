@@ -49,17 +49,40 @@ impl MessageCommand {
     }
 }
 
-/// Payload for [`Action::PreviewDecoded`]: message_id and decode result.
-/// [`Eq`] compares message_id and error message only (Ok images are not compared).
+/// Where a preview image is shown, which also sets how large it is decoded.
+#[cfg(feature = "media-preview")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PreviewTarget {
+    /// The media viewer popup.
+    Viewer,
+    /// Inline in the chat, under the message.
+    Chat,
+}
+
+/// A preview image to download (when `path` is not on disk) and decode.
+#[cfg(feature = "media-preview")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreviewRequest {
+    pub target: PreviewTarget,
+    pub message_id: i64,
+    pub file_id: i32,
+    pub path: Option<String>,
+}
+
+/// Payload for [`Action::PreviewDecoded`]: the request and its decode result.
+/// [`Eq`] compares the request and error message only (Ok images are not compared).
 #[cfg(feature = "media-preview")]
 #[derive(Debug, Clone)]
-pub struct PreviewDecodedPayload(pub i64, pub Result<image::DynamicImage, String>);
+pub struct PreviewDecodedPayload {
+    pub request: PreviewRequest,
+    pub result: Result<image::DynamicImage, String>,
+}
 
 #[cfg(feature = "media-preview")]
 impl PartialEq for PreviewDecodedPayload {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-            && match (&self.1, &other.1) {
+        self.request == other.request
+            && match (&self.result, &other.result) {
                 (Ok(_), Ok(_)) => true,
                 (Err(a), Err(b)) => a == b,
                 _ => false,
@@ -299,13 +322,9 @@ pub enum Action {
     MediaViewerOpen,
     /// Save the media shown in the media viewer to the download directory.
     MediaViewerDownload,
-    /// Download (when `path` is not on disk) and decode a preview image off the main thread.
+    /// Download and decode a preview image off the main thread.
     #[cfg(feature = "media-preview")]
-    LoadPreview {
-        message_id: i64,
-        file_id: i32,
-        path: Option<String>,
-    },
+    LoadPreview(PreviewRequest),
     /// A preview image was decoded in the background.
     #[cfg(feature = "media-preview")]
     PreviewDecoded(PreviewDecodedPayload),

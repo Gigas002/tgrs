@@ -307,8 +307,6 @@ fn summary_line(media: &Media) -> String {
 
 #[cfg(feature = "media-preview")]
 mod preview {
-    use std::io::IsTerminal;
-
     use libtgt::model::Media;
     use ratatui::{
         Frame,
@@ -316,9 +314,11 @@ mod preview {
         style::Style,
         widgets::Paragraph,
     };
-    use ratatui_image::{Resize, StatefulImage, picker::Picker, protocol::StatefulProtocol};
 
-    use crate::app::action::{Action, PreviewDecodedPayload};
+    use crate::{
+        app::action::{Action, PreviewDecodedPayload, PreviewRequest, PreviewTarget},
+        ui::preview::{Image, picker},
+    };
 
     enum State {
         /// Nothing to preview: the viewer shows details instead.
@@ -326,33 +326,20 @@ mod preview {
         Loading {
             message_id: i64,
         },
-        Loaded {
-            image: Box<StatefulProtocol>,
-            width: u32,
-            height: u32,
-        },
+        Loaded(Image),
         Error(String),
     }
 
     /// The preview image of the media viewer.
     pub struct Preview {
-        picker: Picker,
         state: State,
     }
 
     impl Preview {
         pub fn new() -> Self {
-            // Only query the terminal when stdout is a TTY: in tests/CI the
-            // query can block or time out.
-            let picker = if std::io::stdout().is_terminal() {
-                Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks())
-            } else {
-                Picker::halfblocks()
-            };
-            Self {
-                picker,
-                state: State::None,
-            }
+            // Detect the terminal's image support up front, not on first use
+            let _ = picker();
+            Self { state: State::None }
         }
 
         /// Starts loading the preview of `media`; returns the action that
@@ -363,11 +350,12 @@ mod preview {
                 return None;
             };
             self.state = State::Loading { message_id };
-            Some(Action::LoadPreview {
+            Some(Action::LoadPreview(PreviewRequest {
+                target: PreviewTarget::Viewer,
                 message_id,
                 file_id: file.id,
                 path: file.downloaded_path().map(str::to_owned),
-            })
+            }))
         }
 
         pub fn clear(&mut self) {
@@ -381,18 +369,17 @@ mod preview {
 
         pub fn decoded(
             &mut self,
-            PreviewDecodedPayload(message_id, result): PreviewDecodedPayload,
+            PreviewDecodedPayload { request, result }: PreviewDecodedPayload,
         ) {
-            if !matches!(self.state, State::Loading { message_id: loading } if loading == message_id)
-            {
+            let loading = matches!(
+                self.state,
+                State::Loading { message_id } if message_id == request.message_id
+            );
+            if request.target != PreviewTarget::Viewer || !loading {
                 return;
             }
             self.state = match result {
-                Ok(image) => State::Loaded {
-                    width: image.width(),
-                    height: image.height(),
-                    image: Box::new(self.picker.new_resize_protocol(image)),
-                },
+                Ok(image) => State::Loaded(Image::new(image)),
                 Err(e) => State::Error(e),
             };
         }
@@ -402,17 +389,8 @@ mod preview {
                 State::None => return,
                 State::Loading { .. } => "Loading preview…".to_owned(),
                 State::Error(e) => format!("No preview: {e}"),
-                State::Loaded {
-                    image,
-                    width,
-                    height,
-                } => {
-                    let rect = fit(area, *width, *height, self.picker.font_size());
-                    frame.render_stateful_widget(
-                        StatefulImage::new().resize(Resize::Fit(None)),
-                        rect,
-                        image.as_mut(),
-                    );
+                State::Loaded(image) => {
+                    image.draw(frame, area, Alignment::Center, false);
                     return;
                 }
             };
@@ -424,24 +402,6 @@ mod preview {
                 Rect::new(area.x, y, area.width, 1.min(area.height)),
             );
         }
-    }
-
-    /// The largest rect inside `area` with the image's aspect ratio, centered.
-    fn fit(area: Rect, width: u32, height: u32, font: ratatui_image::FontSize) -> Rect {
-        if width == 0 || height == 0 || font.width == 0 || font.height == 0 {
-            return area;
-        }
-        let (font_w, font_h) = (f32::from(font.width), f32::from(font.height));
-        let scale = (f32::from(area.width) * font_w / width as f32)
-            .min(f32::from(area.height) * font_h / height as f32);
-        let cells_w = ((width as f32 * scale / font_w).ceil() as u16).min(area.width);
-        let cells_h = ((height as f32 * scale / font_h).ceil() as u16).min(area.height);
-        Rect::new(
-            area.x + (area.width - cells_w) / 2,
-            area.y + (area.height - cells_h) / 2,
-            cells_w,
-            cells_h,
-        )
     }
 }
 

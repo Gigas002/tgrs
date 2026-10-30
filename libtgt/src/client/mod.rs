@@ -20,12 +20,14 @@ use crate::model::{MessageEntry, TdMessageReplyToMessage};
 use crate::store::Store;
 
 mod auth;
+mod execute;
 mod updates;
 
 #[cfg(test)]
 mod tests;
 
 pub use auth::{Authenticator, Proxy, ProxyKind, TdLogging, TdParams};
+pub use execute::configure_logging;
 pub use updates::Notification;
 
 /// Errors returned by TDLib requests.
@@ -113,7 +115,9 @@ impl Client {
         }
     }
 
-    /// Routes TDLib's own log to a file.
+    /// Applies `logging` to this client. Also the first request, which tdlib_rs
+    /// needs to start receiving updates; call [`configure_logging`] before
+    /// creating the client so TDLib's start-up isn't logged to the terminal.
     pub async fn set_logging(&self, logging: &TdLogging) {
         // tdlib_rs needs one request with the client to start receiving updates for it.
         if let Err(e) =

@@ -38,7 +38,14 @@ pub struct ChatWindow {
     focused: bool,
     /// When true, next draw will select the newest message (Alt+C restore order).
     request_jump_to_latest: bool,
+    /// Image previews shown under media messages.
+    #[cfg(feature = "media-preview")]
+    previews: crate::ui::preview::ChatPreviews,
 }
+
+/// A message's preview in the list: its message id, image and alignment.
+#[cfg(feature = "media-preview")]
+type PreviewSlot = Option<(i64, libtgt::model::MediaFile, Alignment)>;
 /// Implementation of the `ChatWindow` struct.
 impl ChatWindow {
     /// Create a new instance of the `ChatWindow` struct.
@@ -62,6 +69,8 @@ impl ChatWindow {
             message_list_state,
             focused,
             request_jump_to_latest: false,
+            #[cfg(feature = "media-preview")]
+            previews: Default::default(),
         }
     }
     /// Set the name of the `ChatWindow`.
@@ -308,6 +317,51 @@ impl ChatWindow {
     /// Wraps each line with a border span on one side only (reply-target border-only highlight).
     /// Messages from others: `│` at the start of each line. Messages from me: `│` at the end.
     /// This keeps borders aligned and avoids broken vertical bars under each other.
+    /// The image shown under a media message in the chat.
+    #[cfg(feature = "media-preview")]
+    fn preview_file(entry: &MessageEntry) -> Option<&libtgt::model::MediaFile> {
+        entry.media()?.inline_preview()
+    }
+
+    /// Draws the previews of the messages fully on screen, loading missing
+    /// ones. `heights` and `slots` follow the list's items, newest first, as
+    /// they're stacked up from the bottom of `inner`.
+    #[cfg(feature = "media-preview")]
+    fn draw_previews(
+        &mut self,
+        frame: &mut ratatui::Frame<'_>,
+        inner: Rect,
+        heights: &[u16],
+        slots: &[PreviewSlot],
+    ) {
+        use crate::ui::preview::{CHAT_PREVIEW_COLUMNS, CHAT_PREVIEW_ROWS};
+
+        let width = CHAT_PREVIEW_COLUMNS.min(inner.width);
+        let placeholder_style = self.app_context.style_timestamp();
+        let mut bottom = inner.bottom();
+        let offset = self.message_list_state.offset();
+        for (height, slot) in heights.iter().zip(slots).skip(offset) {
+            // Partly visible items are cut: skip their image
+            if *height > bottom - inner.y {
+                break;
+            }
+            if let Some((message_id, file, alignment)) = slot {
+                if let Some(action) = self.previews.request(*message_id, file) {
+                    self.send(action);
+                }
+                let rows = CHAT_PREVIEW_ROWS.min(*height);
+                let x = match alignment {
+                    Alignment::Right => inner.right() - width,
+                    _ => inner.x,
+                };
+                let area = Rect::new(x, bottom - rows, width, rows);
+                self.previews
+                    .draw(frame, file.id, area, *alignment, placeholder_style);
+            }
+            bottom -= height;
+        }
+    }
+
     fn wrap_text_with_reply_border(
         content: Text,
         border_style: Style,
@@ -392,6 +446,8 @@ impl Component for ChatWindow {
                 // Handled by CoreWindow: opens search overlay or focuses ChatList
             }
             Action::LoadPinnedMessages => {}
+            #[cfg(feature = "media-preview")]
+            Action::PreviewDecoded(payload) => self.previews.decoded(payload),
             Action::Key(key_code, modifiers) if self.focused => {
                 let has_message_pins = !self
                     .app_context
@@ -563,7 +619,8 @@ impl Component for ChatWindow {
                         Alignment::Left,
                     )
                 };
-                let content = message::message_text(
+                #[allow(unused_mut)]
+                let mut content = message::message_text(
                     message_entry,
                     myself,
                     &self.app_context,
@@ -573,6 +630,14 @@ impl Component for ChatWindow {
                     wrap_width,
                 )
                 .alignment(alignment);
+                // Room for the preview, drawn over these rows after the list
+                #[cfg(feature = "media-preview")]
+                if Self::preview_file(message_entry).is_some() {
+                    let rows = usize::from(crate::ui::preview::CHAT_PREVIEW_ROWS);
+                    content
+                        .lines
+                        .extend(std::iter::repeat_n(Line::default(), rows));
+                }
                 let is_reply_target =
                     reply_message_id != 0 && message_entry.id() == reply_message_id;
                 if is_reply_target {
@@ -592,6 +657,30 @@ impl Component for ChatWindow {
                 "Loading…",
                 self.app_context.style_timestamp(),
             ))));
+        }
+
+        #[cfg(feature = "media-preview")]
+        let (mut heights, mut slots): (Vec<u16>, Vec<PreviewSlot>) = (
+            items.iter().map(|item| item.height() as u16).collect(),
+            self.message_list
+                .iter()
+                .map(|entry| {
+                    let myself = entry.sender_id() == self.app_context.store().me();
+                    let alignment = if myself {
+                        Alignment::Right
+                    } else {
+                        Alignment::Left
+                    };
+                    Self::preview_file(entry).map(|file| (entry.id(), file.clone(), alignment))
+                })
+                .chain(std::iter::repeat(None))
+                .take(items.len())
+                .collect(),
+        );
+        #[cfg(feature = "media-preview")]
+        {
+            heights.reverse();
+            slots.reverse();
         }
 
         // Render from bottom to top so content sits at the bottom (above the prompt) when
@@ -685,6 +774,8 @@ impl Component for ChatWindow {
             frame.render_widget(pin_preview_para, pin_rows[1]);
         }
         frame.render_stateful_widget(list, list_area, &mut self.message_list_state);
+        #[cfg(feature = "media-preview")]
+        self.draw_previews(frame, list_inner, &heights, &slots);
 
         // Restore selection to message_list index (oldest=0) for next/previous and other logic.
         let list_sel = self.message_list_state.selected();

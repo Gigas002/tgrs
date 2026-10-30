@@ -35,36 +35,18 @@ fn log_level_conflicts_with_verbose() {
 }
 
 #[test]
-fn send_takes_chat_and_message() {
-    assert_eq!(
-        overrides(&["send", "Saved Messages", "hi"]).command,
-        SettingsCommand::Send {
-            chat: "Saved Messages".into(),
-            message: "hi".into(),
-        }
-    );
-}
-
-#[test]
-fn clear_all_selects_every_directory() {
-    assert_eq!(
-        overrides(&["clear", "--all", "-y"]).command,
-        SettingsCommand::Clear {
-            config: true,
-            data: true,
-            state: true,
-            yes: true,
-        }
-    );
+fn there_is_no_send_command() {
+    // Telegram is only used through the TUI; scripts can't send messages
+    assert!(Cli::try_parse_from(["tgt", "send", "Saved Messages", "hi"]).is_err());
 }
 
 #[test]
 fn global_flags_work_after_subcommand() {
-    let cli = overrides(&["init-config", "--config-dir", "/tmp/tgt"]);
+    let cli = overrides(&["logout", "--config-dir", "/tmp/tgt"]);
 
     assert_eq!(
         cli.config_dir.as_deref(),
         Some(std::path::Path::new("/tmp/tgt"))
     );
-    assert_eq!(cli.command, SettingsCommand::InitConfig { force: false });
+    assert_eq!(cli.command, SettingsCommand::Logout);
 }

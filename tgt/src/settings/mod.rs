@@ -12,7 +12,6 @@ use libtgt::client::{Proxy, ProxyKind, TdLogging, TdParams};
 use crate::{
     config::{
         self, ConfigError, CredentialStore, FileConfig, LogLevel, ProxyFile, ProxyType, Rotation,
-        theme::{self as theme_file, ThemeSource},
     },
     utils::{self, AppDirs, PathsError, XdgDirs},
 };
@@ -24,7 +23,7 @@ pub mod theme;
 mod tests;
 
 pub use keymap::{ActionBinding, KeyMap, Keymap, KeymapError};
-pub use theme::{DEFAULT_THEME, Theme, ThemeError};
+pub use theme::{BorderSurface, HighlightGroup, Theme};
 
 /// Overrides the config directory, like `--config-dir`.
 pub const CONFIG_DIR_ENV: &str = "TGT_CONFIG_DIR";
@@ -48,7 +47,6 @@ pub struct CliOverrides {
     pub config_dir: Option<PathBuf>,
     pub log_dir: Option<PathBuf>,
     pub log_level: Option<LogLevel>,
-    pub theme: Option<String>,
     pub command: Command,
 }
 
@@ -60,17 +58,6 @@ pub enum Command {
     Tui,
     /// Log out of Telegram.
     Logout,
-    /// Send one message and exit.
-    Send { chat: String, message: String },
-    /// Write the default config files.
-    InitConfig { force: bool },
-    /// Remove tgt's directories.
-    Clear {
-        config: bool,
-        data: bool,
-        state: bool,
-        yes: bool,
-    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -82,6 +69,8 @@ pub struct Settings {
     pub tdlib_log: TdLogging,
     pub keymap: Keymap,
     pub theme: Theme,
+    /// Problems in `theme.toml` that were skipped, to report after logging starts.
+    pub warnings: Vec<String>,
     /// Where the key of the encrypted TDLib database is kept.
     pub credentials: CredentialStore,
     pub command: Command,
@@ -90,7 +79,7 @@ pub struct Settings {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Dirs {
     pub home: PathBuf,
-    /// Holds `config.toml`, `keymap.toml` and `themes/`.
+    /// Holds `config.toml`, `keymap.toml` and `theme.toml`.
     pub config: PathBuf,
     pub data: PathBuf,
     pub state: PathBuf,
@@ -104,7 +93,6 @@ pub struct App {
     pub frame_rate: f64,
     pub show_status_bar: bool,
     pub show_title_bar: bool,
-    pub theme_enable: bool,
     pub use_emoji_icons: bool,
     /// Where downloaded media is saved.
     pub download_dir: PathBuf,
@@ -133,9 +121,6 @@ pub enum SettingsError {
 
     #[error(transparent)]
     Keymap(#[from] KeymapError),
-
-    #[error(transparent)]
-    Theme(#[from] ThemeError),
 
     #[error("failed to resolve {}: {source}", path.display())]
     Absolute {
@@ -200,7 +185,7 @@ impl Settings {
         let download_dir = from_config("app.download_dir", file.app.download_dir.clone())?
             .unwrap_or_else(|| xdg.download_dir.clone());
         let app = resolve_app(&file, download_dir)?;
-        let telegram = resolve_telegram(&file, &dirs, &cli.command, &lookup, &from_config)?;
+        let telegram = resolve_telegram(&file, &dirs, &lookup, &from_config)?;
         let tdlib_log = TdLogging {
             verbosity_level: file
                 .telegram
@@ -216,8 +201,8 @@ impl Settings {
             config::keymap::load(&dirs.config)?.as_ref(),
         )?;
 
-        let themes = theme_file::discover(&dirs.config);
-        let theme = resolve_theme(&themes, cli.theme.or(file.app.theme))?;
+        let (theme_file, mut warnings) = config::theme::load(&dirs.config)?;
+        let theme = Theme::resolve(&theme_file, &mut warnings);
 
         Ok(Self {
             dirs,
@@ -227,6 +212,7 @@ impl Settings {
             tdlib_log,
             keymap,
             theme,
+            warnings,
             credentials: file.credentials.store.unwrap_or_default(),
             command: cli.command,
         })
@@ -254,7 +240,6 @@ fn resolve_app(file: &FileConfig, download_dir: PathBuf) -> Result<App, Settings
         frame_rate,
         show_status_bar: app.show_status_bar.unwrap_or(true),
         show_title_bar: app.show_title_bar.unwrap_or(true),
-        theme_enable: app.theme_enable.unwrap_or(true),
         use_emoji_icons: app.use_emoji_icons.unwrap_or(false),
         download_dir,
         preview_max_dimension: app
@@ -270,7 +255,6 @@ fn resolve_app(file: &FileConfig, download_dir: PathBuf) -> Result<App, Settings
 fn resolve_telegram<F, P>(
     file: &FileConfig,
     dirs: &Dirs,
-    command: &Command,
     lookup: &F,
     from_config: &P,
 ) -> Result<TdParams, SettingsError>
@@ -294,10 +278,7 @@ where
         .or_else(|| tg.api_hash.clone())
         .unwrap_or_else(|| DEFAULT_API_HASH.to_owned());
 
-    // Without the message database, messages deleted elsewhere can't be resent
-    // by a one-shot `tgt send`.
-    let use_message_database =
-        !matches!(command, Command::Send { .. }) && tg.use_message_database.unwrap_or(true);
+    let use_message_database = tg.use_message_database.unwrap_or(true);
 
     Ok(TdParams {
         api_id,
@@ -340,29 +321,6 @@ fn resolve_proxy(proxy: &ProxyFile) -> Option<Proxy> {
         port: proxy.port.unwrap_or(DEFAULT_PROXY_PORT),
         kind,
     })
-}
-
-/// An explicit theme (CLI or config) must exist; otherwise the default one
-/// is used when present.
-fn resolve_theme(
-    themes: &[(String, ThemeSource)],
-    explicit: Option<String>,
-) -> Result<Theme, SettingsError> {
-    match explicit {
-        Some(name) => load_theme(themes, &name),
-        None if themes.iter().any(|(name, _)| name == DEFAULT_THEME) => {
-            load_theme(themes, DEFAULT_THEME)
-        }
-        None => Ok(Theme::default()),
-    }
-}
-
-pub fn load_theme(themes: &[(String, ThemeSource)], name: &str) -> Result<Theme, SettingsError> {
-    let (_, source) = themes
-        .iter()
-        .find(|(theme, _)| theme == name)
-        .ok_or_else(|| ThemeError::Unknown(name.to_owned()))?;
-    Ok(Theme::resolve(name, source.load()?)?)
 }
 
 /// CLI paths are relative to the working directory.

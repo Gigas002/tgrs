@@ -448,8 +448,11 @@ impl Component for CoreWindow {
             }
             #[cfg(feature = "media-preview")]
             Action::PreviewDecoded(_) => {
-                if let Some(viewer) = self.components.get_mut(&ComponentName::MediaViewer) {
-                    viewer.update(action);
+                // Each takes only the previews it asked for
+                for name in [ComponentName::MediaViewer, ComponentName::Chat] {
+                    if let Some(component) = self.components.get_mut(&name) {
+                        component.update(action.clone());
+                    }
                 }
             }
             Action::ShowFileUploadExplorer => {

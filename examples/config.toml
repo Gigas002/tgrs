@@ -17,10 +17,6 @@
 # show_status_bar = true
 # Show the title bar at the top of the terminal.
 # show_title_bar = true
-# Apply theme colors; false uses the terminal's defaults.
-# theme_enable = true
-# Theme name: a file in themes/ without `.toml`, bundled or user-provided.
-# theme = "theme"
 # Use emoji for message status (edited, reply, sent, seen) instead of
 # ASCII indicators ([edited], <-- reply, [✓] sent, [o o] seen).
 # use_emoji_icons = false

@@ -16,6 +16,8 @@ pub mod media_viewer;
 pub mod message;
 pub mod message_actions;
 pub mod pinned_messages_popup;
+#[cfg(feature = "media-preview")]
+pub mod preview;
 pub mod prompt_window;
 pub mod reply_message;
 pub mod search_overlay;

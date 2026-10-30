@@ -9,25 +9,16 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
     app::action::Action,
-    settings::{App, Dirs, Keymap, Settings, Theme},
+    settings::{App, Dirs, HighlightGroup, Keymap, Settings, Theme},
     ui::component_name::ComponentName,
 };
 
-/// Generates a getter for a theme style: `$map` section, `$attr_name` key.
-/// Returns the default style when themes are disabled or the key is missing.
+/// Generates a getter for the style of a [`HighlightGroup`].
 macro_rules! theme_style_generate {
-    ($fn_name: ident, $map: ident, $attr_name: ident) => {
+    ($fn_name: ident, $group: ident) => {
         #[inline]
         pub fn $fn_name(&self) -> Style {
-            if self.app.theme_enable {
-                self.theme()
-                    .$map
-                    .get(stringify!($attr_name))
-                    .copied()
-                    .unwrap_or_default()
-            } else {
-                Style::default()
-            }
+            self.theme.style(HighlightGroup::$group)
         }
     };
 }
@@ -183,119 +174,57 @@ impl AppContext {
             .store(Self::encode_component(component), Ordering::Release);
     }
 
-    // ===== COMMON ======
-    theme_style_generate!(
-        style_border_component_focused,
-        common,
-        border_component_focused
-    );
+    /// The style of `group` in the theme.
+    pub fn style(&self, group: HighlightGroup) -> Style {
+        self.theme.style(group)
+    }
 
-    theme_style_generate!(style_item_selected, common, item_selected);
-    theme_style_generate!(style_item_reply_target, common, item_reply_target);
-    theme_style_generate!(style_timestamp, common, timestamp);
+    // Component styles, by the Highlight Group each one uses
+    theme_style_generate!(style_border_component_focused, FocusedPaneBorder);
+    theme_style_generate!(style_item_selected, SelectedRow);
+    theme_style_generate!(style_item_reply_target, ReplyTargetBorder);
+    theme_style_generate!(style_timestamp, Timestamp);
 
-    // ===== CHAT LIST =====
-    theme_style_generate!(style_chat_list, chat_list, self);
-    theme_style_generate!(style_chat_list_item_selected, chat_list, item_selected);
-    theme_style_generate!(style_chat_list_item_chat_name, chat_list, item_chat_name);
-    theme_style_generate!(
-        style_chat_list_item_message_content,
-        chat_list,
-        item_message_content
-    );
-    theme_style_generate!(
-        style_chat_list_item_unread_counter,
-        chat_list,
-        item_unread_counter
-    );
+    theme_style_generate!(style_chat_list, Normal);
+    theme_style_generate!(style_chat_list_item_selected, SelectedRow);
+    theme_style_generate!(style_chat_list_item_chat_name, Strong);
+    theme_style_generate!(style_chat_list_item_message_content, ChatPreview);
+    theme_style_generate!(style_chat_list_item_unread_counter, NotificationBadge);
 
-    // ===== CHAT =====
-    theme_style_generate!(style_chat, chat, self);
-    theme_style_generate!(style_chat_chat_name, chat, chat_name);
-    theme_style_generate!(style_chat_message_myself_name, chat, message_myself_name);
-    theme_style_generate!(style_chat_message_other_name, chat, message_other_name);
-    theme_style_generate!(
-        style_chat_message_myself_content,
-        chat,
-        message_myself_content
-    );
-    theme_style_generate!(
-        style_chat_message_other_content,
-        chat,
-        message_other_content
-    );
-    theme_style_generate!(style_chat_message_reply_text, chat, message_reply_text);
-    theme_style_generate!(
-        style_chat_message_myself_reply_name,
-        chat,
-        message_myself_reply_name
-    );
-    theme_style_generate!(
-        style_chat_message_myself_reply_content,
-        chat,
-        message_myself_reply_content
-    );
-    theme_style_generate!(
-        style_chat_message_other_reply_name,
-        chat,
-        message_other_reply_name
-    );
-    theme_style_generate!(
-        style_chat_message_other_reply_content,
-        chat,
-        message_other_reply_content
-    );
+    theme_style_generate!(style_chat, Normal);
+    theme_style_generate!(style_chat_chat_name, PaneTitle);
+    theme_style_generate!(style_chat_message_myself_name, SelfMessageAuthor);
+    theme_style_generate!(style_chat_message_other_name, MessageAuthor);
+    theme_style_generate!(style_chat_message_myself_content, MessageBody);
+    theme_style_generate!(style_chat_message_other_content, MessageBody);
+    theme_style_generate!(style_chat_message_reply_text, MessageSecondary);
+    theme_style_generate!(style_chat_message_myself_reply_name, MessageSecondary);
+    theme_style_generate!(style_chat_message_myself_reply_content, MessageSecondary);
+    theme_style_generate!(style_chat_message_other_reply_name, MessageSecondary);
+    theme_style_generate!(style_chat_message_other_reply_content, MessageSecondary);
 
-    // ===== PROMPT =====
-    theme_style_generate!(style_prompt, prompt, self);
-    theme_style_generate!(style_prompt_message_text, prompt, message_text);
-    theme_style_generate!(
-        style_prompt_message_text_selected,
-        prompt,
-        message_text_selected
-    );
-    theme_style_generate!(
-        style_prompt_message_preview_text,
-        prompt,
-        message_preview_text
-    );
+    theme_style_generate!(style_prompt, Normal);
+    theme_style_generate!(style_prompt_message_text, MessageBody);
+    theme_style_generate!(style_prompt_message_text_selected, SelectedRow);
+    theme_style_generate!(style_prompt_message_preview_text, Placeholder);
 
-    // ===== REPLY MESSAGE =====
-    theme_style_generate!(style_reply_message, reply_message, self);
-    theme_style_generate!(
-        style_reply_message_message_text,
-        reply_message,
-        message_text
-    );
+    theme_style_generate!(style_reply_message, ReplyTargetBorder);
+    theme_style_generate!(style_reply_message_message_text, MessageSecondary);
 
-    // ===== STATUS BAR =====
-    theme_style_generate!(style_status_bar, status_bar, self);
-    theme_style_generate!(style_status_bar_size_info_text, status_bar, size_info_text);
-    theme_style_generate!(
-        style_status_bar_size_info_numbers,
-        status_bar,
-        size_info_numbers
-    );
-    theme_style_generate!(style_status_bar_press_key_text, status_bar, press_key_text);
-    theme_style_generate!(style_status_bar_press_key_key, status_bar, press_key_key);
-    theme_style_generate!(
-        style_status_bar_message_quit_text,
-        status_bar,
-        message_quit_text
-    );
-    theme_style_generate!(
-        style_status_bar_message_quit_key,
-        status_bar,
-        message_quit_key
-    );
-    theme_style_generate!(style_status_bar_open_chat_text, status_bar, open_chat_text);
-    theme_style_generate!(style_status_bar_open_chat_name, status_bar, open_chat_name);
+    theme_style_generate!(style_status_bar, Normal);
+    theme_style_generate!(style_status_bar_size_info_text, HeaderLabel);
+    theme_style_generate!(style_status_bar_size_info_numbers, Normal);
+    theme_style_generate!(style_status_bar_press_key_text, HeaderLabel);
+    theme_style_generate!(style_status_bar_press_key_key, Shortcut);
+    theme_style_generate!(style_status_bar_message_quit_text, HeaderLabel);
+    theme_style_generate!(style_status_bar_message_quit_key, Shortcut);
+    theme_style_generate!(style_status_bar_open_chat_text, HeaderLabel);
+    theme_style_generate!(style_status_bar_open_chat_name, HeaderTitle);
 
-    // ===== TITLE BAR =====
-    theme_style_generate!(style_title_bar, title_bar, self);
-    theme_style_generate!(style_title_bar_title1, title_bar, title1);
-    theme_style_generate!(style_title_bar_title2, title_bar, title2);
-    theme_style_generate!(style_title_bar_title3, title_bar, title3);
+    theme_style_generate!(style_title_bar, Normal);
+    theme_style_generate!(style_title_bar_title1, HeaderTitle);
+    theme_style_generate!(style_title_bar_title2, HeaderTitle);
+    theme_style_generate!(style_title_bar_title3, HeaderTitle);
 }
 
 #[cfg(test)]

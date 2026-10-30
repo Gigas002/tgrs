@@ -1,19 +1,7 @@
-use std::path::PathBuf;
-
 use super::*;
-use crate::{app::commands, settings::Dirs};
 
 fn test_app_context() -> Arc<AppContext> {
     AppContext::for_tests()
-}
-
-fn temp_dirs(root: &std::path::Path) -> Dirs {
-    Dirs {
-        home: root.to_path_buf(),
-        config: root.join("config"),
-        data: root.join("data"),
-        state: root.join("state"),
-    }
 }
 
 #[test]
@@ -94,73 +82,6 @@ fn clear_render_flag_returns_previous_and_clears() {
 }
 
 #[test]
-fn init_config_writes_bundled_files_and_keeps_existing() {
-    let tmp = tempfile::tempdir().unwrap();
-    let dirs = temp_dirs(tmp.path());
-    let config = dirs.config.join("config.toml");
-
-    commands::init_config(&dirs, false).unwrap();
-    assert!(config.exists());
-    assert!(dirs.config.join("keymap.toml").exists());
-    assert!(dirs.config.join("themes/theme.toml").exists());
-
-    std::fs::write(&config, "# mine").unwrap();
-    commands::init_config(&dirs, false).unwrap();
-    assert_eq!(std::fs::read_to_string(&config).unwrap(), "# mine");
-
-    commands::init_config(&dirs, true).unwrap();
-    assert_ne!(std::fs::read_to_string(&config).unwrap(), "# mine");
-}
-
-#[test]
-fn clear_removes_selected_directories() {
-    let tmp = tempfile::tempdir().unwrap();
-    let dirs = temp_dirs(tmp.path());
-    for dir in [&dirs.config, &dirs.data, &dirs.state] {
-        std::fs::create_dir_all(dir).unwrap();
-    }
-
-    commands::clear(&dirs, false, true, true, true).unwrap();
-    assert!(dirs.config.exists());
-    assert!(!dirs.data.exists());
-    assert!(!dirs.state.exists());
-}
-
-#[test]
-fn clear_requires_a_selection() {
-    let tmp = tempfile::tempdir().unwrap();
-    assert!(commands::clear(&temp_dirs(tmp.path()), false, false, false, true).is_err());
-}
-
-#[test]
-fn clear_refuses_project_directories() {
-    let tmp = tempfile::tempdir().unwrap();
-    let dirs = temp_dirs(tmp.path());
-    std::fs::create_dir_all(&dirs.data).unwrap();
-    std::fs::write(dirs.data.join("Cargo.toml"), "").unwrap();
-
-    assert!(commands::clear(&dirs, false, true, false, true).is_err());
-    assert!(dirs.data.exists());
-}
-
-#[test]
-fn unsafe_to_remove_detects_root_and_repositories() {
-    assert!(commands::is_unsafe_to_remove(&PathBuf::from("/")));
-    let tmp = tempfile::tempdir().unwrap();
-    assert!(!commands::is_unsafe_to_remove(tmp.path()));
-    std::fs::create_dir(tmp.path().join(".git")).unwrap();
-    assert!(commands::is_unsafe_to_remove(tmp.path()));
-}
-
-#[test]
-fn confirm_accepts_yes_only() {
-    assert!(commands::confirm("", "y\n".as_bytes()).unwrap());
-    assert!(commands::confirm("", "YES\n".as_bytes()).unwrap());
-    assert!(!commands::confirm("", "\n".as_bytes()).unwrap());
-    assert!(!commands::confirm("", "no\n".as_bytes()).unwrap());
-}
-
-#[test]
 fn notifications_map_to_actions() {
     let ctx = test_app_context();
     handle_notification(&ctx, Notification::OpenChatMessageAdded(42)).unwrap();
@@ -181,4 +102,55 @@ fn notifications_map_to_actions() {
             Action::ChatHistoryAppended,
         ]
     );
+}
+
+mod masked_input {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    use crate::app::auth::read_masked;
+
+    fn keys(text: &str) -> Vec<KeyEvent> {
+        text.chars()
+            .map(|c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE))
+            .collect()
+    }
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    fn ctrl(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
+    }
+
+    #[test]
+    fn echoes_a_star_per_character() {
+        let mut input = keys("pässwörd");
+        input.push(key(KeyCode::Enter));
+        let mut out = Vec::new();
+        assert_eq!(read_masked(input, &mut out).as_deref(), Some("pässwörd"));
+        assert_eq!(String::from_utf8(out).unwrap(), "********\r\n");
+    }
+
+    #[test]
+    fn backspace_and_ctrl_u_edit_the_secret() {
+        let mut input = keys("abc");
+        input.push(key(KeyCode::Backspace));
+        input.push(ctrl('u'));
+        input.push(key(KeyCode::Backspace));
+        input.extend(keys("xy"));
+        input.push(key(KeyCode::Enter));
+        input.extend(keys("ignored"));
+        let mut out = Vec::new();
+        assert_eq!(read_masked(input, &mut out).as_deref(), Some("xy"));
+        let out = String::from_utf8(out).unwrap();
+        assert!(!out.contains(['a', 'b', 'c', 'x', 'y']), "{out:?}");
+    }
+
+    #[test]
+    fn ctrl_c_cancels() {
+        let mut input = keys("secret");
+        input.push(ctrl('c'));
+        assert_eq!(read_masked(input, &mut Vec::new()), None);
+    }
 }

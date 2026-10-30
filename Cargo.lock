@@ -1326,7 +1326,9 @@ name = "libtgt"
 version = "1.0.0"
 dependencies = [
  "chrono",
+ "serde_json",
  "tdlib-rs",
+ "tempfile",
  "tokio",
  "tracing",
 ]

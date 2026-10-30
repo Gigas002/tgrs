@@ -17,7 +17,7 @@ mod tests;
 #[derive(Debug, Parser)]
 #[command(name = "tgt", version, about)]
 pub struct Cli {
-    /// Directory with config.toml, keymap.toml and themes/ [env: TGT_CONFIG_DIR] [default: $XDG_CONFIG_HOME/tgt].
+    /// Directory with config.toml, keymap.toml and theme.toml [env: TGT_CONFIG_DIR] [default: $XDG_CONFIG_HOME/tgt].
     #[arg(long, global = true, value_name = "DIR")]
     pub config_dir: Option<PathBuf>,
 
@@ -37,10 +37,6 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub quiet: bool,
 
-    /// Theme to use, by name from themes/ (overrides `app.theme`).
-    #[arg(long, value_name = "NAME")]
-    pub theme: Option<String>,
-
     #[command(subcommand)]
     pub command: Option<Command>,
 }
@@ -49,37 +45,6 @@ pub struct Cli {
 pub enum Command {
     /// Log out of Telegram.
     Logout,
-    /// Send a message to a chat and exit.
-    Send {
-        /// Chat title to search for; must match exactly one chat.
-        chat: String,
-        /// Message text.
-        message: String,
-    },
-    /// Write the default config files to the config directory.
-    InitConfig {
-        /// Overwrite existing files.
-        #[arg(long)]
-        force: bool,
-    },
-    /// Remove tgt's config, data and/or state directories.
-    Clear {
-        /// Remove the config directory.
-        #[arg(short, long)]
-        config: bool,
-        /// Remove the data directory (TDLib database and downloads).
-        #[arg(short, long)]
-        data: bool,
-        /// Remove the state directory (logs and remembered theme).
-        #[arg(short, long)]
-        state: bool,
-        /// Remove all of the above.
-        #[arg(long)]
-        all: bool,
-        /// Don't ask for confirmation.
-        #[arg(short, long)]
-        yes: bool,
-    },
 }
 
 impl Cli {
@@ -101,7 +66,6 @@ impl From<Cli> for CliOverrides {
             config_dir: cli.config_dir,
             log_dir: cli.log_dir,
             log_level,
-            theme: cli.theme,
             command: cli
                 .command
                 .map_or(SettingsCommand::Tui, SettingsCommand::from),
@@ -113,20 +77,6 @@ impl From<Command> for SettingsCommand {
     fn from(command: Command) -> Self {
         match command {
             Command::Logout => Self::Logout,
-            Command::Send { chat, message } => Self::Send { chat, message },
-            Command::InitConfig { force } => Self::InitConfig { force },
-            Command::Clear {
-                config,
-                data,
-                state,
-                all,
-                yes,
-            } => Self::Clear {
-                config: config || all,
-                data: data || all,
-                state: state || all,
-                yes,
-            },
         }
     }
 }

@@ -2,7 +2,6 @@
 
 pub mod action;
 pub mod auth;
-pub mod commands;
 pub mod context;
 pub mod error;
 pub mod event;
@@ -42,34 +41,13 @@ const HISTORY_BATCH: i32 = 50;
 const INITIAL_CHATS: i32 = 200;
 /// Redraw tick (~60 FPS).
 const REFRESH_MS: u64 = 16;
-/// How long `tgt send` waits for Telegram to acknowledge the message.
-const SEND_ACK_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Runs the command selected on the command line.
 pub fn run(settings: &Settings) -> Result<(), AppError> {
-    match &settings.command {
-        Command::InitConfig { force } => commands::init_config(&settings.dirs, *force),
-        Command::Clear {
-            config,
-            data,
-            state,
-            yes,
-        } => {
-            commands::clear(&settings.dirs, *config, *data, *state, *yes)?;
-            // The key of a removed database is useless
-            let database_dir = &settings.telegram.database_dir;
-            if *data && !database_dir.exists() {
-                keychain::forget_key(settings.credentials, database_dir);
-            }
-            Ok(())
-        }
-        Command::Tui | Command::Logout | Command::Send { .. } => {
-            tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()?
-                .block_on(run_telegram(settings))
-        }
-    }
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(run_telegram(settings))
 }
 
 /// Logs in, then runs the command that needs Telegram.
@@ -81,6 +59,9 @@ async fn run_telegram(settings: &Settings) -> Result<(), AppError> {
         keychain::load_key(&mut keychain, settings.credentials, &database_dir)?;
 
     let store = Arc::new(Store::default());
+    if let Err(e) = libtgt::client::configure_logging(&settings.tdlib_log) {
+        tracing::error!("failed to set up the TDLib log: {e}");
+    }
     let mut client = Client::new(Arc::clone(&store), params);
     let (notify_tx, notify_rx) = tokio::sync::mpsc::unbounded_channel();
     client.start(notify_tx);
@@ -104,7 +85,6 @@ async fn run_telegram(settings: &Settings) -> Result<(), AppError> {
                 keychain::forget_key(settings.credentials, &database_dir);
                 Ok(())
             }
-            Command::Send { chat, message } => send(&mut client, chat, message).await,
             _ => {
                 client.load_chats(ChatList::Main, INITIAL_CHATS).await;
                 let app_context = Arc::new(AppContext::new(settings, store));
@@ -121,42 +101,6 @@ async fn run_telegram(settings: &Settings) -> Result<(), AppError> {
     } else {
         Err(AppError::Command("not authorized".into()))
     }
-}
-
-/// `tgt send`: sends one message to the only chat matching `chat_name`.
-async fn send(client: &mut Client, chat_name: &str, text: &str) -> Result<(), AppError> {
-    client.load_all_chats().await;
-    let chats = client
-        .search_chats(chat_name)
-        .await
-        .map_err(|e| AppError::Command(format!("failed to search chats: {}", e.message)))?;
-    let chat_id = match chats.chat_ids.as_slice() {
-        [] => return Err(AppError::Command(format!("no chat named {chat_name:?}"))),
-        [chat_id] => *chat_id,
-        _ => {
-            return Err(AppError::Command(format!(
-                "{} chats match {chat_name:?}",
-                chats.chat_ids.len()
-            )));
-        }
-    };
-
-    let message = client
-        .send_message(text.to_owned(), chat_id, None)
-        .await
-        .map_err(|e| AppError::Command(format!("failed to send message: {}", e.message)))?;
-
-    // The acknowledgement may be delayed or never arrive.
-    let deadline = Instant::now() + SEND_ACK_TIMEOUT;
-    while client.store().last_acknowledged_message_id() != message.id {
-        if Instant::now() >= deadline {
-            tracing::warn!(message.id, "timed out waiting for MessageSendAcknowledged");
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    tracing::info!("sent a message to {chat_name} ({chat_id})");
-    Ok(())
 }
 
 /// The TUI event loop.
@@ -559,18 +503,8 @@ async fn handle_app_actions(
                 media::download(&app_context, client.files(), *message_id);
             }
             #[cfg(feature = "media-preview")]
-            Action::LoadPreview {
-                message_id,
-                file_id,
-                path,
-            } => {
-                media::load_preview(
-                    &app_context,
-                    client.files(),
-                    *message_id,
-                    *file_id,
-                    path.clone(),
-                );
+            Action::LoadPreview(request) => {
+                media::load_preview(&app_context, client.files(), request.clone());
             }
             Action::GetChatHistory if !app_context.store().is_history_loading() => {
                 app_context.store().set_history_loading(true);

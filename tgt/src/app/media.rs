@@ -9,6 +9,8 @@ use libtgt::{
     model::{Media, MediaFile},
 };
 
+#[cfg(feature = "media-preview")]
+use crate::app::action::{PreviewDecodedPayload, PreviewRequest, PreviewTarget};
 use crate::{app::action::Action, app::context::AppContext, media};
 
 /// Opens the media of a message with the default application.
@@ -59,23 +61,27 @@ pub fn download(app_context: &Arc<AppContext>, files: Files, message_id: i64) {
     });
 }
 
-/// Downloads (unless `path` is given) and decodes a preview image, then sends
-/// [`Action::PreviewDecoded`]. Large images are downscaled to
-/// `app.preview_max_dimension`.
+/// Largest side, in pixels, of previews shown in the chat. They take a few
+/// rows, so a small image is enough and keeps the cache small.
 #[cfg(feature = "media-preview")]
-pub fn load_preview(
-    app_context: &Arc<AppContext>,
-    files: Files,
-    message_id: i64,
-    file_id: i32,
-    path: Option<String>,
-) {
-    let max_dimension = app_context.app_config().preview_max_dimension;
+const CHAT_PREVIEW_MAX_DIMENSION: u32 = 400;
+
+/// Downloads (unless the request has a path) and decodes a preview image, then
+/// sends [`Action::PreviewDecoded`]. Large images are downscaled to
+/// `app.preview_max_dimension`, or less for the chat.
+#[cfg(feature = "media-preview")]
+pub fn load_preview(app_context: &Arc<AppContext>, files: Files, request: PreviewRequest) {
+    let viewer_max = app_context.app_config().preview_max_dimension;
+    let max_dimension = match request.target {
+        PreviewTarget::Viewer => viewer_max,
+        PreviewTarget::Chat if viewer_max == 0 => CHAT_PREVIEW_MAX_DIMENSION,
+        PreviewTarget::Chat => viewer_max.min(CHAT_PREVIEW_MAX_DIMENSION),
+    };
     let action_tx = app_context.action_tx().clone();
     tokio::spawn(async move {
-        let path = match path {
+        let path = match request.path.clone() {
             Some(path) => Ok(path),
-            None => files.download(file_id).await.map_err(|e| e.message),
+            None => files.download(request.file_id).await.map_err(|e| e.message),
         };
         let result = match path {
             Ok(path) => tokio::task::spawn_blocking(move || decode(&path, max_dimension))
@@ -83,7 +89,7 @@ pub fn load_preview(
                 .unwrap_or_else(|e| Err(e.to_string())),
             Err(e) => Err(e),
         };
-        let payload = crate::app::action::PreviewDecodedPayload(message_id, result);
+        let payload = PreviewDecodedPayload { request, result };
         let _ = action_tx.send(Action::PreviewDecoded(payload));
     });
 }

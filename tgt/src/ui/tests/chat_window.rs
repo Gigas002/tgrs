@@ -141,3 +141,95 @@ fn message_actions_open_for_the_selected_message() {
     window.update(Action::ShowMessageActions);
     assert_eq!(sent(&mut rx), vec![Action::ShowMessageActionsFor(2)]);
 }
+
+#[cfg(feature = "media-preview")]
+mod previews {
+    use super::*;
+    use crate::{
+        app::action::{PreviewDecodedPayload, PreviewRequest, PreviewTarget},
+        ui::tests::create_mock_photo_message,
+    };
+    use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, style::Color};
+
+    const RED: Color = Color::Rgb(200, 10, 10);
+
+    fn render(window: &mut ChatWindow) -> Buffer {
+        let mut terminal = Terminal::new(TestBackend::new(60, 30)).unwrap();
+        terminal
+            .draw(|frame| window.draw(frame, frame.area()).unwrap())
+            .unwrap();
+        terminal.backend().buffer().clone()
+    }
+
+    fn draw(window: &mut ChatWindow) -> String {
+        let buffer = render(window);
+        buffer
+            .content()
+            .chunks(usize::from(buffer.area.width))
+            .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn photos_are_previewed_in_the_chat() {
+        let mut window = create_test_chat_window();
+        let mut rx = with_action_rx(&mut window);
+        setup_messages(
+            &mut window,
+            vec![
+                create_mock_message(1, "before"),
+                create_mock_photo_message(2, 30),
+            ],
+        );
+
+        let screen = draw(&mut window);
+        assert!(screen.contains("[loading preview…]"), "{screen}");
+        let request = PreviewRequest {
+            target: PreviewTarget::Chat,
+            message_id: 2,
+            file_id: 30,
+            path: None,
+        };
+        assert_eq!(sent(&mut rx), vec![Action::LoadPreview(request.clone())]);
+
+        window.update(Action::PreviewDecoded(PreviewDecodedPayload {
+            request,
+            result: Ok(image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+                64,
+                48,
+                image::Rgb([200, 10, 10]),
+            ))),
+        }));
+        let screen = draw(&mut window);
+        assert!(!screen.contains("loading preview"), "{screen}");
+        let buffer = render(&mut window);
+        assert!(
+            buffer
+                .content()
+                .iter()
+                .any(|cell| cell.fg == RED || cell.bg == RED),
+            "the image is drawn"
+        );
+        assert!(
+            sent(&mut rx).is_empty(),
+            "loaded previews aren't requested again"
+        );
+    }
+
+    #[test]
+    fn messages_without_images_get_no_preview() {
+        let mut window = create_test_chat_window();
+        let mut rx = with_action_rx(&mut window);
+        setup_messages(
+            &mut window,
+            vec![
+                create_mock_message(1, "text"),
+                crate::ui::tests::create_mock_media_message(2, "a.zip"),
+            ],
+        );
+        let screen = draw(&mut window);
+        assert!(!screen.contains("preview"), "{screen}");
+        assert!(sent(&mut rx).is_empty());
+    }
+}

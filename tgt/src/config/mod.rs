@@ -1,5 +1,5 @@
 //! Discovery, reading and deserialization of tgt's TOML files:
-//! `config.toml`, `keymap.toml` and `themes/*.toml`.
+//! `config.toml`, `keymap.toml` and `theme.toml`.
 //!
 //! Every field is optional; precedence and defaults are applied in `settings`.
 
@@ -17,50 +17,15 @@ pub mod theme;
 mod tests;
 
 pub use keymap::KeymapFile;
-pub use theme::{ThemeEntry, ThemeFile};
+pub use theme::ThemeFile;
 
 pub const FILE_NAME: &str = "config.toml";
 
-/// Default files written by `tgt init-config`, relative to the config directory.
+/// Built-in defaults, relative to the config directory; used when a file is
+/// missing.
 pub const BUNDLED_FILES: &[(&str, &str)] = &[
     (FILE_NAME, include_str!("../../../examples/config.toml")),
     (keymap::FILE_NAME, keymap::BUNDLED),
-    (
-        "themes/catppuccin.toml",
-        include_str!("../../../examples/themes/catppuccin.toml"),
-    ),
-    (
-        "themes/first_theme.toml",
-        include_str!("../../../examples/themes/first_theme.toml"),
-    ),
-    (
-        "themes/github.toml",
-        include_str!("../../../examples/themes/github.toml"),
-    ),
-    (
-        "themes/gruvbox.toml",
-        include_str!("../../../examples/themes/gruvbox.toml"),
-    ),
-    (
-        "themes/monokai.toml",
-        include_str!("../../../examples/themes/monokai.toml"),
-    ),
-    (
-        "themes/nord.toml",
-        include_str!("../../../examples/themes/nord.toml"),
-    ),
-    (
-        "themes/onedark.toml",
-        include_str!("../../../examples/themes/onedark.toml"),
-    ),
-    (
-        "themes/theme.toml",
-        include_str!("../../../examples/themes/theme.toml"),
-    ),
-    (
-        "themes/tokyo.toml",
-        include_str!("../../../examples/themes/tokyo.toml"),
-    ),
 ];
 
 /// Raw contents of `config.toml`. Unknown keys are ignored.
@@ -82,9 +47,6 @@ pub struct AppFile {
     pub frame_rate: Option<f64>,
     pub show_status_bar: Option<bool>,
     pub show_title_bar: Option<bool>,
-    pub theme_enable: Option<bool>,
-    /// Theme name, i.e. a file stem in `themes/`.
-    pub theme: Option<String>,
     pub use_emoji_icons: Option<bool>,
     /// Where downloaded media is saved.
     pub download_dir: Option<PathBuf>,
