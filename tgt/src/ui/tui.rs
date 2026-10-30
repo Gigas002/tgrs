@@ -130,25 +130,9 @@ impl Tui {
         let main_layout = Layout::new(
             Direction::Vertical,
             [
-                Constraint::Length(if self.app_context.app_config().show_title_bar {
-                    if area.height > SMALL_AREA_HEIGHT + 5 {
-                        3
-                    } else {
-                        0
-                    }
-                } else {
-                    0
-                }),
+                Constraint::Length(u16::from(self.app_context.app_config().show_title_bar)),
                 Constraint::Min(SMALL_AREA_HEIGHT),
-                Constraint::Length(if self.app_context.app_config().show_status_bar {
-                    if area.height > SMALL_AREA_HEIGHT + 5 {
-                        4
-                    } else {
-                        0
-                    }
-                } else {
-                    0
-                }),
+                Constraint::Length(u16::from(self.app_context.app_config().show_status_bar)),
             ],
         )
         .split(area);

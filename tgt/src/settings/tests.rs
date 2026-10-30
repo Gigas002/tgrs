@@ -109,7 +109,6 @@ fn config_file_values_apply() {
         [app]
         frame_rate = 30.0
         use_emoji_icons = true
-        media_viewer_popup_size = 5.0
         download_dir = "~/dl"
 
         [credentials]
@@ -138,7 +137,6 @@ fn config_file_values_apply() {
 
     assert_eq!(settings.app.frame_rate, 30.0);
     assert!(settings.app.use_emoji_icons);
-    assert_eq!(settings.app.media_viewer_popup_size, 1.0);
     assert_eq!(settings.app.download_dir, home.join("dl"));
     assert_eq!(settings.credentials, CredentialStore::Plain);
     assert_eq!(settings.logging.level, LogLevel::Debug);

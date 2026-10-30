@@ -2,6 +2,43 @@ use tdlib_rs::types::User;
 
 use super::message::MessageEntry;
 
+/// What a chat is, for its icon.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum ChatKind {
+    /// A private chat with a person.
+    #[default]
+    Private,
+    /// A private chat with a bot.
+    Bot,
+    /// The chat with yourself.
+    Saved,
+    /// An end-to-end encrypted private chat.
+    Secret,
+    /// A basic group or a supergroup.
+    Group,
+    /// A channel.
+    Channel,
+}
+
+impl ChatKind {
+    /// The icon shown before the chat's name.
+    pub fn icon(self) -> &'static str {
+        match self {
+            Self::Private => "👤",
+            Self::Bot => "🤖",
+            Self::Saved => "🔖",
+            Self::Secret => "🔒",
+            Self::Group => "👥",
+            Self::Channel => "📢",
+        }
+    }
+
+    /// Whether messages in the chat can come from several people.
+    pub fn is_group(self) -> bool {
+        self == Self::Group
+    }
+}
+
 /// One row of the main chat list, built from the store's chat index.
 #[derive(Debug, Clone, Default)]
 pub struct ChatListEntry {
@@ -18,4 +55,9 @@ pub struct ChatListEntry {
     pub last_read_inbox_message_id: Option<i64>,
     /// Identifier of the last read outgoing message.
     pub last_read_outbox_message_id: Option<i64>,
+    pub kind: ChatKind,
+    /// Notifications are turned off.
+    pub is_muted: bool,
+    /// Unread messages that mention you.
+    pub unread_mention_count: i32,
 }

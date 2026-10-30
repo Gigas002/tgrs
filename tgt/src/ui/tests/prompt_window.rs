@@ -125,18 +125,18 @@ fn letter_q_is_inserted_as_text() {
     );
 }
 #[test]
-fn configured_prompt_send_action_sends_current_text() {
+fn enter_sends_the_current_text() {
     use crate::settings::ActionBinding;
 
     let app_context = create_test_app_context();
-    let event = Event::Key(KeyCode::Enter, KeyModifiers::ALT);
+    let event = Event::Key(KeyCode::Enter, KeyModifiers::NONE);
     let send_action = match app_context
         .keymap_config()
         .get_map_of(Some(ComponentName::Prompt))
         .get(&event)
     {
         Some(ActionBinding::Single { action, .. }) => action.clone(),
-        binding => panic!("expected alt+enter prompt binding, got {binding:?}"),
+        binding => panic!("expected enter prompt binding, got {binding:?}"),
     };
     assert_eq!(send_action, Action::PromptSendMessage);
 
@@ -152,4 +152,72 @@ fn configured_prompt_send_action_sends_current_text() {
     let sent = std::iter::from_fn(|| rx.try_recv().ok())
         .find(|action| matches!(action, Action::SendMessage(..)));
     assert_eq!(sent, Some(Action::SendMessage("hi".into(), None)));
+}
+
+fn typed(window: &PromptWindow) -> String {
+    window
+        .input
+        .text
+        .iter()
+        .map(|line| line.iter().map(|cell| cell.c).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn modified_enter_and_ctrl_j_insert_newlines() {
+    use crate::app::event::Event;
+    use crate::settings::ActionBinding;
+    let mut window = create_test_prompt_window();
+    let (tx, _rx) = unbounded_channel();
+    window.register_action_handler(tx).unwrap();
+    let keymap = window.app_context.keymap_config();
+    for modifiers in [
+        KeyModifiers::ALT,
+        KeyModifiers::SHIFT,
+        KeyModifiers::CONTROL,
+    ] {
+        // Not bound, so the key reaches the prompt
+        let binding = keymap
+            .get_map_of(Some(ComponentName::Prompt))
+            .get(&Event::Key(KeyCode::Enter, modifiers));
+        assert!(
+            !matches!(binding, Some(ActionBinding::Single { .. })),
+            "{modifiers:?}"
+        );
+    }
+    let none = Modifiers::from(KeyModifiers::NONE);
+    window.update(Action::Key(KeyCode::Char('a'), none.clone()));
+    window.update(Action::Key(
+        KeyCode::Enter,
+        Modifiers::from(KeyModifiers::ALT),
+    ));
+    window.update(Action::Key(KeyCode::Char('b'), none.clone()));
+    window.update(Action::Key(
+        KeyCode::Char('j'),
+        Modifiers::from(KeyModifiers::CONTROL),
+    ));
+    window.update(Action::Key(KeyCode::Char('c'), none));
+    assert_eq!(typed(&window), "a\nb\nc");
+}
+
+#[test]
+fn an_empty_prompt_sends_nothing() {
+    let app_context = create_test_app_context();
+    let mut window = PromptWindow::new(Arc::clone(&app_context));
+    let (tx, _rx) = unbounded_channel();
+    window.register_action_handler(tx).unwrap();
+    window.update(Action::Key(
+        KeyCode::Char(' '),
+        Modifiers::from(KeyModifiers::NONE),
+    ));
+    window.update(Action::PromptSendMessage);
+    let mut rx = app_context.action_rx();
+    let sent: Vec<Action> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+    assert!(
+        !sent
+            .iter()
+            .any(|action| matches!(action, Action::SendMessage(..))),
+        "{sent:?}"
+    );
 }

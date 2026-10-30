@@ -70,9 +70,7 @@ impl MessageActions {
                         Some("not your message")
                     }
                     MessageCommand::OpenLink if message.links().is_empty() => Some("no links"),
-                    MessageCommand::OpenMedia
-                    | MessageCommand::ViewMedia
-                    | MessageCommand::DownloadMedia
+                    MessageCommand::OpenMedia | MessageCommand::DownloadMedia
                         if message.media().is_none() =>
                     {
                         Some("no media")

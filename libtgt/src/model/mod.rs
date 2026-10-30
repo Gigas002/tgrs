@@ -9,7 +9,7 @@ pub mod td_enums;
 #[cfg(test)]
 mod tests;
 
-pub use chat::ChatListEntry;
+pub use chat::{ChatKind, ChatListEntry};
 pub use ids::{ChatId, MessageId};
 pub use message::{
     Media, MediaFile, MediaKind, MessageContentType, MessageEntry, Reaction, TextLine, TextSpan,

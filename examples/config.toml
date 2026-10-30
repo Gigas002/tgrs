@@ -23,11 +23,6 @@
 # Directory where downloaded media and files are saved
 # (default $XDG_DOWNLOAD_DIR, else ~/Downloads).
 # download_dir = "~/Downloads"
-# Longer side of media previews, in pixels; 0 disables downscaling.
-# Only used when built with the `media-preview` feature.
-# preview_max_dimension = 1920
-# Media viewer popup size as a fraction of the terminal (clamped to 0.01–1.0).
-# media_viewer_popup_size = 0.8
 
 [logger]
 # off, error, warn, info, debug or trace. Overridden by `--log-level`, `-v`, `-q`.

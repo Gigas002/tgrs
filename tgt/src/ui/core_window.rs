@@ -12,7 +12,7 @@ use crate::{
         command_guide::CommandGuide,
         component_traits::{Component, HandleFocus},
         file_upload_explorer::FileUploadExplorer,
-        media_viewer::MediaViewer,
+        leader_menu::LeaderMenu,
         message_actions::MessageActions,
         picker::Picker,
         pinned_messages_popup::PinnedMessagesPopup,
@@ -43,6 +43,11 @@ pub struct CoreWindow {
     small_area: bool,
     /// The size of the prompt component.
     size_prompt: u16,
+    /// Rows added to the prompt by hand (Alt+Up/Down), on top of the rows
+    /// its text needs.
+    prompt_extra_rows: u16,
+    /// The pane focused when the leader menu opened, focused again after.
+    focus_before_leader: Option<ComponentName>,
     /// The size of the message reply component.
     size_message_reply: u16,
     /// The size of the chat list component.
@@ -114,15 +119,15 @@ impl CoreWindow {
                     .new_boxed(),
             ),
             (
-                ComponentName::Picker,
-                Picker::new(Arc::clone(&app_context))
-                    .with_name(ComponentName::Picker.to_string())
+                ComponentName::LeaderMenu,
+                LeaderMenu::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::LeaderMenu.to_string())
                     .new_boxed(),
             ),
             (
-                ComponentName::MediaViewer,
-                MediaViewer::new(Arc::clone(&app_context))
-                    .with_name(ComponentName::MediaViewer.to_string())
+                ComponentName::Picker,
+                Picker::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::Picker.to_string())
                     .new_boxed(),
             ),
             (
@@ -145,7 +150,7 @@ impl CoreWindow {
         let components: HashMap<ComponentName, Box<dyn Component>> =
             components_iter.into_iter().collect();
         let size_prompt = 3;
-        let size_message_reply = 2;
+        let size_message_reply = 3;
         let size_chat_list = 20;
         let small_area = false;
         let component_focused = None;
@@ -160,6 +165,8 @@ impl CoreWindow {
             components,
             size_chat_list,
             size_prompt,
+            prompt_extra_rows: 0,
+            focus_before_leader: None,
             size_message_reply,
             small_area,
             component_focused,
@@ -222,16 +229,80 @@ impl CoreWindow {
         self.size_prompt -= 1;
     }
 
+    /// Panes in the order Left/Right move through; a hidden chat list is skipped.
+    fn panes(&self) -> Vec<ComponentName> {
+        let mut panes = vec![ComponentName::Chat, ComponentName::Prompt];
+        if self.size_chat_list > 0 {
+            panes.insert(0, ComponentName::ChatList);
+        }
+        panes
+    }
+
+    /// Focuses the pane `step` panes away from the focused one, stopping at
+    /// the ends. With nothing focused, the chat.
+    fn focus_pane(&mut self, step: isize) {
+        let panes = self.panes();
+        let next = match self
+            .component_focused
+            .and_then(|focused| panes.iter().position(|pane| *pane == focused))
+        {
+            Some(index) => index
+                .checked_add_signed(step)
+                .and_then(|index| panes.get(index))
+                .copied(),
+            None => Some(ComponentName::Chat),
+        };
+        if let Some(next) = next {
+            self.focus_only(Some(next));
+        }
+    }
+
+    /// Like concord: Alt+Right makes the focused pane wider, Alt+Left narrower.
+    /// The chat and the prompt share the right side, so they grow together.
+    fn resize_focused_width(&mut self, wider: bool) {
+        if self.size_chat_list == 0 {
+            return;
+        }
+        match (self.component_focused, wider) {
+            (Some(ComponentName::ChatList), true)
+            | (Some(ComponentName::Chat | ComponentName::Prompt), false) => {
+                self.increase_chat_list_size();
+            }
+            (Some(ComponentName::ChatList), false)
+            | (Some(ComponentName::Chat | ComponentName::Prompt), true) => {
+                self.decrease_chat_list_size();
+            }
+            _ => {}
+        }
+    }
+
+    /// Alt+Up makes the focused pane taller, Alt+Down shorter: the chat and
+    /// the prompt trade rows.
+    fn resize_focused_height(&mut self, taller: bool) {
+        let prompt_grows = match self.component_focused {
+            Some(ComponentName::Prompt) => taller,
+            Some(ComponentName::Chat) => !taller,
+            _ => return,
+        };
+        if prompt_grows {
+            if self.size_prompt + self.prompt_extra_rows < MAX_PROMPT_SIZE {
+                self.prompt_extra_rows += 1;
+            }
+        } else {
+            self.prompt_extra_rows = self.prompt_extra_rows.saturating_sub(1);
+        }
+    }
+
     /// The action that tells a popup it is being hidden.
     fn hide_action(popup: ComponentName) -> Option<Action> {
         Some(match popup {
             ComponentName::CommandGuide => Action::HideCommandGuide,
             ComponentName::SearchOverlay => Action::CloseSearchOverlay,
             ComponentName::MessageActions => Action::HideMessageActions,
-            ComponentName::MediaViewer => Action::HideMediaViewer,
             ComponentName::FileUploadExplorer => Action::HideFileUploadExplorer,
             ComponentName::PinnedMessagesPopup => Action::HidePinnedMessagesPopup,
             ComponentName::Picker => Action::HidePicker,
+            ComponentName::LeaderMenu => Action::HideLeaderMenu,
             _ => return None,
         })
     }
@@ -402,10 +473,24 @@ impl Component for CoreWindow {
                 if let Some(popup) = self.active_popup {
                     self.hide_popup(popup);
                 }
-                self.focus_only(None);
+                // Leaving the prompt goes back to the messages, like concord
+                let back_to_chat = self.component_focused == Some(ComponentName::Prompt);
+                self.focus_only(back_to_chat.then_some(ComponentName::Chat));
             }
+            Action::FocusNextPane => self.focus_pane(1),
+            Action::FocusPreviousPane => self.focus_pane(-1),
+            Action::ResizePaneWider => self.resize_focused_width(true),
+            Action::ResizePaneNarrower => self.resize_focused_width(false),
+            Action::ResizePaneTaller => self.resize_focused_height(true),
+            Action::ResizePaneShorter => self.resize_focused_height(false),
             Action::ToggleChatList => {
                 self.toggle_chat_list();
+                // A hidden chat list can't keep the focus
+                if self.size_chat_list == 0
+                    && self.component_focused == Some(ComponentName::ChatList)
+                {
+                    self.focus_only(Some(ComponentName::Chat));
+                }
             }
             Action::IncreaseChatListSize => {
                 self.increase_chat_list_size();
@@ -444,13 +529,17 @@ impl Component for CoreWindow {
             Action::HideMessageActions => {
                 self.close_popup(ComponentName::MessageActions, Some(ComponentName::Chat));
             }
+            Action::ShowLeaderMenu => {
+                self.focus_before_leader = self.component_focused;
+                self.show_popup(ComponentName::LeaderMenu, action);
+            }
+            Action::HideLeaderMenu => {
+                let refocus = self.focus_before_leader.take();
+                self.close_popup(ComponentName::LeaderMenu, refocus);
+            }
             Action::ShowPicker(_) => self.show_popup(ComponentName::Picker, action),
             Action::HidePicker => {
                 self.close_popup(ComponentName::Picker, Some(ComponentName::Chat))
-            }
-            Action::ShowMediaViewer(_) => self.show_popup(ComponentName::MediaViewer, action),
-            Action::HideMediaViewer => {
-                self.close_popup(ComponentName::MediaViewer, Some(ComponentName::Chat));
             }
             Action::RunMessageCommand(..) => {
                 // From the message actions menu, which may still be focused
@@ -460,11 +549,8 @@ impl Component for CoreWindow {
             }
             #[cfg(feature = "media-preview")]
             Action::PreviewDecoded(_) => {
-                // Each takes only the previews it asked for
-                for name in [ComponentName::MediaViewer, ComponentName::Chat] {
-                    if let Some(component) = self.components.get_mut(&name) {
-                        component.update(action.clone());
-                    }
+                if let Some(chat) = self.components.get_mut(&ComponentName::Chat) {
+                    chat.update(action);
                 }
             }
             Action::ShowFileUploadExplorer => {
@@ -666,7 +752,7 @@ impl Component for CoreWindow {
                         Constraint::Length(0)
                     }
                 },
-                Constraint::Length(self.size_prompt),
+                Constraint::Length(self.size_prompt + self.prompt_extra_rows),
             ])
             .split(core_layout[1]);
 

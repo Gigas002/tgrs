@@ -3,6 +3,8 @@ use std::{
     str::FromStr,
 };
 
+use crossterm::event::{KeyCode, KeyModifiers};
+
 use crate::{
     app::{action::Action, event::Event},
     config::keymap::{KeymapEntry, KeymapFile, KeymapMode},
@@ -53,10 +55,10 @@ const SECTIONS: &[(ComponentName, &str)] = &[
     (ComponentName::CommandGuide, "command_guide"),
     (ComponentName::SearchOverlay, "search_overlay"),
     (ComponentName::MessageActions, "message_actions"),
-    (ComponentName::MediaViewer, "media_viewer"),
     (ComponentName::FileUploadExplorer, "file_upload_explorer"),
     (ComponentName::PinnedMessagesPopup, "pinned_messages_popup"),
     (ComponentName::Picker, "picker"),
+    (ComponentName::LeaderMenu, "leader_menu"),
 ];
 
 fn section(file: &KeymapFile, component: ComponentName) -> Option<&KeymapMode> {
@@ -67,10 +69,10 @@ fn section(file: &KeymapFile, component: ComponentName) -> Option<&KeymapMode> {
         ComponentName::CommandGuide => file.command_guide.as_ref(),
         ComponentName::SearchOverlay => file.search_overlay.as_ref(),
         ComponentName::MessageActions => file.message_actions.as_ref(),
-        ComponentName::MediaViewer => file.media_viewer.as_ref(),
         ComponentName::FileUploadExplorer => file.file_upload_explorer.as_ref(),
         ComponentName::PinnedMessagesPopup => file.pinned_messages_popup.as_ref(),
         ComponentName::Picker => file.picker.as_ref(),
+        ComponentName::LeaderMenu => file.leader_menu.as_ref(),
         _ => file.core_window.as_ref(),
     }
 }
@@ -100,19 +102,14 @@ impl Keymap {
             }
 
             let mut map = core_window.clone();
-            if *component == ComponentName::Prompt {
-                // The prompt takes printable keys as text, so the inherited
-                // `try_quit` (`q` by default) must not swallow them. Explicit
-                // [prompt] bindings are added after this filter.
-                map.retain(|_, binding| {
-                    !matches!(
-                        binding,
-                        ActionBinding::Single {
-                            action: Action::TryQuit,
-                            ..
-                        }
-                    )
-                });
+            if matches!(
+                component,
+                ComponentName::Prompt | ComponentName::SearchOverlay
+            ) {
+                // These take printable keys as text, so inherited plain keys
+                // (`q` to quit, Space for the leader menu) must not swallow
+                // them. Explicit bindings of their sections are added after.
+                map.retain(|key, _| !is_plain_char(key));
             }
             map.extend(own.clone());
             merged.insert(*component, map);
@@ -153,6 +150,12 @@ impl Keymap {
             })
             .collect()
     }
+}
+
+/// A printable key without Ctrl/Alt, which text inputs take as text.
+pub fn is_plain_char(key: &Event) -> bool {
+    matches!(key, Event::Key(KeyCode::Char(_), modifiers)
+        if !modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER))
 }
 
 /// User entries first, then default entries whose command the user didn't bind.

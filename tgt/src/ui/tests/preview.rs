@@ -1,5 +1,5 @@
 use super::*;
-use crate::app::action::{PreviewDecodedPayload, PreviewRequest, PreviewTarget};
+use crate::app::action::{PreviewDecodedPayload, PreviewRequest};
 
 fn file(id: i32) -> MediaFile {
     MediaFile {
@@ -8,10 +8,9 @@ fn file(id: i32) -> MediaFile {
     }
 }
 
-fn decoded(target: PreviewTarget, file_id: i32) -> PreviewDecodedPayload {
+fn decoded(file_id: i32) -> PreviewDecodedPayload {
     PreviewDecodedPayload {
         request: PreviewRequest {
-            target,
             message_id: 1,
             file_id,
             path: None,
@@ -27,7 +26,6 @@ fn a_preview_is_requested_once() {
     assert_eq!(
         action,
         Some(Action::LoadPreview(PreviewRequest {
-            target: PreviewTarget::Chat,
             message_id: 5,
             file_id: 3,
             path: None,
@@ -37,14 +35,12 @@ fn a_preview_is_requested_once() {
 }
 
 #[test]
-fn only_previews_requested_for_the_chat_are_kept() {
+fn only_requested_previews_are_kept() {
     let mut previews = ChatPreviews::default();
     previews.request(1, &file(3));
-    previews.decoded(decoded(PreviewTarget::Viewer, 3));
-    assert!(!previews.is_loaded(3));
-    previews.decoded(decoded(PreviewTarget::Chat, 4));
+    previews.decoded(decoded(4));
     assert!(!previews.is_loaded(4), "never requested");
-    previews.decoded(decoded(PreviewTarget::Chat, 3));
+    previews.decoded(decoded(3));
     assert!(previews.is_loaded(3));
 }
 

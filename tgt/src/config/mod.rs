@@ -50,8 +50,6 @@ pub struct AppFile {
     pub use_emoji_icons: Option<bool>,
     /// Where downloaded media is saved.
     pub download_dir: Option<PathBuf>,
-    pub preview_max_dimension: Option<u32>,
-    pub media_viewer_popup_size: Option<f32>,
 }
 
 /// `[logger]`: tgt's own log.

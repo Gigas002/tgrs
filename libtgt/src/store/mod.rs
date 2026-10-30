@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Mutex, MutexGuard};
 
 use tdlib_rs::{
-    enums::{ChatType, UserStatus},
+    enums::{ChatType, UserStatus, UserType},
     types::{
         BasicGroup, BasicGroupFullInfo, Chat, SecretChat, Supergroup, SupergroupFullInfo, User,
         UserFullInfo,
@@ -15,7 +15,7 @@ use tdlib_rs::{
 };
 
 use crate::model::{
-    ChatListEntry, MessageEntry, OrderedChat, format_timestamp,
+    ChatKind, ChatListEntry, MessageEntry, OrderedChat, format_timestamp,
     ids::{AtomicChatId, AtomicMessageId, ChatId, MessageId},
 };
 
@@ -334,6 +334,40 @@ impl Store {
         self.reply_message_text.lock().unwrap()
     }
 
+    /// What kind the open chat is, for its icon.
+    pub fn open_chat_kind(&self) -> Option<ChatKind> {
+        let chats = self.chats();
+        let chat = chats.get(&self.open_chat_id().as_i64())?;
+        let user = match &chat.r#type {
+            ChatType::Private(p) => self.users().get(&p.user_id).cloned(),
+            _ => None,
+        };
+        Some(self.kind_of(chat, user.as_ref()))
+    }
+
+    /// `user` is the other party of a private chat.
+    fn kind_of(&self, chat: &Chat, user: Option<&User>) -> ChatKind {
+        match &chat.r#type {
+            ChatType::Private(p) if p.user_id == self.me() => ChatKind::Saved,
+            ChatType::Private(_) if user.is_some_and(|u| matches!(u.r#type, UserType::Bot(_))) => {
+                ChatKind::Bot
+            }
+            ChatType::Private(_) => ChatKind::Private,
+            ChatType::Secret(_) => ChatKind::Secret,
+            ChatType::Supergroup(group) if group.is_channel => ChatKind::Channel,
+            ChatType::BasicGroup(_) | ChatType::Supergroup(_) => ChatKind::Group,
+        }
+    }
+
+    /// Your own name, once TDLib has sent it.
+    pub fn my_name(&self) -> Option<String> {
+        let me = self.me();
+        (me != 0)
+            .then(|| self.try_name_from_chats_or_users(me))
+            .flatten()
+            .filter(|name| !name.is_empty())
+    }
+
     pub fn name_of_open_chat_id(&self) -> Option<String> {
         if let Some(chat) = self.chats().get(&self.open_chat_id().as_i64()) {
             return Some(chat.title.clone());
@@ -362,9 +396,13 @@ impl Store {
                 entry.last_read_outbox_message_id = Some(chat.last_read_outbox_message_id);
                 entry.unread_count = chat.unread_count;
                 entry.last_message = chat.last_message.as_ref().map(MessageEntry::from);
+                entry.unread_mention_count = chat.unread_mention_count;
+                let settings = &chat.notification_settings;
+                entry.is_muted = !settings.use_default_mute_for && settings.mute_for > 0;
                 if let ChatType::Private(p) = &chat.r#type {
                     entry.user = self.users().get(&p.user_id).cloned();
                 }
+                entry.kind = self.kind_of(chat, entry.user.as_ref());
             }
             chat_list.push(entry);
         }

@@ -1,10 +1,14 @@
 use {
-    crate::app::{context::AppContext, event::Event},
+    crate::app::{
+        context::AppContext,
+        event::{Event, normalize_key},
+    },
     crossterm::{
         cursor,
         event::{
             DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
-            Event as CrosstermEvent, EventStream, KeyEventKind,
+            Event as CrosstermEvent, EventStream, KeyEventKind, KeyboardEnhancementFlags,
+            PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
         },
         terminal::{EnterAlternateScreen, LeaveAlternateScreen},
     },
@@ -12,7 +16,10 @@ use {
     ratatui::{Terminal, backend::CrosstermBackend},
     std::{
         io::{self, Stderr},
-        sync::Arc,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
         time::Duration,
     },
     tokio::{
@@ -20,6 +27,9 @@ use {
         task::JoinHandle,
     },
 };
+
+/// Whether the keyboard enhancement flags were pushed and must be popped.
+static KEYBOARD_ENHANCED: AtomicBool = AtomicBool::new(false);
 
 /// `TuiBackend` is a struct that represents the backend for the user interface.
 /// It is responsible for managing the terminal and buffering events for
@@ -91,6 +101,19 @@ impl TuiBackend {
             Ok(_) => tracing::info!("Alternate screen enabled"),
             Err(e) => tracing::error!("Error enabling alternate screen: {}", e),
         };
+        // Like concord: terminals with the kitty keyboard protocol then report
+        // Shift/Ctrl+Enter (newlines in the prompt); others ignore the request
+        if crossterm::execute!(
+            std::io::stderr(),
+            PushKeyboardEnhancementFlags(
+                KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                    | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS
+            )
+        )
+        .is_ok()
+        {
+            KEYBOARD_ENHANCED.store(true, Ordering::Release);
+        }
         if self.mouse {
             crossterm::execute!(std::io::stderr(), EnableMouseCapture)?;
         }
@@ -113,6 +136,9 @@ impl TuiBackend {
     /// # Returns
     /// * `Result<(), io::Error>` - An Ok result or an error.
     pub fn force_exit(mouse: bool, paste: bool) -> Result<(), std::io::Error> {
+        if KEYBOARD_ENHANCED.swap(false, Ordering::AcqRel) {
+            let _ = crossterm::execute!(std::io::stderr(), PopKeyboardEnhancementFlags);
+        }
         crossterm::terminal::disable_raw_mode()?;
         tracing::info!("Raw mode disabled");
         crossterm::execute!(std::io::stderr(), LeaveAlternateScreen, cursor::Show)?;
@@ -239,7 +265,9 @@ impl TuiBackend {
                                     CrosstermEvent::Key(key) => {
                                         // Only handle presses; ignore repeat/release events.
                                         if key.kind == KeyEventKind::Press {
-                                            event_tx.send(Event::Key(key.code, key.modifiers))?;
+                                            let (code, modifiers) =
+                                                normalize_key(key.code, key.modifiers);
+                                            event_tx.send(Event::Key(code, modifiers))?;
                                         }
                                     },
                                     CrosstermEvent::Mouse(mouse) => {

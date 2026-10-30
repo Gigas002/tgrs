@@ -26,9 +26,17 @@ Build features can be combined (e.g. `cargo build --release --no-default-feature
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `default`       | Enables `keychain` and `media-preview`.                                                                                                                     |
 | `keychain`      | Encrypt the TDLib database (your login session) with a key kept in the system keychain (Secret Service). See `[credentials]` in `config.toml`.              |
-| `media-preview` | Image previews in the chat and the media viewer: photos, static stickers and the thumbnails of videos, GIFs, video messages and files.                       |
+| `media-preview` | Image previews in the chat: photos, static stickers and the thumbnails of videos, GIFs, video messages and files.                                            |
+
+### Navigation
+
+Like concord: `left`/`right` move between the chat list, the chat and the prompt, `up`/`down` select inside a pane, and `i` in the chat starts writing (`esc` goes back to the chat). `alt+right`/`alt+left` make the focused pane wider or narrower, `alt+up`/`alt+down` taller or shorter. `alt+1`/`alt+2`/`alt+3` focus the chat list, chat and prompt directly.
+
+`space` opens the leader menu, which lists what comes next: `1` hides or shows the chat list, `a` opens the actions of the selected message, `space` searches chats, `/` searches messages, `p` shows pinned messages, `u` uploads a file and `?` lists every key. Its entries are the `[leader_menu]` section of `keymap.toml`.
 
 ### Messages
+
+In the prompt, Enter sends; Alt+Enter or Ctrl+J start a new line (also Shift+Enter in terminals with the kitty keyboard protocol, e.g. kitty, foot, WezTerm, Ghostty).
 
 Select a message in the chat (`up`/`down`) and press a key, or `Enter` for the actions menu, which lists every action with its key and dims the ones that don't apply. The keys follow [concord](https://github.com/chojs23/concord)'s:
 
@@ -41,7 +49,6 @@ Select a message in the chat (`up`/`down`) and press a key, or `Enter` for the a
 | `d` | Delete your message for everyone (`D`: only for you).                                          |
 | `o` | Open a link of the message in the browser, picked from a list when there are several.         |
 | `x` | Open the media (photo, video, GIF, audio, voice message, sticker or file) via `xdg-open`.     |
-| `v` | Open the media viewer: file details and a preview. There `o` opens, `d` downloads.             |
 | `s` | Download the media or file (archives, documents, ...) to `app.download_dir`.                   |
 | `g` | Go to the message it replies to.                                                               |
 | `P` | Pin or unpin the message for everyone.                                                         |

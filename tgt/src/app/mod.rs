@@ -34,7 +34,8 @@ use crate::{
         error::AppError,
         event::Event,
     },
-    settings::{ActionBinding, Command, Settings},
+    settings::{ActionBinding, Command, Settings, is_plain_char},
+    ui::component_name::ComponentName,
     ui::{Tui, terminal::TuiBackend},
 };
 
@@ -259,6 +260,18 @@ async fn handle_tui_backend_one_event(
             let keymap_config = app_context.keymap_config();
             let key_event = Event::Key(key, modifiers);
 
+            if focused == Some(ComponentName::LeaderMenu) {
+                return handle_leader_key(&app_context, &key_event);
+            }
+            // The chat search takes typed characters as text
+            let typing = focused == Some(ComponentName::ChatList) && app_context.is_typing();
+            if typing && is_plain_char(&key_event) {
+                app_context
+                    .action_tx()
+                    .send(Action::Key(key, modifiers.into()))?;
+                return Ok(());
+            }
+
             // Merged map (core + component): component map includes core_window + mode-specific keys.
             let should_check_keymap =
                 focused.is_none() || keymap_config.get_map_of(focused).contains_key(&key_event);
@@ -330,6 +343,21 @@ async fn consume_until_single_action(
     }
 }
 
+/// A key pressed in the leader menu: its `[leader_menu]` binding runs after
+/// the menu closes (and gives the focus back); any other key just closes it.
+fn handle_leader_key(app_context: &AppContext, key: &Event) -> Result<(), AppError> {
+    let action_tx = app_context.action_tx();
+    action_tx.send(Action::HideLeaderMenu)?;
+    if let Some(ActionBinding::Single { action, .. }) = app_context
+        .keymap_config()
+        .section(ComponentName::LeaderMenu)
+        .and_then(|section| section.get(key))
+    {
+        action_tx.send(action.clone())?;
+    }
+    Ok(())
+}
+
 /// TDLib can emit long bursts of chat-list-related updates. The main loop would otherwise drain
 /// thousands of [`Action::ChatHistoryAppended`] / [`Action::Refresh`] in one turn, each forcing
 /// chat list work. Compress any run consisting only of those two variants to at most one refresh
@@ -396,14 +424,19 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::HideMessageActions
             | Action::MessageActionsPrevious
             | Action::MessageActionsNext
+            | Action::ShowLeaderMenu
+            | Action::HideLeaderMenu
+            | Action::FocusNextPane
+            | Action::FocusPreviousPane
+            | Action::ResizePaneWider
+            | Action::ResizePaneNarrower
+            | Action::ResizePaneTaller
+            | Action::ResizePaneShorter
+            | Action::UnfocusComponent
             | Action::ShowPicker(_)
             | Action::HidePicker
             | Action::PickerPrevious
             | Action::PickerNext
-            | Action::ShowMediaViewer(_)
-            | Action::HideMediaViewer
-            | Action::MediaViewerPrevious
-            | Action::MediaViewerNext
             | Action::RunMessageCommand(..)
             | Action::StatusMessage(_)
             | Action::ShowFileUploadExplorer
@@ -411,7 +444,6 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::LoadPinnedMessages
             | Action::ShowPinnedMessagesPopup
             | Action::PinnedPopupConfirmJump
-            | Action::PinnedPopupViewMedia
             | Action::HidePinnedMessagesPopup
             | Action::PinnedPopupPrevious
             | Action::PinnedPopupNext

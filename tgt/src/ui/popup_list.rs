@@ -10,7 +10,10 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthStr;
 
-use crate::settings::{BorderSurface, HighlightGroup, Theme};
+use crate::{
+    settings::{BorderSurface, HighlightGroup, Theme},
+    ui::pane,
+};
 
 /// One row of a popup list.
 #[derive(Debug, Clone, Default)]
@@ -24,7 +27,8 @@ pub struct PopupRow {
 
 /// The first row shown so that `selected` is visible in `height` rows.
 pub fn scroll_offset(selected: usize, len: usize, height: usize) -> usize {
-    if height == 0 || len <= height {
+    // Nothing selected (e.g. the leader menu): from the top
+    if height == 0 || len <= height || selected >= len {
         return 0;
     }
     selected.saturating_sub(height - 1).min(len - height)
@@ -32,21 +36,12 @@ pub fn scroll_offset(selected: usize, len: usize, height: usize) -> usize {
 
 /// The lines of the rows, without the frame.
 pub fn lines(theme: &Theme, rows: &[PopupRow], selected: usize) -> Vec<Line<'static>> {
-    let marker = theme.selection_marker();
-    let marker_width = marker.width();
     let key_width = rows.iter().map(|row| row.key.width()).max().unwrap_or(0);
     rows.iter()
         .enumerate()
         .map(|(index, row)| {
             let is_selected = index == selected;
-            let mut spans = vec![if is_selected {
-                Span::styled(
-                    marker.to_owned(),
-                    theme.style(HighlightGroup::SelectionMarker),
-                )
-            } else {
-                Span::raw(" ".repeat(marker_width))
-            }];
+            let mut spans = vec![pane::selection_marker(theme, is_selected)];
             if key_width > 0 {
                 let padding = " ".repeat(key_width - row.key.width());
                 spans.push(Span::styled(

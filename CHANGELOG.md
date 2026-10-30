@@ -10,9 +10,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - In-app audio playback (`audio` and `voice-message` features, `rodio`, `ogg`, `audiopus`, ALSA and libopus): media is opened in external applications instead.
 - Theme selector popup, theme switching and the remembered theme in `$XDG_STATE_HOME/tgt/theme`: settings are only changed by editing `config.toml`.
 - Palette themes (`themes/*.toml`, the bundled catppuccin, github, gruvbox, monokai, nord, onedark, tokyo and default themes), `--theme`, `app.theme` and `app.theme_enable`: tgt follows the terminal's colors, and `theme.toml` overrides them.
-- Photo viewer and the save-as file explorer, replaced by the media viewer and downloads to `app.download_dir`.
+- Photo viewer and the save-as file explorer: images are previewed in the chat, media is opened in external applications (`x`) and downloaded to `app.download_dir` (`s`).
 - Commands `show_theme_selector`, `hide_theme_selector`, `switch_theme`, `view_photo_message`, `show_photo_viewer`, `hide_photo_viewer`, `photo_viewer_previous`, `photo_viewer_next`, `play_voice_message`, `start_file_download`, `hide_file_download_explorer`, `pinned_popup_view_photo` and `pinned_popup_play_voice`; keymap sections `[theme_selector]`, `[photo_viewer]` and `[file_download_explorer]`.
-- Config keys `app.photo_max_dimension` and `app.photo_viewer_popup_size`, renamed to `app.preview_max_dimension` and `app.media_viewer_popup_size`.
+- Config keys `app.photo_max_dimension` and `app.photo_viewer_popup_size`: chat previews have a fixed size.
 
 - Legacy config locations (`~/.tgt`, `.tgt-dev`, `.data`); only XDG directories are used.
 - `app.toml`, `logger.toml` and `telegram.toml`, replaced by a single `config.toml`. `theme_filename`, `take_api_*_from_telegram_config` and the log file name options are gone.
@@ -34,9 +34,16 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 - Message keys follow concord's: `r` reacts (was reply, now `R`), `o` opens a URL (opening media moved to `x`). The actions menu starts with copy and uses the concord-style list (selection marker, key column, modal border).
 - Edited messages and reaction changes are redrawn right away.
+- The title bar is concord's one-line header (` tgt - v1.0.0  Connected as Name `) and the status bar one line of key hints or the latest status message; the pressed key and terminal size are no longer shown.
+- Function keys are shown as `F1` instead of `F(1)`.
+- Chats in the chat list are separated by a blank line.
+- Navigation like concord: `left`/`right` move focus between the chat list, chat and prompt (`right` in the chat list no longer opens the chat, `enter` does; `left` in the chat no longer unselects), `i` in the chat focuses the prompt and `esc` there returns to the chat. `alt+arrows` resize the focused pane instead of moving focus (`resize_pane_wider`, `resize_pane_narrower`, `resize_pane_taller`, `resize_pane_shorter`, `focus_next_pane`, `focus_previous_pane` commands); the chat list can be up to half the width.
+- Leader menu like concord's: `space` lists the `[leader_menu]` keys and runs the pressed one; `space` `1` hides or shows the chat list (focus moves to the chat). `space` can be used in keymaps.
+- The prompt and the message search no longer inherit plain-key bindings from `[core_window]` (like `q` and `space`), and typing in the chat search no longer triggers them.
+- Enter sends the message, like concord; Alt+Enter, Ctrl+J and, in terminals with the kitty keyboard protocol (now requested at start), Shift+Enter and Ctrl+Enter insert a newline. Empty messages aren't sent.
 - Split into a workspace: `libtgt` (TDLib client, store and models, no UI) and the `tgt` binary.
 - Restructured `tgt` into `cli`, `config`, `settings`, `logger`, `app`, `credentials`, `media`, `ui` and `utils` modules with a single settings resolver (`CLI > environment > config.toml > defaults`).
-- Images, videos, GIFs and stickers are previewed under their messages in the chat and in the media viewer with the new `media-preview` feature (on by default; build with `--no-default-features` to drop it), rendered by `ratatui-image` without chafa; `image` and `ratatui-image` are optional.
+- Images, videos, GIFs and stickers are previewed under their messages in the chat with the new `media-preview` feature (on by default; build with `--no-default-features` to drop it), rendered by `ratatui-image` without chafa; `image` and `ratatui-image` are optional.
 - CI, dependabot, `deny.toml` and `.typos.toml` follow the [rust-template](https://github.com/Gigas002/rust-template) setup; TDLib is built and cached by a composite action.
 
 - Default config files moved from `config/` to `examples/`.
@@ -47,7 +54,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ### Added
 
 - The two-step verification password is masked with `*` when logging in on the terminal (Backspace and Ctrl+U edit it, Ctrl+C quits).
-- Concord-like media handling: `o` opens the media of the selected message (photo, video, GIF, audio, voice/video message, sticker or file) in the default application via `xdg-open`, `v` shows the media viewer, `s` downloads to `app.download_dir` (default `$XDG_DOWNLOAD_DIR` or `~/Downloads`) without overwriting files. Programs and scripts are refused by `o` and can only be downloaded.
+- Concord-like media handling: `x` opens the media of the selected message (photo, video, GIF, audio, voice/video message, sticker or file) in the default application via `xdg-open`, `s` downloads to `app.download_dir` (default `$XDG_DOWNLOAD_DIR` or `~/Downloads`) without overwriting files. Programs and scripts are refused by `x` and can only be downloaded.
 - Message actions menu (`Enter` in the chat) listing every message action with its key; unavailable actions are dimmed.
 - `keychain` feature (default): the TDLib database is encrypted with a key kept in the system keychain (Secret Service); `[credentials] store = "auto" | "keychain" | "plain"`. Existing databases are encrypted on the next start; `tgt logout` removes the key.
 - Captions, videos, GIFs, video messages and stickers are shown in the chat with their duration or size.
@@ -57,6 +64,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - Reactions: shown under their messages (yours highlighted, custom emoji as `✦`), and `r` opens a picker of the emoji the chat allows; picking one of yours removes it, `1`-`9` and `0` pick directly.
 - Message actions like concord's: open URL (`o`, picked from a list when there are several), go to the replied message (`g`), pin/unpin (`P`), copy the message link (`L`). Pinned messages show 📌. Only web, e-mail, phone and `tg:` links are opened.
 - `[picker]` keymap section for the reaction and URL picker.
+- Concord-style panes: every pane is fully bordered with its title in the border (`Chats`, the chat's icon, name and status, `Message <chat>`), the focused one highlighted, and a hint while no chat is open. The composer shows a ` n / 4096 ` character count while typing.
+- Chat list rows like concord's channel list: the `▸` selection marker, an icon per chat type (👤 person, 🤖 bot, 🔖 saved messages, 🔒 secret chat, 👥 group, 📢 channel), a green dot for online contacts, the time of the last message on the right, and under the name a `You:`/`Name:` preview with badges for pinned chats (📌), unread mentions (`@`) and the unread count; muted chats are dimmed.
 - `docs/ARCHITECTURE.md`.
 
 - `static` feature to statically link `tdjson` (use with `download-tdlib` or `local-tdlib`); no runtime `tdjson` dependency needed. Powered by **tdlib-rs v1.4.0**.
@@ -88,6 +97,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 - TDLib's start-up log no longer floods the terminal before login: its verbosity and log file are set before the first client is created.
 - Closing the input (Ctrl+D) at a login prompt quits instead of asking again forever.
+- Keys bound to capital letters (`D`, `R`, `P`, `L`, or `shift+x`) never matched: terminals report them with Shift, which is now dropped for letters.
 - Text links show their text instead of the URL, and mentions of users without a username show the name instead of a user id.
 - Formatting after emoji landing on the wrong characters: TDLib's UTF-16 entity offsets are converted to characters.
 - Senders whose name isn't known yet are shown as `Unknown` instead of an empty header.

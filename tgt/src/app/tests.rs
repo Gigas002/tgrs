@@ -193,3 +193,84 @@ fn the_reaction_picker_lists_our_reactions_first() {
         })
     );
 }
+
+#[test]
+fn shifted_letters_match_their_bindings() {
+    use crate::app::event::{Event, normalize_key};
+    use crossterm::event::{KeyCode, KeyModifiers};
+    // Terminals report `R` as Shift+R; keymaps name it `R` or `shift+r`
+    let pressed = normalize_key(KeyCode::Char('R'), KeyModifiers::SHIFT);
+    assert_eq!(pressed, (KeyCode::Char('R'), KeyModifiers::NONE));
+    let pressed = Event::Key(pressed.0, pressed.1);
+    assert_eq!("R".parse::<Event>().unwrap(), pressed);
+    assert_eq!("shift+r".parse::<Event>().unwrap(), pressed);
+    // Other keys keep Shift
+    assert_eq!(
+        normalize_key(KeyCode::Enter, KeyModifiers::SHIFT),
+        (KeyCode::Enter, KeyModifiers::SHIFT)
+    );
+    assert_eq!(
+        normalize_key(
+            KeyCode::Char('x'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT
+        ),
+        (KeyCode::Char('X'), KeyModifiers::CONTROL)
+    );
+
+    let keymap = test_app_context().keymap_config().clone();
+    let reply = keymap
+        .get_map_of(Some(crate::ui::component_name::ComponentName::Chat))
+        .get(&pressed);
+    assert!(
+        matches!(
+            reply,
+            Some(ActionBinding::Single {
+                action: Action::SelectedMessage(crate::app::action::MessageCommand::Reply),
+                ..
+            })
+        ),
+        "{reply:?}"
+    );
+}
+
+#[test]
+fn leader_keys_close_the_menu_then_run() {
+    use crate::app::event::Event;
+    use crossterm::event::{KeyCode, KeyModifiers};
+    let ctx = test_app_context();
+    let sent = |ctx: &AppContext| {
+        let mut rx = ctx.action_rx();
+        std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>()
+    };
+    handle_leader_key(&ctx, &Event::Key(KeyCode::Char('1'), KeyModifiers::NONE)).unwrap();
+    assert_eq!(
+        sent(&ctx),
+        vec![Action::HideLeaderMenu, Action::ToggleChatList]
+    );
+    // Unbound keys (and Esc) only close it
+    handle_leader_key(&ctx, &Event::Key(KeyCode::Esc, KeyModifiers::NONE)).unwrap();
+    assert_eq!(sent(&ctx), vec![Action::HideLeaderMenu]);
+}
+
+#[test]
+fn space_opens_the_leader_menu_except_where_text_is_typed() {
+    use crate::app::event::Event;
+    use crate::ui::component_name::ComponentName;
+    let ctx = test_app_context();
+    let space: Event = "space".parse().unwrap();
+    assert_eq!(space.to_string(), "Space");
+    let binding = |component| match ctx.keymap_config().get_map_of(Some(component)).get(&space) {
+        Some(ActionBinding::Single { action, .. }) => Some(action.clone()),
+        _ => None,
+    };
+    for component in [ComponentName::Chat, ComponentName::ChatList] {
+        assert_eq!(
+            binding(component),
+            Some(Action::ShowLeaderMenu),
+            "{component}"
+        );
+    }
+    for component in [ComponentName::Prompt, ComponentName::SearchOverlay] {
+        assert_eq!(binding(component), None, "{component}");
+    }
+}

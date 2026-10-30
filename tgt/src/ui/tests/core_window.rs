@@ -334,7 +334,7 @@ fn test_focus_non_popup_does_not_hide_non_popup() {
 }
 
 #[test]
-fn message_actions_and_media_viewer_return_focus_to_the_chat() {
+fn message_actions_return_focus_to_the_chat() {
     let mut window = create_test_core_window();
     window.update(Action::FocusComponent(ComponentName::Chat));
 
@@ -345,14 +345,7 @@ fn message_actions_and_media_viewer_return_focus_to_the_chat() {
         Some(ComponentName::MessageActions)
     );
 
-    // Picking "view media" in the menu: the menu closes, the viewer opens
     window.update(Action::HideMessageActions);
-    assert_eq!(window.component_focused, Some(ComponentName::Chat));
-    window.update(Action::ShowMediaViewer(1));
-    assert!(window.is_popup_visible(ComponentName::MediaViewer));
-    assert_eq!(window.component_focused, Some(ComponentName::MediaViewer));
-
-    window.update(Action::HideMediaViewer);
     assert_eq!(window.active_popup, None);
     assert_eq!(window.component_focused, Some(ComponentName::Chat));
 }
@@ -360,7 +353,7 @@ fn message_actions_and_media_viewer_return_focus_to_the_chat() {
 #[test]
 fn unfocus_hides_the_popup() {
     let mut window = create_test_core_window();
-    window.update(Action::ShowMediaViewer(1));
+    window.update(Action::ShowMessageActionsFor(1));
     window.update(Action::UnfocusComponent);
     assert_eq!(window.active_popup, None);
     assert_eq!(window.component_focused, None);
@@ -374,4 +367,132 @@ fn command_guide_toggles() {
     window.update(Action::ShowCommandGuide);
     assert_eq!(window.active_popup, None);
     assert_eq!(window.component_focused, None);
+}
+
+mod panes {
+    use super::*;
+    use crate::settings::ActionBinding;
+    use crossterm::event::{KeyCode, KeyModifiers};
+
+    fn focused(window: &CoreWindow) -> Option<ComponentName> {
+        window.component_focused
+    }
+
+    #[test]
+    fn left_and_right_move_between_panes_and_stop_at_the_ends() {
+        let mut window = create_test_core_window();
+        window.focus_only(Some(ComponentName::ChatList));
+        window.update(Action::FocusPreviousPane);
+        assert_eq!(focused(&window), Some(ComponentName::ChatList));
+        window.update(Action::FocusNextPane);
+        assert_eq!(focused(&window), Some(ComponentName::Chat));
+        window.update(Action::FocusNextPane);
+        assert_eq!(focused(&window), Some(ComponentName::Prompt));
+        window.update(Action::FocusNextPane);
+        assert_eq!(focused(&window), Some(ComponentName::Prompt));
+        // Esc in the prompt goes back to the messages
+        window.update(Action::UnfocusComponent);
+        assert_eq!(focused(&window), Some(ComponentName::Chat));
+    }
+
+    #[test]
+    fn a_hidden_chat_list_is_skipped() {
+        let mut window = create_test_core_window();
+        window.toggle_chat_list();
+        window.focus_only(Some(ComponentName::Chat));
+        window.update(Action::FocusPreviousPane);
+        assert_eq!(focused(&window), Some(ComponentName::Chat));
+    }
+
+    #[test]
+    fn alt_arrows_resize_the_focused_pane() {
+        let mut window = create_test_core_window();
+        let start = window.size_chat_list;
+        window.focus_only(Some(ComponentName::ChatList));
+        window.update(Action::ResizePaneWider);
+        assert_eq!(window.size_chat_list, start + 1);
+        // The chat is on the other side: wider chat, narrower chat list
+        window.focus_only(Some(ComponentName::Chat));
+        window.update(Action::ResizePaneWider);
+        window.update(Action::ResizePaneWider);
+        assert_eq!(window.size_chat_list, start - 1);
+
+        window.focus_only(Some(ComponentName::Prompt));
+        window.update(Action::ResizePaneTaller);
+        assert_eq!(window.prompt_extra_rows, 1);
+        // A taller chat takes the row back, and the prompt never shrinks below its text
+        window.focus_only(Some(ComponentName::Chat));
+        window.update(Action::ResizePaneTaller);
+        window.update(Action::ResizePaneTaller);
+        assert_eq!(window.prompt_extra_rows, 0);
+    }
+
+    #[test]
+    fn arrows_are_bound_like_concord() {
+        let app_context = create_test_app_context();
+        let keymap = app_context.keymap_config();
+        let action = |component, code, modifiers| match keymap
+            .get_map_of(Some(component))
+            .get(&Event::Key(code, modifiers))
+        {
+            Some(ActionBinding::Single { action, .. }) => Some(action.clone()),
+            _ => None,
+        };
+        let none = KeyModifiers::NONE;
+        let alt = KeyModifiers::ALT;
+        assert_eq!(
+            action(ComponentName::ChatList, KeyCode::Right, none),
+            Some(Action::FocusNextPane)
+        );
+        assert_eq!(
+            action(ComponentName::Chat, KeyCode::Left, none),
+            Some(Action::FocusPreviousPane)
+        );
+        assert_eq!(
+            action(ComponentName::Chat, KeyCode::Char('i'), none),
+            Some(Action::FocusComponent(ComponentName::Prompt))
+        );
+        // Plain arrows move the cursor in the prompt
+        assert_eq!(action(ComponentName::Prompt, KeyCode::Left, none), None);
+        for component in [
+            ComponentName::ChatList,
+            ComponentName::Chat,
+            ComponentName::Prompt,
+        ] {
+            assert_eq!(
+                action(component, KeyCode::Right, alt),
+                Some(Action::ResizePaneWider)
+            );
+            assert_eq!(
+                action(component, KeyCode::Up, alt),
+                Some(Action::ResizePaneTaller)
+            );
+        }
+    }
+}
+
+mod leader {
+    use super::*;
+
+    #[test]
+    fn space_then_one_hides_the_chat_list_and_gives_the_focus_back() {
+        let mut window = create_test_core_window();
+        window.focus_only(Some(ComponentName::ChatList));
+        window.update(Action::ShowLeaderMenu);
+        assert_eq!(window.active_popup, Some(ComponentName::LeaderMenu));
+        assert_eq!(window.component_focused, Some(ComponentName::LeaderMenu));
+        // What the run loop sends for `1`
+        window.update(Action::HideLeaderMenu);
+        assert_eq!(window.component_focused, Some(ComponentName::ChatList));
+        window.update(Action::ToggleChatList);
+        assert_eq!(window.size_chat_list, 0);
+        // The hidden chat list hands the focus to the chat
+        assert_eq!(window.component_focused, Some(ComponentName::Chat));
+        assert_eq!(window.active_popup, None);
+        // And shows it again
+        window.update(Action::ShowLeaderMenu);
+        window.update(Action::HideLeaderMenu);
+        window.update(Action::ToggleChatList);
+        assert!(window.size_chat_list > 0);
+    }
 }

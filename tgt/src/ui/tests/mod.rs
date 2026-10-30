@@ -59,3 +59,40 @@ pub fn create_mock_chat(chat_id: i64, chat_name: &str) -> ChatListEntry {
         ..ChatListEntry::default()
     }
 }
+
+/// The whole screen: header, panes and status bar, like concord's.
+#[test]
+fn the_screen_has_a_header_panes_and_hints() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let app_context = create_test_app_context();
+    let mut tui = super::Tui::new(Arc::clone(&app_context));
+    let (width, height) = (100, 30);
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+    terminal
+        .draw(|frame| tui.draw(frame, frame.area()).unwrap())
+        .unwrap();
+    let rows: Vec<String> = terminal
+        .backend()
+        .buffer()
+        .content()
+        .chunks(usize::from(width))
+        .map(|row| row.iter().map(|cell| cell.symbol()).collect())
+        .collect();
+    let screen = rows.join("\n");
+    assert!(rows[0].starts_with(" tgt - v"), "{screen}");
+    assert!(
+        rows[0].contains("Loading..."),
+        "not logged in yet:\n{screen}"
+    );
+    assert!(rows[1].contains("┌ Chats "), "{screen}");
+    assert!(rows[1].contains("┌ Chat "), "{screen}");
+    assert!(screen.contains("Message"), "composer title:\n{screen}");
+    assert!(
+        screen.contains("Press i or Alt+3 to write a message"),
+        "{screen}"
+    );
+    let last = rows.last().unwrap();
+    assert!(last.contains("Space menu"), "{screen}");
+    assert!(last.contains("Alt+F1 help"), "{screen}");
+    assert!(last.contains("q quit"), "{screen}");
+}

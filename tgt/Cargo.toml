@@ -20,7 +20,7 @@ path = "src/main.rs"
 default = ["keychain", "media-preview"]
 # Keep the key of the encrypted TDLib database in the system keychain (Secret Service).
 keychain = ["dep:keyring-core", "dep:dbus-secret-service-keyring-store", "dep:getrandom"]
-# Image previews of photos, videos, GIFs and stickers in the media viewer.
+# Image previews of photos, videos, GIFs and stickers in the chat.
 media-preview = ["dep:image", "dep:ratatui-image"]
 
 [dependencies]

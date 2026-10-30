@@ -35,10 +35,10 @@ pub struct KeymapFile {
     pub command_guide: Option<KeymapMode>,
     pub search_overlay: Option<KeymapMode>,
     pub message_actions: Option<KeymapMode>,
-    pub media_viewer: Option<KeymapMode>,
     pub file_upload_explorer: Option<KeymapMode>,
     pub pinned_messages_popup: Option<KeymapMode>,
     pub picker: Option<KeymapMode>,
+    pub leader_menu: Option<KeymapMode>,
 }
 
 /// Loads `keymap.toml` from `config_dir`; a missing file is `Ok(None)`.

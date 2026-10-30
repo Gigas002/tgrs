@@ -11,36 +11,100 @@ fn create_test_chat_list_window() -> ChatListWindow {
 }
 
 #[test]
-fn test_chat_list_entry_without_last_message_has_two_lines() {
+fn test_chat_list_entry_without_last_message_has_fixed_height() {
     let app_context = create_test_app_context();
     // No last_message.
     let entry = create_mock_chat(1, "Zöli");
 
-    let text = chat_list_item_text(&entry, &app_context);
+    let text = chat_list_item_text(&entry, &app_context, 40, false);
 
     let line_count = text.iter().count();
     assert_eq!(
-        line_count, 2,
-        "Chat list entry without last message must have exactly 2 lines (name + [No message]) for consistent height and click mapping; got {}",
+        line_count,
+        usize::from(CHAT_LIST_ITEM_ROWS),
+        "Chat list entry without last message must have a fixed height (name + [No message] + spacer) for click mapping; got {}",
         line_count
     );
 }
 
 #[test]
-fn test_chat_list_entry_with_empty_last_message_has_two_lines() {
+fn test_chat_list_entry_with_empty_last_message_has_fixed_height() {
     let app_context = create_test_app_context();
     let mut entry = create_mock_chat(1, "Pandúr Katinka");
     // last_message present but with empty content (e.g. "joined Telegram" → backend sends empty message).
     entry.last_message = Some(create_mock_message(1, ""));
 
-    let text = chat_list_item_text(&entry, &app_context);
+    let text = chat_list_item_text(&entry, &app_context, 40, false);
 
     let line_count = text.iter().count();
     assert_eq!(
-        line_count, 2,
-        "Chat list entry with empty last message (e.g. joined Telegram) must have exactly 2 lines (name + [No message]); got {}",
+        line_count,
+        usize::from(CHAT_LIST_ITEM_ROWS),
+        "Chat list entry with empty last message (e.g. joined Telegram) must have a fixed height (name + [No message] + spacer); got {}",
         line_count
     );
+}
+
+fn row_text(text: &Text<'_>) -> Vec<String> {
+    text.lines
+        .iter()
+        .map(|line| {
+            line.spans
+                .iter()
+                .map(|span| span.content.as_ref())
+                .collect()
+        })
+        .collect()
+}
+
+#[test]
+fn rows_show_the_icon_time_preview_and_badges() {
+    use libtgt::model::{ChatKind, MessageEntry, TdMessageSender};
+    use ratatui::style::Style;
+    use unicode_width::UnicodeWidthStr;
+    let app_context = create_test_app_context();
+    app_context.store().set_me(1);
+    let mut entry = create_mock_chat(5, "Rust");
+    entry.kind = ChatKind::Group;
+    entry.is_pinned = true;
+    entry.unread_count = 3;
+    entry.unread_mention_count = 1;
+    entry.last_message = Some(MessageEntry::plain(
+        9,
+        TdMessageSender::User(1),
+        "see you\nlater",
+        1_700_000_000,
+    ));
+
+    let text = chat_list_item_text(&entry, &app_context, 40, true);
+    let rows = row_text(&text);
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[2], "", "a blank spacer separates chats");
+    // Selected lines are highlighted, the spacer isn't
+    let selected = app_context.theme().style(HighlightGroup::SelectedRow);
+    assert_eq!(text.lines[0].style, selected);
+    assert_eq!(text.lines[2].style, Style::default());
+    // Every row fills the width so the badges and time line up at the right
+    for row in &rows[..2] {
+        assert_eq!(row.width(), 40, "{row:?}");
+    }
+    assert!(rows[0].starts_with("▸ 👥 Rust"), "{rows:?}");
+    assert!(
+        rows[1].contains("You: see you"),
+        "only the first line: {rows:?}"
+    );
+    assert!(rows[1].trim_end().ends_with("📌 @  3"), "{rows:?}");
+
+    // Unselected rows keep the marker's width blank
+    let text = chat_list_item_text(&entry, &app_context, 40, false);
+    assert!(row_text(&text)[0].starts_with("  👥 Rust"));
+}
+
+#[test]
+fn chats_without_messages_say_so() {
+    let app_context = create_test_app_context();
+    let text = chat_list_item_text(&create_mock_chat(1, "New"), &app_context, 30, false);
+    assert!(row_text(&text)[1].contains("No messages"));
 }
 
 fn setup_chats(window: &mut ChatListWindow, chat_names: &[&str]) {
@@ -244,14 +308,14 @@ fn test_chat_list_left_click_on_item_when_focused_selects_and_returns_open() {
     let mut window = create_test_chat_list_window();
     setup_chats(&mut window, &["Alice", "Bob", "Charlie"]);
     window.focused = true;
-    // List content: first item at row content_y = list_area.y+2 = 2; second at row 3.
+    // Items start below the top border at row 1, 3 rows each: Bob at rows 4-6.
     window.last_list_area = Some(Rect::new(0, 0, 20, 10));
     window.chat_list_state.select(Some(0));
 
     let mouse = MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
         column: 5,
-        row: 3, // second visible row = index 1 (Bob); first item at row 2
+        row: 4, // first row of index 1 (Bob)
         modifiers: crossterm::event::KeyModifiers::empty(),
     };
     let result = window.handle_mouse_events(mouse).unwrap();

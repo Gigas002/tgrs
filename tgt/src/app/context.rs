@@ -40,6 +40,9 @@ pub struct AppContext {
     /// The focused component, for context-aware keymap lookup in the run loop.
     /// Encoded as: 0 = None, n = `ComponentName::ALL[n - 1]`.
     focused_component: AtomicU8,
+    /// A text input outside the prompt (the chat search) takes typed keys,
+    /// so plain characters skip the keymap.
+    typing: AtomicBool,
 }
 
 impl AppContext {
@@ -56,6 +59,7 @@ impl AppContext {
             needs_render: AtomicBool::new(false),
             store,
             focused_component: AtomicU8::new(0),
+            typing: AtomicBool::new(false),
         }
     }
 
@@ -172,6 +176,14 @@ impl AppContext {
     pub fn set_focused_component(&self, component: Option<ComponentName>) {
         self.focused_component
             .store(Self::encode_component(component), Ordering::Release);
+    }
+
+    pub fn is_typing(&self) -> bool {
+        self.typing.load(Ordering::Acquire)
+    }
+
+    pub fn set_typing(&self, typing: bool) {
+        self.typing.store(typing, Ordering::Release);
     }
 
     /// The style of `group` in the theme.

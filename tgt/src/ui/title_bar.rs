@@ -2,12 +2,13 @@ use {
     crate::{
         app::action::Action,
         app::context::AppContext,
+        settings::HighlightGroup,
         ui::component_traits::{Component, HandleFocus},
     },
     ratatui::{
-        layout::{Alignment, Constraint, Direction, Layout, Rect},
+        layout::Rect,
         text::{Line, Span},
-        widgets::{Block, Borders, Paragraph, Wrap},
+        widgets::Paragraph,
     },
     std::{io, sync::Arc},
     tokio::sync::mpsc,
@@ -72,53 +73,33 @@ impl Component for TitleBar {
         Ok(())
     }
 
+    /// One line like concord's header: ` tgt - v1.2.3 ` and who is logged in.
     fn draw(&mut self, frame: &mut ratatui::Frame<'_>, area: Rect) -> io::Result<()> {
-        let chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(0), Constraint::Percentage(100)])
-            .split(area);
-
-        let name: Vec<char> = self.name.chars().collect::<Vec<char>>();
-        // Span::raw(" - A TUI for Telegram"),
-        let text = vec![Line::from(vec![
-            Span::styled(
-                name[0].to_string(),
-                self.app_context.style_title_bar_title1(),
-            ),
-            Span::styled(
-                name[1].to_string(),
-                self.app_context.style_title_bar_title2(),
-            ),
-            Span::styled(
-                name[2].to_string(),
-                self.app_context.style_title_bar_title3(),
-            ),
-            Span::styled(" - ", self.app_context.style_title_bar_title1()),
-            Span::styled("A", self.app_context.style_title_bar_title2()),
-            Span::styled(" T", self.app_context.style_title_bar_title3()),
-            Span::styled("U", self.app_context.style_title_bar_title1()),
-            Span::styled("I", self.app_context.style_title_bar_title2()),
-            Span::styled(" f", self.app_context.style_title_bar_title3()),
-            Span::styled("o", self.app_context.style_title_bar_title1()),
-            Span::styled("r", self.app_context.style_title_bar_title2()),
-            Span::styled(" T", self.app_context.style_title_bar_title3()),
-            Span::styled("e", self.app_context.style_title_bar_title1()),
-            Span::styled("l", self.app_context.style_title_bar_title2()),
-            Span::styled("e", self.app_context.style_title_bar_title3()),
-            Span::styled("g", self.app_context.style_title_bar_title1()),
-            Span::styled("r", self.app_context.style_title_bar_title2()),
-            Span::styled("a", self.app_context.style_title_bar_title3()),
-            Span::styled("m", self.app_context.style_title_bar_title1()),
-        ])];
-        let block = Block::new().borders(Borders::ALL);
-        let paragraph = Paragraph::new(text)
-            .block(block.clone())
-            .style(self.app_context.style_title_bar())
-            .alignment(Alignment::Center)
-            .wrap(Wrap { trim: true });
-
-        frame.render_widget(paragraph, chunks[1]);
-
+        let theme = self.app_context.theme();
+        let mut spans = vec![Span::styled(
+            format!(" tgt - v{} ", env!("CARGO_PKG_VERSION")),
+            theme.style(HighlightGroup::HeaderTitle),
+        )];
+        match self.app_context.store().my_name() {
+            Some(name) => {
+                spans.push(Span::styled(
+                    " Connected as ",
+                    theme.style(HighlightGroup::HeaderLabel),
+                ));
+                spans.push(Span::styled(
+                    format!("{name} "),
+                    theme.style(HighlightGroup::Strong),
+                ));
+            }
+            None => spans.push(Span::styled(
+                " Loading... ",
+                theme.style(HighlightGroup::HeaderWarning),
+            )),
+        }
+        frame.render_widget(
+            Paragraph::new(Line::from(spans)).style(theme.style(HighlightGroup::Normal)),
+            area,
+        );
         Ok(())
     }
 }

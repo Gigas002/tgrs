@@ -2,16 +2,14 @@ use {
     crate::{
         app::action::Action,
         app::context::AppContext,
+        settings::HighlightGroup,
         ui::component_traits::{Component, HandleFocus},
+        ui::pane,
     },
     ratatui::{
         layout::Rect,
-        symbols::{
-            border::{PLAIN, Set},
-            line::NORMAL,
-        },
         text::{Line, Span, Text},
-        widgets::{Block, Borders, Paragraph, Wrap},
+        widgets::{Paragraph, Wrap},
     },
     std::{io, sync::Arc},
     tokio::sync::mpsc,
@@ -76,32 +74,17 @@ impl Component for ReplyMessage {
     }
 
     fn draw(&mut self, frame: &mut ratatui::Frame<'_>, area: Rect) -> io::Result<()> {
-        let mut text = Text::default();
-        text.extend(vec![Line::from(vec![Span::styled(
-            (*self.app_context.store().reply_message_text()).to_string(),
-            self.app_context.style_reply_message_message_text(),
-        )])]);
-
-        let collapsed_border = Set {
-            top_left: NORMAL.vertical_right,
-            top_right: NORMAL.vertical_left,
-            bottom_left: NORMAL.vertical_right,
-            bottom_right: NORMAL.vertical_left,
-            ..PLAIN
-        };
-
-        let block = Block::new()
-            .border_set(collapsed_border)
-            .borders(Borders::RIGHT | Borders::LEFT | Borders::TOP)
-            .title("Reply Message")
-            .border_style(self.app_context.style_reply_message())
-            .style(self.app_context.style_reply_message());
-
-        let paragraph = Paragraph::new(text)
-            .block(block)
-            .style(self.app_context.style_reply_message())
-            // .alignment(Alignment::Center)
-            .wrap(Wrap { trim: true });
+        let theme = self.app_context.theme();
+        // `↪ text` with the reply-target bar's color, like the message it marks
+        let text = Text::from(Line::from(vec![
+            Span::styled("↪ ", theme.style(HighlightGroup::ReplyTargetBorder)),
+            Span::styled(
+                (*self.app_context.store().reply_message_text()).to_string(),
+                theme.style(HighlightGroup::ChatPreview),
+            ),
+        ]));
+        let block = pane::block(theme, pane::title("Replying to"), false);
+        let paragraph = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
 
         frame.render_widget(paragraph, area);
 

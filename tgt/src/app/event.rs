@@ -25,6 +25,19 @@ pub enum Event {
     /// Focus Gained event.
     FocusGained,
 }
+/// The key as bindings name it: a letter's case already says whether Shift
+/// was held, so `R` is `Char('R')` without the Shift that terminals add, and
+/// `shift+r` is the same key.
+pub fn normalize_key(code: KeyCode, mut modifiers: KeyModifiers) -> (KeyCode, KeyModifiers) {
+    match code {
+        KeyCode::Char(c) if modifiers.contains(KeyModifiers::SHIFT) => {
+            modifiers.remove(KeyModifiers::SHIFT);
+            (KeyCode::Char(c.to_ascii_uppercase()), modifiers)
+        }
+        _ => (code, modifiers),
+    }
+}
+
 /// Implement the `Event` enum.
 impl Event {
     /// Create an event with a key code and modifiers.
@@ -39,6 +52,7 @@ impl Event {
         match s {
             "backspace" => Ok(Event::Key(KeyCode::Backspace, modifiers)),
             "enter" => Ok(Event::Key(KeyCode::Enter, modifiers)),
+            "space" => Ok(Event::Key(KeyCode::Char(' '), modifiers)),
             "left" => Ok(Event::Key(KeyCode::Left, modifiers)),
             "right" => Ok(Event::Key(KeyCode::Right, modifiers)),
             "up" => Ok(Event::Key(KeyCode::Up, modifiers)),
@@ -67,10 +81,9 @@ impl Event {
             "f12" => Ok(Event::Key(KeyCode::F(12), modifiers)),
             e => {
                 if e.len() == 1 && e.chars().next().unwrap().is_ascii() {
-                    Ok(Event::Key(
-                        KeyCode::Char(e.chars().next().unwrap()),
-                        modifiers,
-                    ))
+                    let (code, modifiers) =
+                        normalize_key(KeyCode::Char(e.chars().next().unwrap()), modifiers);
+                    Ok(Event::Key(code, modifiers))
                 } else {
                     Err(AppError::InvalidEvent(e.to_string()))
                 }
@@ -117,10 +130,11 @@ impl Display for Event {
                 write!(f, "Resize({width}, {height})")
             }
             Event::Key(key, modifiers) => {
-                let k = if let KeyCode::Char(c) = key {
-                    c.to_string()
-                } else {
-                    format!("{key:?}")
+                let k = match key {
+                    KeyCode::Char(' ') => "Space".to_owned(),
+                    KeyCode::Char(c) => c.to_string(),
+                    KeyCode::F(n) => format!("F{n}"),
+                    _ => format!("{key:?}"),
                 };
 
                 match *modifiers {

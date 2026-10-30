@@ -5,18 +5,15 @@ use crate::{
     ui::component_name::ComponentName,
     ui::component_traits::{Component, HandleFocus},
     ui::message::{self, MessageRow},
+    ui::pane,
 };
 use arboard::Clipboard;
 use crossterm::event::{KeyCode, MouseEventKind};
 use libtgt::model::{MessageEntry, TdMessageReplyTo};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    symbols::{
-        border::{self, Set},
-        line,
-    },
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListDirection, ListItem, ListState, Paragraph},
+    widgets::{List, ListDirection, ListItem, ListState, Paragraph},
 };
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
@@ -247,15 +244,10 @@ impl ChatWindow {
             MessageCommand::OpenMedia if entry.media().is_some() => {
                 self.send(Action::OpenMedia(message_id));
             }
-            MessageCommand::ViewMedia if entry.media().is_some() => {
-                self.send(Action::ShowMediaViewer(message_id));
-            }
             MessageCommand::DownloadMedia if entry.media().is_some() => {
                 self.send(Action::DownloadMedia(message_id));
             }
-            MessageCommand::OpenMedia
-            | MessageCommand::ViewMedia
-            | MessageCommand::DownloadMedia => {
+            MessageCommand::OpenMedia | MessageCommand::DownloadMedia => {
                 self.send(Action::StatusMessage("This message has no media.".into()));
             }
             MessageCommand::React => self.send(Action::LoadReactions(message_id)),
@@ -351,6 +343,32 @@ impl ChatWindow {
             return crate::ui::preview::CHAT_PREVIEW_ROWS;
         }
         0
+    }
+
+    /// ` 👥 Name · status `, like concord's channel pane title.
+    fn pane_title(&self) -> Line<'static> {
+        let store = self.app_context.store();
+        let theme = self.app_context.theme();
+        let Some(name) = store.name_of_open_chat_id() else {
+            return Line::from(pane::title("Chat"));
+        };
+        let mut spans = vec![Span::raw(" ")];
+        if let Some(kind) = store.open_chat_kind() {
+            spans.push(Span::styled(
+                format!("{} ", kind.icon()),
+                theme.style(HighlightGroup::ChatTypeMarker),
+            ));
+        }
+        spans.push(Span::raw(name));
+        let status = store.open_chat_user_status();
+        if !status.trim().is_empty() {
+            spans.push(Span::styled(
+                format!(" · {}", status.trim()),
+                theme.style(HighlightGroup::Description),
+            ));
+        }
+        spans.push(Span::raw(" "));
+        Line::from(spans)
     }
 
     /// Draws the previews of the messages fully on screen, loading missing
@@ -558,37 +576,35 @@ impl Component for ChatWindow {
             .store()
             .open_chat_pinned_snapshot()
             .is_empty();
-        // Fixed header + pinned section (label row + preview row); only the message list uses Min.
-        let header_h = 3u16;
+        // One pane titled with the chat; the pinned strip (label and preview rows) on top
+        let app_context = Arc::clone(&self.app_context);
+        let theme = app_context.theme();
+        let block = pane::block(theme, self.pane_title(), self.focused);
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+        if app_context.store().open_chat_id().as_i64() == 0 {
+            frame.render_widget(
+                Paragraph::new(Line::from(Span::styled(
+                    "Select a chat to start messaging",
+                    theme.style(HighlightGroup::Placeholder),
+                )))
+                .alignment(Alignment::Center),
+                Rect::new(
+                    inner.x,
+                    inner.y + inner.height / 2,
+                    inner.width,
+                    1.min(inner.height),
+                ),
+            );
+            return Ok(());
+        }
         let pin_h = if has_pins { 2u16 } else { 0u16 };
         let chat_layout = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(header_h),
-                Constraint::Length(pin_h),
-                Constraint::Min(1),
-            ])
-            .split(area);
-
-        let style_panel_border = if self.focused {
-            self.app_context.style_border_component_focused()
-        } else {
-            self.app_context.style_chat()
-        };
-
-        let border = Set {
-            top_left: line::NORMAL.vertical_right,
-            top_right: line::NORMAL.vertical_left,
-            bottom_left: line::NORMAL.horizontal_up,
-            ..border::PLAIN
-        };
-        let block = Block::new()
-            .border_set(border)
-            .border_style(style_panel_border)
-            .borders(Borders::TOP | Borders::LEFT | Borders::RIGHT)
-            .style(self.app_context.style_chat());
-        let list_area = chat_layout[2];
-        let list_inner = block.inner(list_area);
+            .constraints([Constraint::Length(pin_h), Constraint::Min(1)])
+            .split(inner);
+        let list_area = chat_layout[1];
+        let list_inner = list_area;
         let store = self.app_context.store();
         let reply_message_id = store.reply_message_id().as_i64();
         let me = store.me();
@@ -661,74 +677,35 @@ impl Component for ChatWindow {
 
         // The selected message is framed by a card instead of a highlight
         let list = List::new(items)
-            .block(block)
-            .style(self.app_context.style_chat())
             .repeat_highlight_symbol(true)
             .direction(ListDirection::BottomToTop);
 
-        let border_header = Set {
-            top_left: line::NORMAL.horizontal_down,
-            bottom_left: line::NORMAL.horizontal_up,
-            ..border::PLAIN
-        };
-        let block_header = Block::new()
-            .border_set(border_header)
-            .border_style(style_panel_border)
-            .borders(Borders::TOP | Borders::LEFT | Borders::RIGHT)
-            .style(self.app_context.style_chat())
-            .title(self.name.as_str());
-        let header = Paragraph::new(Line::from(vec![
-            Span::styled(
-                self.app_context
-                    .store()
-                    .name_of_open_chat_id()
-                    .unwrap_or_default(),
-                self.app_context.style_chat_chat_name(),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                self.app_context.store().open_chat_user_status(),
-                self.app_context.style_timestamp(),
-            ),
-        ]))
-        .block(block_header)
-        .alignment(Alignment::Center);
-
-        frame.render_widget(header, chat_layout[0]);
         if pin_h > 0 {
-            let pin_area = chat_layout[1];
-            let pin_block = Block::new()
-                .borders(Borders::LEFT | Borders::RIGHT)
-                .border_style(style_panel_border)
-                .style(self.app_context.style_chat());
-            let pin_inner = pin_block.inner(pin_area);
-            frame.render_widget(pin_block, pin_area);
-
+            let pin_inner = chat_layout[0];
             let pin_rows = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Length(1), Constraint::Length(1)])
                 .split(pin_inner);
 
             let open_keys = self.pinned_messages_popup_keys_hint();
-            let pin_title = Paragraph::new(Line::from(vec![Span::styled(
-                format!("Pinned messages (press {open_keys} to view)"),
-                self.app_context.style_chat_chat_name(),
-            )]))
-            .style(self.app_context.style_chat());
+            let pin_title = Paragraph::new(Line::from(vec![
+                Span::styled("📌 Pinned", theme.style(HighlightGroup::PinnedBadge)),
+                Span::styled(
+                    format!("  {open_keys} to browse"),
+                    theme.style(HighlightGroup::Hint),
+                ),
+            ]));
 
             let pin_preview = self.pinned_preview_text();
-            let pin_line = Line::from(vec![
-                Span::styled("📌 ", self.app_context.style_timestamp()),
-                Span::styled(
-                    if pin_preview.is_empty() {
-                        "(no preview)".to_string()
-                    } else {
-                        pin_preview
-                    },
-                    self.app_context.style_chat_message_other_content(),
-                ),
-            ]);
-            let pin_preview_para = Paragraph::new(pin_line).style(self.app_context.style_chat());
+            let pin_line = Line::from(Span::styled(
+                if pin_preview.is_empty() {
+                    "(no preview)".to_string()
+                } else {
+                    pin_preview
+                },
+                theme.style(HighlightGroup::ChatPreview),
+            ));
+            let pin_preview_para = Paragraph::new(pin_line);
 
             frame.render_widget(pin_title, pin_rows[0]);
             frame.render_widget(pin_preview_para, pin_rows[1]);

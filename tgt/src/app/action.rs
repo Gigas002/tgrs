@@ -19,8 +19,6 @@ pub enum MessageCommand {
     OpenLink,
     /// Open the attached media with the default application.
     OpenMedia,
-    /// Show the attached media in the media viewer.
-    ViewMedia,
     /// Save the attached media to the download directory.
     DownloadMedia,
     /// Select the message this one replies to.
@@ -34,7 +32,7 @@ pub enum MessageCommand {
 
 impl MessageCommand {
     /// Every command, in the order of the message actions menu.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 12] = [
         Self::Copy,
         Self::React,
         Self::Reply,
@@ -42,7 +40,6 @@ impl MessageCommand {
         Self::Edit,
         Self::OpenLink,
         Self::OpenMedia,
-        Self::ViewMedia,
         Self::DownloadMedia,
         Self::GoToReply,
         Self::TogglePin,
@@ -59,7 +56,6 @@ impl MessageCommand {
             Self::Edit => "edit message",
             Self::OpenLink => "open URL",
             Self::OpenMedia => "open media",
-            Self::ViewMedia => "view media",
             Self::DownloadMedia => "download file",
             Self::GoToReply => "go to replied message",
             Self::TogglePin => "pin message",
@@ -89,21 +85,10 @@ pub struct ReactionChoice {
     pub chosen: bool,
 }
 
-/// Where a preview image is shown, which also sets how large it is decoded.
-#[cfg(feature = "media-preview")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PreviewTarget {
-    /// The media viewer popup.
-    Viewer,
-    /// Inline in the chat, under the message.
-    Chat,
-}
-
-/// A preview image to download (when `path` is not on disk) and decode.
+/// A chat preview image to download (when `path` is not on disk) and decode.
 #[cfg(feature = "media-preview")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreviewRequest {
-    pub target: PreviewTarget,
     pub message_id: i64,
     pub file_id: i32,
     pub path: Option<String>,
@@ -356,6 +341,22 @@ pub enum Action {
     CopyMessageLink(i64),
     /// Open a link from a message in the default browser.
     OpenUrl(String),
+    /// Open the leader menu (Space), listing the `[leader_menu]` keys.
+    ShowLeaderMenu,
+    /// Close the leader menu.
+    HideLeaderMenu,
+    /// Focus the pane to the right: chat list, chat, then prompt.
+    FocusNextPane,
+    /// Focus the pane to the left.
+    FocusPreviousPane,
+    /// Make the focused pane wider.
+    ResizePaneWider,
+    /// Make the focused pane narrower.
+    ResizePaneNarrower,
+    /// Make the focused pane taller (the chat or the prompt).
+    ResizePaneTaller,
+    /// Make the focused pane shorter.
+    ResizePaneShorter,
     /// Show the picker popup.
     ShowPicker(PickerKind),
     /// Close the picker popup.
@@ -371,18 +372,6 @@ pub enum Action {
     OpenMedia(i64),
     /// Save the media of a message to the download directory (downloads it first).
     DownloadMedia(i64),
-    /// Show the media viewer for a message.
-    ShowMediaViewer(i64),
-    /// Close the media viewer.
-    HideMediaViewer,
-    /// Show the previous (older) message with media in the media viewer.
-    MediaViewerPrevious,
-    /// Show the next (newer) message with media in the media viewer.
-    MediaViewerNext,
-    /// Open the media shown in the media viewer with the default application.
-    MediaViewerOpen,
-    /// Save the media shown in the media viewer to the download directory.
-    MediaViewerDownload,
     /// Download and decode a preview image off the main thread.
     #[cfg(feature = "media-preview")]
     LoadPreview(PreviewRequest),
@@ -402,8 +391,6 @@ pub enum Action {
     PinnedPopupNext,
     /// Jump to the currently shown pinned message in the chat (then close popup).
     PinnedPopupConfirmJump,
-    /// Show the media of the current pinned message in the media viewer.
-    PinnedPopupViewMedia,
     /// Open the media of the current pinned message with the default application.
     PinnedPopupOpenMedia,
 
@@ -478,23 +465,25 @@ impl FromStr for Action {
             "go_to_replied_message" => Ok(Action::SelectedMessage(MessageCommand::GoToReply)),
             "toggle_message_pin" => Ok(Action::SelectedMessage(MessageCommand::TogglePin)),
             "copy_message_link" => Ok(Action::SelectedMessage(MessageCommand::CopyLink)),
+            "show_leader_menu" => Ok(Action::ShowLeaderMenu),
+            "hide_leader_menu" => Ok(Action::HideLeaderMenu),
+            "focus_next_pane" => Ok(Action::FocusNextPane),
+            "focus_previous_pane" => Ok(Action::FocusPreviousPane),
+            "resize_pane_wider" => Ok(Action::ResizePaneWider),
+            "resize_pane_narrower" => Ok(Action::ResizePaneNarrower),
+            "resize_pane_taller" => Ok(Action::ResizePaneTaller),
+            "resize_pane_shorter" => Ok(Action::ResizePaneShorter),
             "hide_picker" => Ok(Action::HidePicker),
             "picker_previous" => Ok(Action::PickerPrevious),
             "picker_next" => Ok(Action::PickerNext),
             "picker_confirm" => Ok(Action::PickerConfirm),
             "open_message_media" => Ok(Action::SelectedMessage(MessageCommand::OpenMedia)),
-            "view_message_media" => Ok(Action::SelectedMessage(MessageCommand::ViewMedia)),
             "download_message_media" => Ok(Action::SelectedMessage(MessageCommand::DownloadMedia)),
             "show_message_actions" => Ok(Action::ShowMessageActions),
             "hide_message_actions" => Ok(Action::HideMessageActions),
             "message_actions_confirm" => Ok(Action::MessageActionsConfirm),
             "message_actions_previous" => Ok(Action::MessageActionsPrevious),
             "message_actions_next" => Ok(Action::MessageActionsNext),
-            "hide_media_viewer" => Ok(Action::HideMediaViewer),
-            "media_viewer_previous" => Ok(Action::MediaViewerPrevious),
-            "media_viewer_next" => Ok(Action::MediaViewerNext),
-            "media_viewer_open" => Ok(Action::MediaViewerOpen),
-            "media_viewer_download" => Ok(Action::MediaViewerDownload),
             "show_command_guide" => Ok(Action::ShowCommandGuide),
             "hide_command_guide" => Ok(Action::HideCommandGuide),
             "prompt_send_message" => Ok(Action::PromptSendMessage),
@@ -513,7 +502,6 @@ impl FromStr for Action {
             "pinned_popup_previous" => Ok(Action::PinnedPopupPrevious),
             "pinned_popup_next" => Ok(Action::PinnedPopupNext),
             "pinned_popup_confirm_jump" => Ok(Action::PinnedPopupConfirmJump),
-            "pinned_popup_view_media" => Ok(Action::PinnedPopupViewMedia),
             "pinned_popup_open_media" => Ok(Action::PinnedPopupOpenMedia),
             _ => Err(AppError::InvalidAction(s.to_string())),
         }

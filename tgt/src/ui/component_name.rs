@@ -24,14 +24,14 @@ pub enum ComponentName {
     SearchOverlay,
     /// The actions menu of a chat message.
     MessageActions,
-    /// The media viewer popup.
-    MediaViewer,
     /// The file upload explorer popup.
     FileUploadExplorer,
     /// Pinned messages browser popup (open chat).
     PinnedMessagesPopup,
     /// Popup to pick a reaction or a link.
     Picker,
+    /// The leader menu (Space), like concord's.
+    LeaderMenu,
 }
 
 impl ComponentName {
@@ -47,10 +47,10 @@ impl ComponentName {
         Self::CommandGuide,
         Self::SearchOverlay,
         Self::MessageActions,
-        Self::MediaViewer,
         Self::FileUploadExplorer,
         Self::PinnedMessagesPopup,
         Self::Picker,
+        Self::LeaderMenu,
     ];
 
     /// The popups (modal overlays); only one is shown at a time.
@@ -58,10 +58,10 @@ impl ComponentName {
         Self::CommandGuide,
         Self::SearchOverlay,
         Self::MessageActions,
-        Self::MediaViewer,
         Self::FileUploadExplorer,
         Self::PinnedMessagesPopup,
         Self::Picker,
+        Self::LeaderMenu,
     ];
 
     /// Returns true if this component is a popup (overlay) component.
@@ -84,10 +84,10 @@ impl Display for ComponentName {
             ComponentName::CommandGuide => write!(f, "Command Guide"),
             ComponentName::SearchOverlay => write!(f, "Search Overlay"),
             ComponentName::MessageActions => write!(f, "Message Actions"),
-            ComponentName::MediaViewer => write!(f, "Media Viewer"),
             ComponentName::FileUploadExplorer => write!(f, "File Upload Explorer"),
             ComponentName::PinnedMessagesPopup => write!(f, "Pinned Messages"),
             ComponentName::Picker => write!(f, "Picker"),
+            ComponentName::LeaderMenu => write!(f, "Leader Menu"),
         }
     }
 }

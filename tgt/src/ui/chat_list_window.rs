@@ -1,97 +1,176 @@
 use crate::app::action::Action;
 use crate::app::context::AppContext;
+use crate::settings::HighlightGroup;
 use crate::ui::component_name::ComponentName;
 use crate::ui::component_name::ComponentName::Prompt;
 use crate::ui::component_traits::{Component, HandleFocus};
-use crate::ui::message;
+use crate::ui::{message, pane};
 use crossterm::event::{KeyCode, MouseButton, MouseEventKind};
-use libtgt::model::ChatListEntry;
+use libtgt::model::{ChatListEntry, format_timestamp};
 use libtgt::tdlib_rs::enums::{ChatList, UserStatus};
 use nucleo_matcher::{Matcher, Utf32Str};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Position, Rect};
-use ratatui::symbols::border::PLAIN;
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Borders, List, ListDirection, ListState, Paragraph};
+use ratatui::widgets::{List, ListDirection, ListState, Paragraph};
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
+use unicode_width::UnicodeWidthStr;
 
-/// The two-line chat list row: name, unread count, time, then a message preview.
+/// `left`, then `right` aligned to the end of a `width` columns wide row.
+fn spread(mut left: Vec<Span<'static>>, right: Vec<Span<'static>>, width: usize) -> Line<'static> {
+    let used: usize = left.iter().chain(&right).map(Span::width).sum();
+    left.push(Span::raw(" ".repeat(width.saturating_sub(used).max(1))));
+    left.extend(right);
+    Line::from(left)
+}
+
+/// Rows each chat takes in the list: its two lines and a blank spacer.
+pub(crate) const CHAT_LIST_ITEM_ROWS: u16 = 3;
+
+/// The chat list row, like concord's channel list: the selection marker, the
+/// chat's icon and name with the time of its last message, then a preview of
+/// that message with the badges (pinned, mentions, unread), and a blank line
+/// that keeps it apart from the next chat.
 pub(crate) fn chat_list_item_text(
     entry: &ChatListEntry,
     app_context: &AppContext,
+    width: usize,
+    selected: bool,
 ) -> Text<'static> {
-    let pin_symbol = if entry.is_pinned { "📌 " } else { "" };
-    let mut online_symbol = "";
-    let mut verificated_symbol = "";
-    if let Some(user) = &entry.user {
-        online_symbol = match user.status {
-            UserStatus::Online(_) => "🟢 ",
-            UserStatus::Offline(_) => "",
-            UserStatus::Empty => "",
-            UserStatus::Recently(_) => "",
-            UserStatus::LastWeek(_) => "",
-            UserStatus::LastMonth(_) => "",
-        };
-        // tdlib-rs 1.3+: User.is_verified removed; verified badge disabled until we map from new API
-        verificated_symbol = "";
-    }
-    let unread_info = if entry.is_marked_as_unread {
-        format!("({})", entry.unread_count)
+    let theme = app_context.theme();
+    let marker = pane::selection_marker(theme, selected);
+    let icon = format!("{} ", entry.kind.icon());
+    let indent = marker.width() + icon.width();
+    let unread = entry.unread_count > 0;
+
+    // Line 1: icon, name, online dot ... time
+    let time: Vec<Span<'static>> = entry
+        .last_message
+        .as_ref()
+        .map(|message| {
+            vec![Span::styled(
+                format_timestamp(message.timestamp()),
+                theme.style(HighlightGroup::Timestamp),
+            )]
+        })
+        .unwrap_or_default();
+    let online = entry
+        .user
+        .as_ref()
+        .is_some_and(|user| matches!(user.status, UserStatus::Online(_)));
+    let online_width = if online { 2 } else { 0 };
+    let time_width: usize = time.iter().map(Span::width).sum();
+    let name_group = if entry.is_muted {
+        HighlightGroup::MutedChat
+    } else if unread {
+        HighlightGroup::NavigationUnread
     } else {
-        "".to_string()
+        HighlightGroup::Normal
     };
+    let name = message::truncate_display_width(
+        &entry.chat_name,
+        width
+            .saturating_sub(indent + online_width + time_width + 1)
+            .max(1),
+    );
+    let mut first = vec![
+        marker,
+        Span::styled(icon, theme.style(HighlightGroup::ChatTypeMarker)),
+        Span::styled(name, theme.style(name_group)),
+    ];
+    if online {
+        first.push(Span::styled(
+            " ●",
+            theme.style(HighlightGroup::PresenceOnline),
+        ));
+    }
 
-    let preview_lines = -1;
-    let mut text = Text::default();
-    text.extend(vec![Line::from(vec![
-        Span::raw(pin_symbol),
-        Span::raw(online_symbol),
-        Span::styled(
-            entry.chat_name.clone(),
-            app_context.style_chat_list_item_chat_name(),
-        ),
-        Span::raw(" "),
-        Span::styled(
-            unread_info,
-            app_context.style_chat_list_item_unread_counter(),
-        ),
-        Span::raw(" "),
-        Span::raw(verificated_symbol),
-        Span::raw(" | "),
-        entry.last_message.as_ref().map_or_else(Span::default, |e| {
-            message::timestamp_span(e.timestamp(), app_context)
-        }),
-    ])]);
-    // Always add a second line (message preview or "[No message]") so every item is 2 rows for consistent height and click mapping.
-    // Treat missing last_message or empty content (e.g. "joined Telegram" → empty message from backend) as no message.
-    let second_line = match &entry.last_message {
-        None => Line::from(Span::styled(
-            "[No message]",
-            app_context.style_chat_list_item_message_content(),
-        )),
-        Some(e) if e.message_content_to_string().trim().is_empty() => Line::from(Span::styled(
-            "[No message]",
-            app_context.style_chat_list_item_message_content(),
-        )),
-        Some(e) => message::content_lines(
-            e,
-            app_context.style_chat_list_item_message_content(),
-            preview_lines,
-        )
+    // Line 2: preview ... badges
+    let mut badges: Vec<Span<'static>> = Vec::new();
+    if entry.is_pinned {
+        badges.push(Span::styled("📌", theme.style(HighlightGroup::PinnedBadge)));
+    }
+    if entry.unread_mention_count > 0 {
+        badges.push(Span::styled("@", theme.style(HighlightGroup::MentionBadge)));
+    }
+    if unread {
+        let group = if entry.is_muted {
+            HighlightGroup::MutedChat
+        } else {
+            HighlightGroup::NotificationBadge
+        };
+        badges.push(Span::styled(
+            format!(" {} ", entry.unread_count),
+            theme.style(group),
+        ));
+    }
+    let badges: Vec<Span<'static>> = badges
         .into_iter()
-        .next()
-        .unwrap_or_else(|| {
-            Line::from(Span::styled(
-                "[No message]",
-                app_context.style_chat_list_item_message_content(),
-            ))
-        }),
-    };
-    text.extend(second_line);
+        .enumerate()
+        .flat_map(|(index, badge)| {
+            let gap = (index > 0).then(|| Span::raw(" "));
+            gap.into_iter().chain(std::iter::once(badge))
+        })
+        .collect();
+    let badges_width: usize = badges.iter().map(Span::width).sum();
+    let preview_width = width.saturating_sub(indent + badges_width + 1).max(1);
+    let mut second = vec![Span::raw(" ".repeat(indent))];
+    second.extend(preview_spans(entry, app_context, preview_width));
 
-    text
+    let mut lines = vec![spread(first, time, width), spread(second, badges, width)];
+    if selected {
+        // Not the spacer, so the highlight stays on the chat itself
+        for line in &mut lines {
+            line.style = theme.style(HighlightGroup::SelectedRow);
+        }
+    }
+    lines.push(Line::default());
+    Text::from(lines)
 }
+
+/// `You: text`, `Name: text` in groups, or the text of the last message,
+/// on one line of `width` columns.
+fn preview_spans(
+    entry: &ChatListEntry,
+    app_context: &AppContext,
+    width: usize,
+) -> Vec<Span<'static>> {
+    let theme = app_context.theme();
+    let text = entry
+        .last_message
+        .as_ref()
+        .map(|message| message.message_content_to_string())
+        .unwrap_or_default();
+    let first_line = text.lines().map(str::trim).find(|line| !line.is_empty());
+    let (Some(message), Some(first_line)) = (&entry.last_message, first_line) else {
+        return vec![Span::styled(
+            "No messages",
+            theme.style(HighlightGroup::Placeholder),
+        )];
+    };
+    let store = app_context.store();
+    let author = if message.sender_id() == store.me() {
+        Some("You".to_owned())
+    } else if entry.kind.is_group() {
+        store.try_name_from_chats_or_users(message.sender_id())
+    } else {
+        None
+    };
+    let mut spans = Vec::new();
+    let mut left = width;
+    if let Some(author) = author.filter(|author| !author.is_empty()) {
+        let author = message::truncate_display_width(&format!("{author}: "), left / 2);
+        left = left.saturating_sub(author.width());
+        spans.push(Span::styled(author, theme.style(HighlightGroup::Muted)));
+    }
+    spans.push(Span::styled(
+        message::truncate_display_width(first_line, left.max(1)),
+        theme.style(HighlightGroup::ChatPreview),
+    ));
+    spans
+}
+
 /// `ChatListWindow` is a struct that represents a window for displaying a list
 /// of chat items. It is responsible for managing the layout and rendering of
 /// the chat list.
@@ -358,12 +437,14 @@ impl ChatListWindow {
     /// Enter search mode.
     fn start_search(&mut self) {
         self.search_mode = true;
+        self.app_context.set_typing(true);
         self.search_input.clear();
     }
 
     /// Exit search mode.
     fn stop_search(&mut self) {
         self.search_mode = false;
+        self.app_context.set_typing(false);
         self.search_input.clear();
         self.default_sort();
     }
@@ -433,8 +514,6 @@ impl Component for ChatListWindow {
                     return Ok(None);
                 }
                 // List content: block has top border (1 row); items start at area.y+1.
-                // Each chat list item is 2 rows (name line + last message line).
-                const ROWS_PER_ITEM: u16 = 2;
                 let content_y = list_area.y + 1; // below top border
                 let content_height = list_area.height.saturating_sub(2); // top and bottom border
                 let row_in_content = row.saturating_sub(content_y);
@@ -443,7 +522,7 @@ impl Component for ChatListWindow {
                 }
                 // Use actual first visible item index from last draw (not inferred from selected).
                 let offset = self.last_list_offset.unwrap_or(0);
-                let item_index = offset + (row_in_content as usize / ROWS_PER_ITEM as usize);
+                let item_index = offset + usize::from(row_in_content / CHAT_LIST_ITEM_ROWS);
                 if item_index < self.visible_chats.len() {
                     self.chat_list_state.select(Some(item_index));
                     return Ok(Some(Action::ChatListOpen));
@@ -540,11 +619,8 @@ impl Component for ChatListWindow {
     }
 
     fn draw(&mut self, frame: &mut Frame<'_>, area: Rect) -> std::io::Result<()> {
-        let style_border_focused = if self.focused {
-            self.app_context.style_border_component_focused()
-        } else {
-            self.app_context.style_chat_list()
-        };
+        let app_context = Arc::clone(&self.app_context);
+        let theme = app_context.theme();
 
         // Split area to include search bar if in search mode
         let (list_area, search_area) = if self.search_mode {
@@ -567,15 +643,9 @@ impl Component for ChatListWindow {
         // Draw only from visible_chats (filter/sort done in update() via rebuild_visible_chats).
         // Draw search bar if in search mode
         if let Some(search_rect) = search_area {
-            let search_block = Block::default()
-                .border_set(PLAIN)
-                .border_style(style_border_focused)
-                .borders(Borders::ALL)
-                .title("Search chats");
+            let search_block = pane::block(theme, pane::title("Search chats"), self.focused);
             let search_text = format!("{}_", self.search_input);
-            let search_paragraph = Paragraph::new(search_text)
-                .block(search_block)
-                .style(self.app_context.style_chat_list());
+            let search_paragraph = Paragraph::new(search_text).block(search_block);
             frame.render_widget(search_paragraph, search_rect);
 
             // Set cursor position in search bar
@@ -587,23 +657,16 @@ impl Component for ChatListWindow {
             }
         }
 
-        let items = self
-            .visible_chats
-            .iter()
-            .map(|item| chat_list_item_text(item, &self.app_context));
-        let block = Block::default()
-            .border_set(PLAIN)
-            .border_style(style_border_focused)
-            .borders(Borders::TOP | Borders::LEFT | Borders::BOTTOM)
-            .title(Line::from(self.name.as_str()));
-
+        let block = pane::block(theme, pane::title("Chats"), self.focused);
+        let width = usize::from(block.inner(list_area).width);
+        let selected = self.chat_list_state.selected();
+        let items = self.visible_chats.iter().enumerate().map(|(index, item)| {
+            chat_list_item_text(item, &self.app_context, width, selected == Some(index))
+        });
+        // The selection is drawn by the rows: marker and highlighted background
         let list = List::new(items)
             .block(block)
-            .style(self.app_context.style_chat_list())
-            .highlight_style(self.app_context.style_chat_list_item_selected())
             .direction(ListDirection::TopToBottom);
-        // .highlight_symbol("➤ ")
-        // .repeat_highlight_symbol(true)
 
         frame.render_stateful_widget(list, list_area, &mut self.chat_list_state);
         // Store first visible item index for click-to-item (List updates state.offset on render).

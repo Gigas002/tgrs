@@ -12,6 +12,7 @@ fn create_test_chat_window() -> ChatWindow {
 
 fn setup_messages(window: &mut ChatWindow, messages: Vec<MessageEntry>) {
     let tg_context = window.app_context.store();
+    tg_context.set_open_chat_id_i64(1);
     {
         let mut store = tg_context.open_chat_messages();
         store.clear();
@@ -110,11 +111,7 @@ fn media_commands_need_media() {
     let mut window = create_test_chat_window();
     let mut rx = with_action_rx(&mut window);
     setup_messages(&mut window, vec![create_mock_message(100, "text only")]);
-    for command in [
-        MessageCommand::OpenMedia,
-        MessageCommand::ViewMedia,
-        MessageCommand::DownloadMedia,
-    ] {
+    for command in [MessageCommand::OpenMedia, MessageCommand::DownloadMedia] {
         window.update(Action::RunMessageCommand(command, 100));
         assert_eq!(
             sent(&mut rx),
@@ -203,7 +200,7 @@ fn message_actions_open_for_the_selected_message() {
 mod previews {
     use super::*;
     use crate::{
-        app::action::{PreviewDecodedPayload, PreviewRequest, PreviewTarget},
+        app::action::{PreviewDecodedPayload, PreviewRequest},
         ui::tests::create_mock_photo_message,
     };
     use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, style::Color};
@@ -243,7 +240,6 @@ mod previews {
         let screen = draw(&mut window);
         assert!(screen.contains("[loading preview…]"), "{screen}");
         let request = PreviewRequest {
-            target: PreviewTarget::Chat,
             message_id: 2,
             file_id: 30,
             path: None,
@@ -389,6 +385,10 @@ mod layout {
         window.message_list_state.select(Some(1));
         let rows = screen(&mut window, 40, 16);
         let text = rows.join("\n");
+        assert!(
+            rows[0].starts_with("┌ Chat "),
+            "the pane is titled:\n{text}"
+        );
         // A grouped continuation gets an empty top border and its time below
         let world = rows.iter().position(|row| row.contains("world")).unwrap();
         assert!(rows[world - 1].contains('╭'), "{text}");
@@ -400,4 +400,22 @@ mod layout {
         );
         assert!(!rows[world - 2].contains('╭'), "{text}");
     }
+}
+
+#[test]
+fn without_an_open_chat_a_hint_is_shown() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut window = create_test_chat_window();
+    let mut terminal = Terminal::new(TestBackend::new(50, 9)).unwrap();
+    terminal
+        .draw(|frame| window.draw(frame, frame.area()).unwrap())
+        .unwrap();
+    let text: String = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect();
+    assert!(text.contains("Select a chat to start messaging"), "{text}");
 }

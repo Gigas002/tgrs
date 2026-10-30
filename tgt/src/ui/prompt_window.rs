@@ -2,8 +2,10 @@ use crate::{
     app::action::{Action, Modifiers},
     app::context::AppContext,
     app::event::Event,
+    settings::HighlightGroup,
     ui::component_name::ComponentName,
     ui::component_traits::{Component, HandleFocus},
+    ui::pane,
 };
 use arboard::Clipboard;
 use crossterm::event::KeyCode;
@@ -11,16 +13,15 @@ use libtgt::model::td_enums::TdMessageReplyToMessage;
 use ratatui::{
     Frame,
     layout::{Position, Rect},
-    symbols::{
-        border::{PLAIN, Set},
-        line::NORMAL,
-    },
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::Paragraph,
 };
 use std::{io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 use unicode_width::UnicodeWidthChar;
+
+/// Longest text message Telegram accepts, in characters.
+const MESSAGE_MAX_CHARS: usize = 4096;
 
 /// `DirSelection` is an enum that represents the direction of the selection.
 /// It is used to keep track of the direction of the selection when the user
@@ -506,6 +507,11 @@ impl Input {
     /// * `app_context` - An Arc wrapped AppContext struct.
     fn send_message(&mut self, app_context: Arc<AppContext>) {
         let action_tx = app_context.action_tx();
+        let composing = matches!(self.mode, Mode::Normal | Mode::Edit(_) | Mode::Reply(_));
+        if composing && self.text_to_string().trim().is_empty() {
+            // Nothing to send: Enter on an empty prompt does nothing
+            return;
+        }
         {
             match self.mode {
                 Mode::Normal => {
@@ -631,10 +637,15 @@ impl PromptWindow {
         let name = "".to_string();
         let action_tx = None;
         let focused = false;
-        let focused_keys = app_context.keymap_config().get_key_of_single_action(
-            ComponentName::CoreWindow,
+        // From the chat, where the hint is read; short keys like `i` first
+        let mut focused_keys = app_context.keymap_config().get_key_of_single_action(
+            ComponentName::Chat,
             Action::FocusComponent(ComponentName::Prompt),
         );
+        focused_keys.sort_by_key(|key| {
+            let name = key.to_string();
+            (name.len(), name)
+        });
 
         let input = Input::default();
 
@@ -751,16 +762,6 @@ impl Component for PromptWindow {
                 self.input.unselect_all();
             }
             Action::Key(key_code, modifiers) => match (key_code, modifiers) {
-                (KeyCode::Left, Modifiers { alt: true, .. }) => {
-                    if let Some(tx) = self.action_tx.as_ref() {
-                        let _ = tx.send(Action::FocusComponent(ComponentName::ChatList));
-                    }
-                }
-                (KeyCode::Right, Modifiers { alt: true, .. }) => {
-                    if let Some(tx) = self.action_tx.as_ref() {
-                        let _ = tx.send(Action::FocusComponent(ComponentName::Chat));
-                    }
-                }
                 (KeyCode::Esc, ..) => {
                     // ESC cancels reply or edit mode and returns focus to chat
                     if matches!(self.input.mode, Mode::Reply(_) | Mode::Edit(_)) {
@@ -878,6 +879,12 @@ impl Component for PromptWindow {
                     self.input.move_cursor_to_next_word();
                 }
 
+                // Ctrl+J is a newline, like Shift/Ctrl/Alt+Enter (Enter sends)
+                (KeyCode::Char('j'), Modifiers { control: true, .. }) => {
+                    self.input.unselect_all();
+                    self.input.insert_newline();
+                }
+
                 (KeyCode::Backspace, Modifiers { control: true, .. })
                 | (KeyCode::Char('h'), Modifiers { control: true, .. })
                 | (KeyCode::Char('w'), Modifiers { control: true, .. }) => {
@@ -987,12 +994,10 @@ impl Component for PromptWindow {
     fn draw(&mut self, frame: &mut Frame<'_>, area: Rect) -> io::Result<()> {
         self.update_input(area);
 
-        let collapsed_top_and_left_border_set = Set {
-            top_left: NORMAL.vertical_right,
-            top_right: NORMAL.vertical_left,
-            bottom_left: NORMAL.horizontal_up,
-            ..PLAIN
-        };
+        let app_context = Arc::clone(&self.app_context);
+        let theme = app_context.theme();
+        let character_count: usize = self.input.text().iter().map(Vec::len).sum::<usize>()
+            + self.input.text().len().saturating_sub(1);
         let text = self
             .input
             .text()
@@ -1018,26 +1023,21 @@ impl Component for PromptWindow {
             })
             .collect::<Vec<Line>>();
 
-        let (text, style_text, style_border_focused) = if self.focused {
+        let (text, style_text) = if self.focused {
             self.input.restore_prompt_size();
-            (
-                text,
-                self.app_context.style_prompt(),
-                self.app_context.style_border_component_focused(),
-            )
+            (text, self.app_context.style_prompt())
         } else {
             self.input.set_prompt_size_to_one_unfocused();
             (
                 vec![Line::from(format!(
-                    "Press {} to send a message",
+                    "Press {} to write a message",
                     self.focused_keys
                         .iter()
                         .map(|e| e.to_string())
                         .collect::<Vec<String>>()
                         .join(" or ")
                 ))],
-                self.app_context.style_prompt_message_preview_text(),
-                self.app_context.style_prompt(),
+                theme.style(HighlightGroup::Placeholder),
             )
         };
 
@@ -1051,14 +1051,32 @@ impl Component for PromptWindow {
                 let preview = tg_context.reply_message_text();
                 Self::reply_title(&preview)
             }
-            Mode::Normal => self.name.clone(),
+            Mode::Normal => match self.app_context.store().name_of_open_chat_id() {
+                Some(name) => format!("Message {name}"),
+                None => "Message".into(),
+            },
         };
 
-        let block = Block::new()
-            .border_set(collapsed_top_and_left_border_set)
-            .border_style(style_border_focused)
-            .borders(Borders::ALL)
-            .title(title);
+        let counter_style = if character_count > MESSAGE_MAX_CHARS {
+            theme.style(HighlightGroup::Error)
+        } else {
+            theme.style(HighlightGroup::MessageSecondary)
+        };
+        let mut block = pane::composer_block(theme, pane::title(&title), self.focused);
+        if self.focused
+            && matches!(
+                self.input.mode,
+                Mode::Normal | Mode::Edit(_) | Mode::Reply(_)
+            )
+        {
+            block = block.title(
+                Line::from(Span::styled(
+                    format!(" {character_count} / {MESSAGE_MAX_CHARS} "),
+                    counter_style,
+                ))
+                .right_aligned(),
+            );
+        }
 
         let input = Paragraph::new(text).style(style_text).block(block);
 

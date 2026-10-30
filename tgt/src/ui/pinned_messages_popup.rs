@@ -112,7 +112,7 @@ impl Component for PinnedMessagesPopup {
                     let _ = tx.send(Action::HidePinnedMessagesPopup);
                 }
             }
-            Action::PinnedPopupViewMedia | Action::PinnedPopupOpenMedia => {
+            Action::PinnedPopupOpenMedia => {
                 self.ensure_current_in_open_cache();
                 let Some(entry) = self.messages.get(self.index) else {
                     return;
@@ -120,10 +120,9 @@ impl Component for PinnedMessagesPopup {
                 let Some(tx) = self.action_tx.as_ref() else {
                     return;
                 };
-                let _ = tx.send(match (entry.media(), action) {
-                    (None, _) => Action::StatusMessage("This message has no media.".into()),
-                    (Some(_), Action::PinnedPopupViewMedia) => Action::ShowMediaViewer(entry.id()),
-                    (Some(_), _) => Action::OpenMedia(entry.id()),
+                let _ = tx.send(match entry.media() {
+                    None => Action::StatusMessage("This message has no media.".into()),
+                    Some(_) => Action::OpenMedia(entry.id()),
                 });
             }
             Action::LoadPinnedMessages if self.visible => {
@@ -216,7 +215,7 @@ impl Component for PinnedMessagesPopup {
         let footer_area = main[2];
 
         let hint = Line::from(vec![Span::styled(
-            "↑/k older  ↓/j newer  Enter jump  v view media  o open media  Esc close",
+            "↑/k older  ↓/j newer  Enter jump  o open media  Esc close",
             self.app_context.style_timestamp(),
         )]);
         frame.render_widget(

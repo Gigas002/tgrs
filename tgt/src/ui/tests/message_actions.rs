@@ -66,7 +66,6 @@ fn own_media_message_enables_media_and_delete() {
     menu.update(Action::ShowMessageActionsFor(5));
     for command in [
         MessageCommand::OpenMedia,
-        MessageCommand::ViewMedia,
         MessageCommand::DownloadMedia,
         MessageCommand::DeleteForMe,
     ] {

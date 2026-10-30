@@ -2,13 +2,14 @@ use {
     crate::{
         app::action::Action,
         app::context::AppContext,
-        app::event::Event,
+        settings::HighlightGroup,
+        ui::component_name::ComponentName,
         ui::component_traits::{Component, HandleFocus},
     },
     ratatui::{
-        layout::{Alignment, Rect},
+        layout::Rect,
         text::{Line, Span},
-        widgets::{Block, Borders, Paragraph, Wrap},
+        widgets::Paragraph,
     },
     std::sync::Arc,
     std::time::Instant,
@@ -26,17 +27,13 @@ pub struct StatusBar {
     command_tx: Option<UnboundedSender<Action>>,
     /// Indicates whether the `StatusBar` is focused or not.
     focused: bool,
-    /// The area of the terminal where the all the content will be rendered.
-    terminal_area: Rect,
-    /// The last key pressed.
-    last_key: Event,
     /// Optional short status message; cleared after STATUS_MESSAGE_DURATION or on next key press.
     status_message: Option<String>,
     /// When the status message was set (for 5s auto-clear).
     status_message_set_at: Option<Instant>,
 }
 
-/// How long a status message is shown before reverting to "Open chat" on line 2.
+/// How long a status message is shown before the hints come back.
 const STATUS_MESSAGE_DURATION_SECS: u64 = 5;
 /// Implementation of `StatusBar` struct.
 impl StatusBar {
@@ -50,8 +47,6 @@ impl StatusBar {
     pub fn new(app_context: Arc<AppContext>) -> Self {
         let command_tx = None;
         let name = "".to_string();
-        let terminal_area = Rect::default();
-        let last_key = Event::Unknown;
         let focused = false;
         let status_message = None;
         let status_message_set_at = None;
@@ -60,8 +55,6 @@ impl StatusBar {
             app_context,
             command_tx,
             name,
-            terminal_area,
-            last_key,
             focused,
             status_message,
             status_message_set_at,
@@ -77,6 +70,14 @@ impl StatusBar {
     pub fn with_name(mut self, name: impl AsRef<str>) -> Self {
         self.name = name.as_ref().to_string();
         self
+    }
+
+    /// The first key bound to `action`, in the chat or everywhere.
+    fn first_key(&self, action: Action) -> Option<String> {
+        let keymap = self.app_context.keymap_config();
+        let mut keys = keymap.get_key_of_single_action(ComponentName::Chat, action);
+        keys.sort_by_key(ToString::to_string);
+        keys.first().map(ToString::to_string)
     }
 }
 
@@ -102,11 +103,7 @@ impl Component for StatusBar {
 
     fn update(&mut self, action: Action) {
         match action {
-            Action::UpdateArea(area) => {
-                self.terminal_area = area;
-            }
-            Action::Key(key, modifiers) => {
-                self.last_key = Event::Key(key, modifiers.into());
+            Action::Key(..) => {
                 self.status_message = None;
                 self.status_message_set_at = None;
             }
@@ -118,96 +115,51 @@ impl Component for StatusBar {
         }
     }
 
+    /// One line: the latest status message for a few seconds, otherwise
+    /// hints for the help and quit keys.
     fn draw(&mut self, frame: &mut ratatui::Frame<'_>, area: Rect) -> std::io::Result<()> {
-        let selected_chat = self
-            .app_context
-            .store()
-            .name_of_open_chat_id()
-            .unwrap_or_default();
-        let mut spans: Vec<Span<'_>> = vec![
-            Span::styled(
-                "Press ",
-                self.app_context.style_status_bar_message_quit_text(),
-            ),
-            Span::styled("q ", self.app_context.style_status_bar_message_quit_key()),
-            Span::styled("or ", self.app_context.style_status_bar_message_quit_text()),
-            Span::styled(
-                "ctrl+c ",
-                self.app_context.style_status_bar_message_quit_key(),
-            ),
-            Span::styled(
-                "to quit",
-                self.app_context.style_status_bar_message_quit_text(),
-            ),
-            Span::raw("     "),
-            Span::styled(
-                "Help: ",
-                self.app_context.style_status_bar_message_quit_text(),
-            ),
-            Span::styled(
-                "alt+F1",
-                self.app_context.style_status_bar_message_quit_key(),
-            ),
-            Span::raw("     "),
-            Span::styled(
-                "Key pressed: ",
-                self.app_context.style_status_bar_press_key_text(),
-            ),
-            Span::styled(
-                self.last_key.to_string(),
-                self.app_context.style_status_bar_press_key_key(),
-            ),
-            Span::raw("     "),
-        ];
-        spans.extend([
-            Span::styled("Size: ", self.app_context.style_status_bar_size_info_text()),
-            Span::styled(
-                self.terminal_area.width.to_string(),
-                self.app_context.style_status_bar_size_info_numbers(),
-            ),
-            Span::styled(" x ", self.app_context.style_status_bar_size_info_text()),
-            Span::styled(
-                self.terminal_area.height.to_string(),
-                self.app_context.style_status_bar_size_info_numbers(),
-            ),
-        ]);
-        // Expire status message after 5 seconds so line 2 reverts to "Open chat".
         if let Some(set_at) = self.status_message_set_at
             && set_at.elapsed() >= std::time::Duration::from_secs(STATUS_MESSAGE_DURATION_SECS)
         {
             self.status_message = None;
             self.status_message_set_at = None;
         }
-        // Line 1: key hints, key pressed, size. Line 2: status message (for 5s) else "Open chat" (default).
-        let line1 = Line::from(spans);
-        let line2_spans: Vec<Span<'_>> = if let Some(ref msg) = self.status_message {
-            vec![Span::styled(
-                msg.as_str(),
-                self.app_context.style_status_bar_message_quit_key(),
-            )]
-        } else {
-            vec![
-                Span::styled(
-                    "Open chat: ",
-                    self.app_context.style_status_bar_open_chat_text(),
-                ),
-                Span::styled(
-                    selected_chat,
-                    self.app_context.style_status_bar_open_chat_name(),
-                ),
-            ]
+        let theme = self.app_context.theme();
+        let line = match &self.status_message {
+            Some(message) => Line::from(Span::styled(
+                format!(" {message}"),
+                theme.style(HighlightGroup::Info),
+            )),
+            None => {
+                let mut spans = vec![Span::raw(" ")];
+                for (index, (action, label)) in [
+                    (Action::ShowLeaderMenu, "menu"),
+                    (Action::ShowCommandGuide, "help"),
+                    (Action::ShowMessageActions, "message actions"),
+                    (Action::TryQuit, "quit"),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    let Some(key) = self.first_key(action) else {
+                        continue;
+                    };
+                    if index > 0 {
+                        spans.push(Span::styled(" · ", theme.style(HighlightGroup::Decoration)));
+                    }
+                    spans.push(Span::styled(key, theme.style(HighlightGroup::Shortcut)));
+                    spans.push(Span::styled(
+                        format!(" {label}"),
+                        theme.style(HighlightGroup::Hint),
+                    ));
+                }
+                Line::from(spans)
+            }
         };
-        let mut text = vec![line1];
-        text.push(Line::from(line2_spans));
-
-        let paragraph = Paragraph::new(text)
-            .block(Block::new().title(self.name.as_str()).borders(Borders::ALL))
-            .style(self.app_context.style_status_bar())
-            .alignment(Alignment::Center)
-            .wrap(Wrap { trim: true });
-
-        frame.render_widget(paragraph, area);
-
+        frame.render_widget(
+            Paragraph::new(line).style(theme.style(HighlightGroup::Normal)),
+            area,
+        );
         Ok(())
     }
 }

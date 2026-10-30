@@ -16,7 +16,7 @@ use ratatui::{
 };
 use ratatui_image::{Resize, StatefulImage, picker::Picker, protocol::StatefulProtocol};
 
-use crate::app::action::{Action, PreviewDecodedPayload, PreviewRequest, PreviewTarget};
+use crate::app::action::{Action, PreviewDecodedPayload, PreviewRequest};
 
 /// Rows a preview takes under its message in the chat.
 pub const CHAT_PREVIEW_ROWS: u16 = 8;
@@ -123,7 +123,6 @@ impl ChatPreviews {
         self.entries.insert(file.id, Entry::Loading);
         self.order.push_back(file.id);
         Some(Action::LoadPreview(PreviewRequest {
-            target: PreviewTarget::Chat,
             message_id,
             file_id: file.id,
             path: file.downloaded_path().map(str::to_owned),
@@ -131,9 +130,6 @@ impl ChatPreviews {
     }
 
     pub fn decoded(&mut self, PreviewDecodedPayload { request, result }: PreviewDecodedPayload) {
-        if request.target != PreviewTarget::Chat {
-            return;
-        }
         // Dropped from the cache meanwhile: it's requested again when shown
         if let Some(entry @ Entry::Loading) = self.entries.get_mut(&request.file_id) {
             *entry = match result {

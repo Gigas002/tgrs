@@ -10,7 +10,7 @@ use libtgt::{
 };
 
 #[cfg(feature = "media-preview")]
-use crate::app::action::{PreviewDecodedPayload, PreviewRequest, PreviewTarget};
+use crate::app::action::{PreviewDecodedPayload, PreviewRequest};
 use crate::{app::action::Action, app::context::AppContext, media};
 
 /// Opens the media of a message with the default application.
@@ -86,15 +86,9 @@ const CHAT_PREVIEW_MAX_DIMENSION: u32 = 400;
 
 /// Downloads (unless the request has a path) and decodes a preview image, then
 /// sends [`Action::PreviewDecoded`]. Large images are downscaled to
-/// `app.preview_max_dimension`, or less for the chat.
+/// 400 pixels on their longer side.
 #[cfg(feature = "media-preview")]
 pub fn load_preview(app_context: &Arc<AppContext>, files: Files, request: PreviewRequest) {
-    let viewer_max = app_context.app_config().preview_max_dimension;
-    let max_dimension = match request.target {
-        PreviewTarget::Viewer => viewer_max,
-        PreviewTarget::Chat if viewer_max == 0 => CHAT_PREVIEW_MAX_DIMENSION,
-        PreviewTarget::Chat => viewer_max.min(CHAT_PREVIEW_MAX_DIMENSION),
-    };
     let action_tx = app_context.action_tx().clone();
     tokio::spawn(async move {
         let path = match request.path.clone() {
@@ -102,9 +96,11 @@ pub fn load_preview(app_context: &Arc<AppContext>, files: Files, request: Previe
             None => files.download(request.file_id).await.map_err(|e| e.message),
         };
         let result = match path {
-            Ok(path) => tokio::task::spawn_blocking(move || decode(&path, max_dimension))
-                .await
-                .unwrap_or_else(|e| Err(e.to_string())),
+            Ok(path) => {
+                tokio::task::spawn_blocking(move || decode(&path, CHAT_PREVIEW_MAX_DIMENSION))
+                    .await
+                    .unwrap_or_else(|e| Err(e.to_string()))
+            }
             Err(e) => Err(e),
         };
         let payload = PreviewDecodedPayload { request, result };
@@ -115,7 +111,7 @@ pub fn load_preview(app_context: &Arc<AppContext>, files: Files, request: Previe
 #[cfg(feature = "media-preview")]
 fn decode(path: &str, max_dimension: u32) -> Result<image::DynamicImage, String> {
     let image = image::open(path).map_err(|e| e.to_string())?;
-    if max_dimension == 0 || image.width().max(image.height()) <= max_dimension {
+    if image.width().max(image.height()) <= max_dimension {
         return Ok(image);
     }
     // `thumbnail` keeps the aspect ratio within the bounds

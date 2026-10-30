@@ -13,16 +13,19 @@ keymap = [
   { keys = ["ctrl+c"], command = "try_quit", description = "Quit the application"},
   # Focus the chat list
   { keys = ["alt+1"], command = "focus_chat_list", description = "Focus the chat list"},
-  { keys = ["alt+left"], command = "focus_chat_list", description = "Focus the chat list"},
   # Focus the chat
   { keys = ["alt+2"], command = "focus_chat", description = "Focus the chat"},
-  { keys = ["alt+right"], command = "focus_chat", description = "Focus the chat"},
   # Focus the prompt
   { keys = ["alt+3"], command = "focus_prompt", description = "Focus the prompt"},
-  { keys = ["alt+down"], command = "focus_prompt", description = "Focus the prompt"},
-  # Unfocus the current component
+  # Leave the prompt for the chat; elsewhere unfocus the current component
   { keys = ["esc"], command = "unfocus_component", description = "Unfocus the current component"},
-  { keys = ["alt+up"], command = "unfocus_component", description = "Unfocus the current component"},
+  # Resize the focused pane, like concord: wider, narrower, taller, shorter
+  { keys = ["alt+right"], command = "resize_pane_wider", description = "Make the focused pane wider"},
+  { keys = ["alt+left"], command = "resize_pane_narrower", description = "Make the focused pane narrower"},
+  { keys = ["alt+up"], command = "resize_pane_taller", description = "Make the focused pane taller"},
+  { keys = ["alt+down"], command = "resize_pane_shorter", description = "Make the focused pane shorter"},
+  # Open the leader menu, like concord: then e.g. 1 hides or shows the chat list
+  { keys = ["space"], command = "show_leader_menu", description = "Open the leader menu"},
   # Toggle chat_list visibility
   { keys = ["alt+n"], command = "toggle_chat_list", description = "Toggle chat_list visibility"},
   # Increase the chat list size
@@ -51,10 +54,8 @@ keymap = [
   { keys = ["down"], command = "chat_list_next", description = "Select the next chat"},
   # Select the previous chat
   { keys = ["up"], command = "chat_list_previous", description = "Select the previous chat"},
-  # Unselect the current chat
-  { keys = ["left"], command = "chat_list_unselect", description = "Unselect the current chat"},
-  # Open the selected chat
-  { keys = ["right"], command = "chat_list_open", description = "Open the selected chat"},
+  # Move to the chat, like concord (Enter opens the selected chat)
+  { keys = ["right"], command = "focus_next_pane", description = "Focus the chat"},
   # Open the selected chat
   { keys = ["enter"], command = "chat_list_open", description = "Open the selected chat"},
   # Move focus to the prompt and set its state to receive a string used to order the entries in the chat list window.
@@ -74,8 +75,11 @@ keymap = [
   { keys = ["up"], command = "chat_window_next", description = "Select the previous message (up)"},
   # Select the previous message (newer, toward bottom of list)
   { keys = ["down"], command = "chat_window_previous", description = "Select the next message (down)"},
-  # Unselect the current message
-  { keys = ["left"], command = "chat_window_unselect", description = "Unselect the current message"},
+  # Move to the chat list or the prompt, like concord
+  { keys = ["left"], command = "focus_previous_pane", description = "Focus the chat list"},
+  { keys = ["right"], command = "focus_next_pane", description = "Focus the prompt"},
+  # Write a message, like concord
+  { keys = ["i"], command = "focus_prompt", description = "Write a message"},
   # Delete the selected message for all users
   { keys = ["d"], command = "chat_window_delete_for_everyone", description = "Delete the selected message for all users"},
   # Delete the selected message for "me"
@@ -102,8 +106,6 @@ keymap = [
   { keys = ["enter"], command = "show_message_actions", description = "Open message actions"},
   # Open the media (photo, video, GIF, audio, voice, file, ...) in its default application, e.g. mpv
   { keys = ["x"], command = "open_message_media", description = "Open media in the default application"},
-  # Show the media in the media viewer (details, and a preview with the media-preview feature)
-  { keys = ["v"], command = "view_message_media", description = "View media"},
   # Save the media or file to the download directory (app.download_dir)
   { keys = ["s"], command = "download_message_media", description = "Download media or file"},
   # Move focus to the prompt and set its state to search messages in the chat window.
@@ -120,13 +122,12 @@ keymap = [
 # Only list prompt-specific bindings here.
 [prompt]
 keymap = [
-  # Send the current message, edit, reply, or search.
-  { keys = ["alt+enter"], command = "prompt_send_message", description = "Send the message"},
+  # Send the current message, edit, reply, or search. Shift/Ctrl/Alt+Enter or
+  # Ctrl+J insert a newline (Shift+Enter and Ctrl+Enter only in terminals that
+  # report them, e.g. with the kitty keyboard protocol).
+  { keys = ["enter"], command = "prompt_send_message", description = "Send the message"},
   # Copy the selected text (overrides core_window try_quit when prompt focused)
   { keys = ["ctrl+c"], command = "prompt_copy", description = "Copy the selected text"},
-  # Focus chat list / chat (so Alt+arrows work even if keymap lookup fails, e.g. terminal escape)
-  { keys = ["alt+left"], command = "focus_chat_list", description = "Focus the chat list"},
-  { keys = ["alt+right"], command = "focus_chat", description = "Focus the chat"},
   # Open message search overlay (same as Alt+R in chat section)
   { keys = ["alt+r"], command = "chat_window_search", description = "Open message search overlay"},
 ]
@@ -165,6 +166,20 @@ keymap = [
   { keys = ["j"], command = "message_actions_next", description = "Next action"},
 ]
 
+# The leader menu opens with Space (see [core_window]) and lists these keys; the
+# pressed key runs its command and closes the menu, any other key just closes it.
+# Like concord, the pane numbers toggle panes: 1 hides or shows the chat list.
+[leader_menu]
+keymap = [
+  { keys = ["1"], command = "toggle_chat_list", description = "Toggle the chat list"},
+  { keys = ["a"], command = "show_message_actions", description = "Actions of the selected message"},
+  { keys = ["space"], command = "chat_list_search", description = "Search chats"},
+  { keys = ["/"], command = "chat_window_search", description = "Search messages"},
+  { keys = ["p"], command = "show_pinned_messages_popup", description = "Pinned messages"},
+  { keys = ["u"], command = "show_file_upload_explorer", description = "Upload a file"},
+  { keys = ["?"], command = "show_command_guide", description = "Help: every key"},
+]
+
 # The picker key bindings are only usable when the reaction or URL picker is open.
 # Besides these, 1-9 and 0 pick the first ten entries directly.
 [picker]
@@ -176,20 +191,6 @@ keymap = [
   { keys = ["k"], command = "picker_previous", description = "Previous entry"},
   { keys = ["down"], command = "picker_next", description = "Next entry"},
   { keys = ["j"], command = "picker_next", description = "Next entry"},
-]
-
-# The media_viewer key bindings are only usable when the media viewer popup is open.
-[media_viewer]
-keymap = [
-  { keys = ["esc"], command = "hide_media_viewer", description = "Close the media viewer"},
-  { keys = ["q"], command = "hide_media_viewer", description = "Close the media viewer"},
-  { keys = ["o"], command = "media_viewer_open", description = "Open in the default application"},
-  { keys = ["enter"], command = "media_viewer_open", description = "Open in the default application"},
-  { keys = ["d"], command = "media_viewer_download", description = "Download"},
-  { keys = ["up"], command = "media_viewer_previous", description = "Previous media"},
-  { keys = ["k"], command = "media_viewer_previous", description = "Previous media"},
-  { keys = ["down"], command = "media_viewer_next", description = "Next media"},
-  { keys = ["j"], command = "media_viewer_next", description = "Next media"},
 ]
 
 [file_upload_explorer]
@@ -208,7 +209,6 @@ keymap = [
   { keys = ["down"], command = "pinned_popup_next", description = "Newer pinned message"},
   { keys = ["k"], command = "pinned_popup_previous", description = "Older pinned message"},
   { keys = ["j"], command = "pinned_popup_next", description = "Newer pinned message"},
-  { keys = ["v"], command = "pinned_popup_view_media", description = "View media of the current pin"},
   { keys = ["o"], command = "pinned_popup_open_media", description = "Open media of the current pin"},
 ]
 

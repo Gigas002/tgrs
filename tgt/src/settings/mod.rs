@@ -22,7 +22,7 @@ pub mod theme;
 #[cfg(test)]
 mod tests;
 
-pub use keymap::{ActionBinding, KeyMap, Keymap, KeymapError};
+pub use keymap::{ActionBinding, KeyMap, Keymap, KeymapError, is_plain_char};
 pub use theme::{BorderSurface, HighlightGroup, Theme};
 
 /// Overrides the config directory, like `--config-dir`.
@@ -35,8 +35,6 @@ pub const API_HASH_ENV: &str = "API_HASH";
 pub const DEFAULT_API_ID: i32 = 94575;
 pub const DEFAULT_API_HASH: &str = "a3406de8d171bb422bb6ddf3bbd800e2";
 pub const DEFAULT_FRAME_RATE: f64 = 60.0;
-pub const DEFAULT_PREVIEW_MAX_DIMENSION: u32 = 1920;
-pub const DEFAULT_MEDIA_VIEWER_POPUP_SIZE: f32 = 0.8;
 pub const DEFAULT_LOG_KEEP: usize = 7;
 pub const DEFAULT_TDLIB_VERBOSITY: i32 = 2;
 pub const DEFAULT_PROXY_PORT: i32 = 1080;
@@ -96,10 +94,6 @@ pub struct App {
     pub use_emoji_icons: bool,
     /// Where downloaded media is saved.
     pub download_dir: PathBuf,
-    /// Longer side of media previews in pixels; 0 disables downscaling.
-    pub preview_max_dimension: u32,
-    /// Media viewer size as a fraction of the terminal (0.01–1.0).
-    pub media_viewer_popup_size: f32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -242,13 +236,6 @@ fn resolve_app(file: &FileConfig, download_dir: PathBuf) -> Result<App, Settings
         show_title_bar: app.show_title_bar.unwrap_or(true),
         use_emoji_icons: app.use_emoji_icons.unwrap_or(false),
         download_dir,
-        preview_max_dimension: app
-            .preview_max_dimension
-            .unwrap_or(DEFAULT_PREVIEW_MAX_DIMENSION),
-        media_viewer_popup_size: app
-            .media_viewer_popup_size
-            .unwrap_or(DEFAULT_MEDIA_VIEWER_POPUP_SIZE)
-            .clamp(0.01, 1.0),
     })
 }
 
