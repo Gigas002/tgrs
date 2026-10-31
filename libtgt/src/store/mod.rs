@@ -27,6 +27,11 @@ mod tests;
 
 pub use open_chat::OpenChatMessageStore;
 
+/// The name of the row standing for the archive in the main chat list.
+pub const ARCHIVE_NAME: &str = "Archived chats";
+/// Archived chats named in the archive row's preview at most.
+const ARCHIVE_PREVIEW_CHATS: usize = 10;
+
 #[derive(Debug)]
 pub struct Store {
     users: Mutex<HashMap<i64, User>>,
@@ -37,6 +42,8 @@ pub struct Store {
 
     // Ordered
     chats_index: Mutex<BTreeSet<OrderedChat>>,
+    /// Chats of the Archive chat list, ordered like `chats_index`.
+    archive_index: Mutex<BTreeSet<OrderedChat>>,
 
     users_full_info: Mutex<HashMap<i64, UserFullInfo>>,
     basic_groups_full_info: Mutex<HashMap<i64, BasicGroupFullInfo>>,
@@ -93,6 +100,9 @@ impl Store {
     }
     pub fn chats_index(&self) -> MutexGuard<'_, BTreeSet<OrderedChat>> {
         self.chats_index.lock().unwrap()
+    }
+    pub fn archive_index(&self) -> MutexGuard<'_, BTreeSet<OrderedChat>> {
+        self.archive_index.lock().unwrap()
     }
     pub fn users_full_info(&self) -> MutexGuard<'_, HashMap<i64, UserFullInfo>> {
         self.users_full_info.lock().unwrap()
@@ -575,8 +585,66 @@ impl Store {
     pub fn chat_list(&self) -> Vec<ChatListEntry> {
         let chats = self.chats();
         let chats_index = self.chats_index();
-        let mut chat_list = Vec::with_capacity(chats_index.len());
-        for ord_chat in chats_index.iter() {
+        self.entries_of(&chats, &chats_index)
+    }
+
+    /// The chats of the Archive chat list, like [`Self::chat_list`].
+    pub fn archived_chat_list(&self) -> Vec<ChatListEntry> {
+        let chats = self.chats();
+        let archive_index = self.archive_index();
+        self.entries_of(&chats, &archive_index)
+    }
+
+    /// Whether a chat is in the Archive chat list.
+    pub fn is_archived(&self, chat_id: i64) -> bool {
+        self.archive_index()
+            .iter()
+            .any(|ord_chat| ord_chat.chat_id == chat_id)
+    }
+
+    /// The row standing for the archive at the top of the main chat list: the
+    /// newest archived message, the archived chats' names as its preview and
+    /// how many of them are unread. None while no chat is archived.
+    pub fn archive_entry(&self) -> Option<ChatListEntry> {
+        let archived = self.archived_chat_list();
+        if archived.is_empty() {
+            return None;
+        }
+        let unread: Vec<&ChatListEntry> = archived
+            .iter()
+            .filter(|chat| chat.unread_count > 0)
+            .collect();
+        let names: Vec<&str> = archived
+            .iter()
+            .map(|chat| chat.chat_name.as_str())
+            .filter(|name| !name.is_empty())
+            .take(ARCHIVE_PREVIEW_CHATS)
+            .collect();
+        Some(ChatListEntry {
+            chat_name: ARCHIVE_NAME.to_owned(),
+            kind: ChatKind::Archive,
+            last_message: archived
+                .iter()
+                .filter_map(|chat| chat.last_message.as_ref())
+                .max_by_key(|message| message.timestamp())
+                .cloned(),
+            summary: Some(names.join(", ")),
+            unread_count: i32::try_from(unread.len()).unwrap_or(i32::MAX),
+            unread_mention_count: archived.iter().map(|chat| chat.unread_mention_count).sum(),
+            // Dimmed unless an unmuted chat is unread
+            is_muted: unread.iter().all(|chat| chat.is_muted),
+            ..ChatListEntry::default()
+        })
+    }
+
+    /// The rows of the chats in `index`, in its order.
+    fn entries_of(
+        &self,
+        chats: &HashMap<i64, Chat>,
+        index: &BTreeSet<OrderedChat>,
+    ) -> Vec<ChatListEntry> {
+        let mut chat_list = Vec::with_capacity(index.len());
+        for ord_chat in index.iter() {
             let mut entry = ChatListEntry {
                 chat_id: ord_chat.chat_id,
                 is_pinned: ord_chat.position.is_pinned,
@@ -612,6 +680,7 @@ impl Default for Store {
             secret_chats: Mutex::default(),
             chats: Mutex::default(),
             chats_index: Mutex::default(),
+            archive_index: Mutex::default(),
             users_full_info: Mutex::default(),
             basic_groups_full_info: Mutex::default(),
             supergroups_full_info: Mutex::default(),

@@ -10,6 +10,7 @@ use crate::{
         MIN_PROMPT_SIZE,
     },
     ui::{
+        archive_list_window::ArchiveListWindow,
         chat_list_window::ChatListWindow,
         chat_window::ChatWindow,
         command_guide::CommandGuide,
@@ -31,7 +32,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use super::reply_message::ReplyMessage;
 
-/// Width of the chat list and the topic list when shown, in percent.
+/// Width of the chat list, the archived chats and the topic list when shown, in percent.
 const DEFAULT_SIDE_PANE_SIZE: u16 = 20;
 
 /// `CoreWindow` is a struct that represents the core window of the application.
@@ -61,6 +62,10 @@ pub struct CoreWindow {
     size_chat_list: u16,
     /// The size of the topic list, shown while the open chat is a forum; 0 hides it.
     size_topic_list: u16,
+    /// The size of the archived chats when shown.
+    size_archive_list: u16,
+    /// Whether the archived chats are shown, after opening the archive row.
+    archive_list_shown: bool,
     /// The name of the component that currently has focus. It is an optional
     /// value because no component may have focus. The focus is a component
     /// inside the `CoreWindow`.
@@ -89,6 +94,12 @@ impl CoreWindow {
                 ComponentName::ChatList,
                 ChatListWindow::new(Arc::clone(&app_context))
                     .with_name(ComponentName::ChatList.to_string())
+                    .new_boxed(),
+            ),
+            (
+                ComponentName::ArchiveList,
+                ArchiveListWindow::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::ArchiveList.to_string())
                     .new_boxed(),
             ),
             (
@@ -180,6 +191,8 @@ impl CoreWindow {
             components,
             size_chat_list,
             size_topic_list: DEFAULT_SIDE_PANE_SIZE,
+            size_archive_list: DEFAULT_SIDE_PANE_SIZE,
+            archive_list_shown: false,
             size_prompt,
             prompt_extra_rows: 0,
             focus_before_leader: None,
@@ -215,19 +228,14 @@ impl CoreWindow {
     /// Toggle the chat list component.
     pub fn toggle_chat_list(&mut self) {
         self.size_chat_list = if self.size_chat_list == 0 {
-            DEFAULT_SIDE_PANE_SIZE.min(MAX_SIDE_PANES_SIZE - self.shown_topic_list_size())
+            DEFAULT_SIDE_PANE_SIZE.min(MAX_SIDE_PANES_SIZE.saturating_sub(self.side_panes_size()))
         } else {
             0
         };
     }
     /// Increase the size of the chat list component.
     pub fn increase_chat_list_size(&mut self) {
-        if self.size_chat_list == MAX_CHAT_LIST_SIZE
-            || self.size_chat_list + self.shown_topic_list_size() >= MAX_SIDE_PANES_SIZE
-        {
-            return;
-        }
-        self.size_chat_list += 1;
+        self.resize_side_pane(ComponentName::ChatList, true);
     }
 
     /// Whether the topic list is drawn: the open chat is a forum and it isn't hidden.
@@ -235,35 +243,111 @@ impl CoreWindow {
         self.size_topic_list > 0 && self.app_context.store().open_chat_is_forum()
     }
 
-    /// The width the topic list takes, 0 while it isn't shown.
-    fn shown_topic_list_size(&self) -> u16 {
-        if self.topic_list_shown() {
-            self.size_topic_list
-        } else {
-            0
-        }
-    }
-
     /// Hides or shows the topic list.
     pub fn toggle_topic_list(&mut self) {
         self.size_topic_list = if self.size_topic_list == 0 {
-            DEFAULT_SIDE_PANE_SIZE.min(MAX_SIDE_PANES_SIZE - self.size_chat_list)
+            DEFAULT_SIDE_PANE_SIZE.min(MAX_SIDE_PANES_SIZE.saturating_sub(self.side_panes_size()))
         } else {
             0
         };
     }
-    /// Makes the topic list wider (`true`) or narrower, within the chat list's limits.
-    fn resize_topic_list(&mut self, wider: bool) {
-        if wider {
-            if self.size_topic_list < MAX_CHAT_LIST_SIZE
-                && self.size_topic_list + self.size_chat_list < MAX_SIDE_PANES_SIZE
-            {
-                self.size_topic_list += 1;
-            }
-        } else if self.size_topic_list > MIN_CHAT_LIST_SIZE {
-            self.size_topic_list -= 1;
+
+    /// Shows the archived chats, which start at the open chat again.
+    fn show_archive_list(&mut self) {
+        if self.archive_list_shown {
+            return;
+        }
+        self.archive_list_shown = true;
+        if let Some(archive) = self.components.get_mut(&ComponentName::ArchiveList) {
+            archive.update(Action::FocusComponent(ComponentName::ArchiveList));
         }
     }
+
+    /// Hides the archived chats; their focus goes to the chat list.
+    fn hide_archive_list(&mut self) {
+        self.archive_list_shown = false;
+        if self.component_focused == Some(ComponentName::ArchiveList) {
+            let next = if self.size_chat_list > 0 {
+                ComponentName::ChatList
+            } else {
+                ComponentName::Chat
+            };
+            self.focus_only(Some(next));
+        }
+    }
+
+    /// The side panes shown left of the chat, from the left.
+    fn side_panes(&self) -> Vec<ComponentName> {
+        let mut panes = Vec::new();
+        if self.size_chat_list > 0 {
+            panes.push(ComponentName::ChatList);
+        }
+        if self.archive_list_shown {
+            panes.push(ComponentName::ArchiveList);
+        }
+        if self.topic_list_shown() {
+            panes.push(ComponentName::TopicList);
+        }
+        panes
+    }
+
+    /// The width a side pane takes, 0 while it isn't shown.
+    fn side_pane_width(&self, pane: ComponentName) -> u16 {
+        match pane {
+            ComponentName::ChatList => self.size_chat_list,
+            ComponentName::ArchiveList if self.archive_list_shown => self.size_archive_list,
+            ComponentName::TopicList if self.topic_list_shown() => self.size_topic_list,
+            _ => 0,
+        }
+    }
+
+    /// The width the shown side panes take together.
+    fn side_panes_size(&self) -> u16 {
+        self.side_panes()
+            .into_iter()
+            .map(|pane| self.side_pane_width(pane))
+            .sum()
+    }
+
+    fn side_pane_size_mut(&mut self, pane: ComponentName) -> Option<&mut u16> {
+        match pane {
+            ComponentName::ChatList => Some(&mut self.size_chat_list),
+            ComponentName::ArchiveList => Some(&mut self.size_archive_list),
+            ComponentName::TopicList => Some(&mut self.size_topic_list),
+            _ => None,
+        }
+    }
+
+    /// Makes a side pane wider (`true`) or narrower, within the chat list's
+    /// limits and leaving the chat its share of the width.
+    fn resize_side_pane(&mut self, pane: ComponentName, wider: bool) {
+        let full = self.side_panes_size() >= MAX_SIDE_PANES_SIZE;
+        let Some(size) = self.side_pane_size_mut(pane) else {
+            return;
+        };
+        if wider {
+            if *size < MAX_CHAT_LIST_SIZE && !full {
+                *size += 1;
+            }
+        } else if *size > MIN_CHAT_LIST_SIZE {
+            *size -= 1;
+        }
+    }
+
+    /// Narrows the side panes, the leftmost first, until they leave the chat
+    /// its share of the width: a forum may open while they are wide.
+    fn fit_side_panes(&mut self) {
+        for pane in self.side_panes() {
+            let excess = self.side_panes_size().saturating_sub(MAX_SIDE_PANES_SIZE);
+            if excess == 0 {
+                break;
+            }
+            if let Some(size) = self.side_pane_size_mut(pane) {
+                *size -= excess.min(size.saturating_sub(MIN_CHAT_LIST_SIZE));
+            }
+        }
+    }
+
     /// Increase the size of the chat list component.
     pub fn increase_size_prompt(&mut self) {
         if self.size_prompt == MAX_PROMPT_SIZE {
@@ -273,10 +357,7 @@ impl CoreWindow {
     }
     /// Decrease the size of the chat list component.
     pub fn decrease_chat_list_size(&mut self) {
-        if self.size_chat_list == MIN_CHAT_LIST_SIZE {
-            return;
-        }
-        self.size_chat_list -= 1;
+        self.resize_side_pane(ComponentName::ChatList, false);
     }
     /// Decrease the size of the chat list component.
     pub fn decrease_size_prompt(&mut self) {
@@ -288,13 +369,7 @@ impl CoreWindow {
 
     /// Panes in the order Left/Right move through; hidden lists are skipped.
     fn panes(&self) -> Vec<ComponentName> {
-        let mut panes = Vec::new();
-        if self.size_chat_list > 0 {
-            panes.push(ComponentName::ChatList);
-        }
-        if self.topic_list_shown() {
-            panes.push(ComponentName::TopicList);
-        }
+        let mut panes = self.side_panes();
         panes.extend([ComponentName::Chat, ComponentName::Prompt]);
         panes
     }
@@ -322,26 +397,15 @@ impl CoreWindow {
     /// The chat and the prompt share the right side, so they grow together,
     /// taking from the pane left of them.
     fn resize_focused_width(&mut self, wider: bool) {
-        let chat_list = self.size_chat_list > 0;
-        let topic_list = self.topic_list_shown();
+        let side_panes = self.side_panes();
         match self.component_focused {
-            Some(ComponentName::ChatList) if chat_list => self.resize_chat_list(wider),
-            Some(ComponentName::TopicList) if topic_list => self.resize_topic_list(wider),
-            Some(ComponentName::Chat | ComponentName::Prompt) if topic_list => {
-                self.resize_topic_list(!wider);
+            Some(ComponentName::Chat | ComponentName::Prompt) => {
+                if let Some(left) = side_panes.last() {
+                    self.resize_side_pane(*left, !wider);
+                }
             }
-            Some(ComponentName::Chat | ComponentName::Prompt) if chat_list => {
-                self.resize_chat_list(!wider);
-            }
+            Some(pane) if side_panes.contains(&pane) => self.resize_side_pane(pane, wider),
             _ => {}
-        }
-    }
-
-    fn resize_chat_list(&mut self, wider: bool) {
-        if wider {
-            self.increase_chat_list_size();
-        } else {
-            self.decrease_chat_list_size();
         }
     }
 
@@ -485,6 +549,7 @@ impl Component for CoreWindow {
                 let row = mouse.row;
                 for name in [
                     ComponentName::ChatList,
+                    ComponentName::ArchiveList,
                     ComponentName::TopicList,
                     ComponentName::Chat,
                     ComponentName::Prompt,
@@ -534,6 +599,9 @@ impl Component for CoreWindow {
                 if component_name == ComponentName::TopicList && self.size_topic_list == 0 {
                     self.toggle_topic_list();
                 }
+                if component_name == ComponentName::ArchiveList {
+                    self.show_archive_list();
+                }
                 // If the previously focused component was a popup, hide it automatically
                 if let Some(prev_focused) = self.component_focused
                     && prev_focused.is_popup()
@@ -568,6 +636,14 @@ impl Component for CoreWindow {
                     self.focus_only(Some(ComponentName::Chat));
                 }
             }
+            Action::ToggleArchiveList => {
+                if self.archive_list_shown {
+                    self.hide_archive_list();
+                } else {
+                    self.show_archive_list();
+                }
+            }
+            Action::CloseArchiveList => self.hide_archive_list(),
             Action::ToggleTopicList => {
                 self.toggle_topic_list();
                 // A hidden topic list can't keep the focus
@@ -823,11 +899,14 @@ impl Component for CoreWindow {
     }
 
     fn draw(&mut self, frame: &mut ratatui::Frame<'_>, area: Rect) -> io::Result<()> {
-        let size_topic_list = self.shown_topic_list_size();
+        self.fit_side_panes();
+        let size_archive_list = self.side_pane_width(ComponentName::ArchiveList);
+        let size_topic_list = self.side_pane_width(ComponentName::TopicList);
         let core_layout = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Percentage(self.size_chat_list),
+                Constraint::Percentage(size_archive_list),
                 Constraint::Percentage(size_topic_list),
                 Constraint::Fill(1),
             ])
@@ -846,13 +925,15 @@ impl Component for CoreWindow {
                 },
                 Constraint::Length(self.size_prompt + self.prompt_extra_rows),
             ])
-            .split(core_layout[2]);
+            .split(core_layout[3]);
 
-        // Store areas for click-to-focus (chat list, topic list, chat window, prompt)
+        // Store areas for click-to-focus (chat list, archive, topic list, chat window, prompt)
         self.last_focusable_areas
             .insert(ComponentName::ChatList, core_layout[0]);
         self.last_focusable_areas
-            .insert(ComponentName::TopicList, core_layout[1]);
+            .insert(ComponentName::ArchiveList, core_layout[1]);
+        self.last_focusable_areas
+            .insert(ComponentName::TopicList, core_layout[2]);
         self.last_focusable_areas
             .insert(ComponentName::Chat, sub_core_layout[0]);
         self.last_focusable_areas
@@ -863,11 +944,20 @@ impl Component for CoreWindow {
             .unwrap_or_else(|| panic!("Failed to get component: {}", ComponentName::ChatList))
             .draw(frame, core_layout[0])?;
 
+        if size_archive_list > 0 {
+            self.components
+                .get_mut(&ComponentName::ArchiveList)
+                .unwrap_or_else(|| {
+                    panic!("Failed to get component: {}", ComponentName::ArchiveList)
+                })
+                .draw(frame, core_layout[1])?;
+        }
+
         if size_topic_list > 0 {
             self.components
                 .get_mut(&ComponentName::TopicList)
                 .unwrap_or_else(|| panic!("Failed to get component: {}", ComponentName::TopicList))
-                .draw(frame, core_layout[1])?;
+                .draw(frame, core_layout[2])?;
         }
 
         self.components

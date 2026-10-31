@@ -50,6 +50,7 @@ pub struct Keymap {
 /// Components with their own section in `keymap.toml`.
 const SECTIONS: &[(ComponentName, &str)] = &[
     (ComponentName::ChatList, "chat_list"),
+    (ComponentName::ArchiveList, "archive_list"),
     (ComponentName::TopicList, "topic_list"),
     (ComponentName::Chat, "chat"),
     (ComponentName::Prompt, "prompt"),
@@ -65,6 +66,7 @@ const SECTIONS: &[(ComponentName, &str)] = &[
 fn section(file: &KeymapFile, component: ComponentName) -> Option<&KeymapMode> {
     match component {
         ComponentName::ChatList => file.chat_list.as_ref(),
+        ComponentName::ArchiveList => file.archive_list.as_ref(),
         ComponentName::TopicList => file.topic_list.as_ref(),
         ComponentName::Chat => file.chat.as_ref(),
         ComponentName::Prompt => file.prompt.as_ref(),

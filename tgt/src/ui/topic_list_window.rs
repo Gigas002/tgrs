@@ -115,7 +115,7 @@ pub struct TopicListWindow {
     topic_list_state: ListState,
     /// Indicates whether the `TopicListWindow` is focused or not.
     focused: bool,
-    /// Last list area (for click-to-select item when focused).
+    /// Where the rows were drawn last (for click-to-select item when focused).
     last_list_area: Option<Rect>,
     /// First visible item index after last draw (used for click-to-item).
     last_list_offset: Option<usize>,
@@ -231,22 +231,16 @@ impl Component for TopicListWindow {
                 let Some(area) = self.last_list_area else {
                     return Ok(None);
                 };
-                let (col, row) = (mouse.column, mouse.row);
-                // Rows start below the top border and end above the bottom one
-                let inside = col > area.x
-                    && col < area.x + area.width.saturating_sub(1)
-                    && row > area.y
-                    && row < area.y + area.height.saturating_sub(1);
-                if !inside {
-                    return Ok(None);
-                }
                 let offset = self.last_list_offset.unwrap_or(0);
-                let index = offset + usize::from((row - area.y - 1) / CHAT_LIST_ITEM_ROWS);
-                if index >= self.visible_topics.len() {
-                    return Ok(None);
+                let index =
+                    pane::item_at(area, mouse.column, mouse.row, offset, CHAT_LIST_ITEM_ROWS);
+                match index {
+                    Some(index) if index < self.visible_topics.len() => {
+                        self.select(Some(index));
+                        Ok(Some(Action::TopicListOpen))
+                    }
+                    _ => Ok(None),
                 }
-                self.select(Some(index));
-                Ok(Some(Action::TopicListOpen))
             }
             _ => Ok(None),
         }
@@ -267,12 +261,13 @@ impl Component for TopicListWindow {
         let app_context = Arc::clone(&self.app_context);
         let theme = app_context.theme();
         self.refresh();
-        self.last_list_area = Some(area);
 
-        let block = pane::block(theme, pane::title("Topics"), self.focused);
+        let block = pane::list_block(theme, pane::title("Topics"), self.focused);
+        let inner = block.inner(area);
+        self.last_list_area = Some(inner);
         if self.visible_topics.is_empty() {
             let placeholder = Paragraph::new(Line::styled(
-                " Loading topics…",
+                "Loading topics…",
                 theme.style(HighlightGroup::Placeholder),
             ))
             .block(block);
@@ -280,7 +275,7 @@ impl Component for TopicListWindow {
             return Ok(());
         }
 
-        let width = usize::from(block.inner(area).width);
+        let width = usize::from(inner.width);
         let selected = self.topic_list_state.selected();
         let open = app_context.store().open_topic_id();
         let items = self

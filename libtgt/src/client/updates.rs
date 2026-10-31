@@ -1,6 +1,5 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
-use std::sync::MutexGuard;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -144,7 +143,7 @@ async fn apply(
             let mut chat = update.chat;
             store.chats().insert(chat.id, chat.clone());
             let positions = std::mem::take(&mut chat.positions);
-            set_chat_positions(store.chats_index(), &mut chat, positions);
+            set_chat_positions(store, &mut chat, positions);
             throttle.request(notify);
         }
         Update::ChatTitle(update) => {
@@ -164,30 +163,28 @@ async fn apply(
             // Also received when a message is edited
             let changed = with_chat(store, update.chat_id, |chat| {
                 chat.last_message = update.last_message;
-                set_chat_positions(store.chats_index(), chat, update.positions);
+                set_chat_positions(store, chat, update.positions);
             });
             if changed {
                 throttle.request(notify);
             }
         }
-        Update::ChatPosition(update) => {
-            if let ChatList::Main = update.position.list {
-                let changed = with_chat(store, update.chat_id, |chat| {
-                    let mut positions: Vec<ChatPosition> = Vec::new();
-                    if update.position.order != 0 {
-                        positions.push(update.position);
-                    }
-                    positions.extend(
-                        chat.positions
-                            .iter()
-                            .filter(|p| !matches!(p.list, ChatList::Main))
-                            .cloned(),
-                    );
-                    set_chat_positions(store.chats_index(), chat, positions);
-                });
-                if changed {
-                    throttle.request(notify);
+        Update::ChatPosition(update) if is_indexed(&update.position.list) => {
+            let changed = with_chat(store, update.chat_id, |chat| {
+                let mut positions: Vec<ChatPosition> = Vec::new();
+                if update.position.order != 0 {
+                    positions.push(update.position.clone());
                 }
+                positions.extend(
+                    chat.positions
+                        .iter()
+                        .filter(|p| p.list != update.position.list)
+                        .cloned(),
+                );
+                set_chat_positions(store, chat, positions);
+            });
+            if changed {
+                throttle.request(notify);
             }
         }
         Update::ChatReadInbox(update) => {
@@ -236,7 +233,7 @@ async fn apply(
         Update::ChatDraftMessage(update) => {
             with_chat(store, update.chat_id, |chat| {
                 chat.draft_message = update.draft_message;
-                set_chat_positions(store.chats_index(), chat, update.positions);
+                set_chat_positions(store, chat, update.positions);
             });
         }
         Update::ChatMessageSender(update) => {
@@ -414,14 +411,18 @@ async fn apply(
     }
 }
 
-fn set_chat_positions(
-    mut chats_index: MutexGuard<'_, BTreeSet<OrderedChat>>,
-    chat: &mut Chat,
-    positions: Vec<ChatPosition>,
-) {
+/// Whether a chat list is kept ordered in the store: the main one and the archive.
+fn is_indexed(list: &ChatList) -> bool {
+    matches!(list, ChatList::Main | ChatList::Archive)
+}
+
+/// Lock `chats` before calling (see [`Store::chat_list`]).
+fn set_chat_positions(store: &Store, chat: &mut Chat, positions: Vec<ChatPosition>) {
+    let mut chats_index = store.chats_index();
+    let mut archive_index = store.archive_index();
     for position in &chat.positions {
-        if let ChatList::Main = position.list {
-            chats_index.remove(&OrderedChat {
+        if let Some(index) = index_of(&position.list, &mut chats_index, &mut archive_index) {
+            index.remove(&OrderedChat {
                 position: position.clone(),
                 chat_id: chat.id,
             });
@@ -431,11 +432,24 @@ fn set_chat_positions(
     chat.positions = positions;
 
     for position in &chat.positions {
-        if let ChatList::Main = position.list {
-            chats_index.insert(OrderedChat {
+        if let Some(index) = index_of(&position.list, &mut chats_index, &mut archive_index) {
+            index.insert(OrderedChat {
                 position: position.clone(),
                 chat_id: chat.id,
             });
         }
+    }
+}
+
+/// The index of `list` among the store's, see [`is_indexed`].
+fn index_of<'a>(
+    list: &ChatList,
+    chats_index: &'a mut BTreeSet<OrderedChat>,
+    archive_index: &'a mut BTreeSet<OrderedChat>,
+) -> Option<&'a mut BTreeSet<OrderedChat>> {
+    match list {
+        ChatList::Main => Some(chats_index),
+        ChatList::Archive => Some(archive_index),
+        ChatList::Folder(_) => None,
     }
 }

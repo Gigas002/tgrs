@@ -279,3 +279,122 @@ mod topics {
         }));
     }
 }
+
+mod archive {
+    use tdlib_rs::enums::{ChatAvailableReactions, ChatList, ChatType};
+    use tdlib_rs::types::{
+        Chat, ChatAvailableReactionsAll, ChatNotificationSettings, ChatPosition, ChatTypePrivate,
+    };
+
+    use crate::model::{ChatKind, OrderedChat};
+    use crate::store::{ARCHIVE_NAME, Store};
+
+    fn chat(id: i64, title: &str, unread_count: i32, muted: bool) -> Chat {
+        Chat {
+            id,
+            r#type: ChatType::Private(ChatTypePrivate { user_id: id }),
+            title: title.to_owned(),
+            photo: None,
+            accent_color_id: 0,
+            background_custom_emoji_id: 0,
+            upgraded_gift_colors: None,
+            profile_accent_color_id: 0,
+            profile_background_custom_emoji_id: 0,
+            permissions: Default::default(),
+            last_message: None,
+            positions: Vec::new(),
+            chat_lists: Vec::new(),
+            message_sender_id: None,
+            block_list: None,
+            has_protected_content: false,
+            is_translatable: false,
+            is_marked_as_unread: false,
+            view_as_topics: false,
+            has_scheduled_messages: false,
+            has_welcome_messages: false,
+            can_be_deleted_only_for_self: false,
+            can_be_deleted_for_all_users: false,
+            can_be_reported: false,
+            default_disable_notification: false,
+            unread_count,
+            last_read_inbox_message_id: 0,
+            last_read_outbox_message_id: 0,
+            unread_mention_count: 0,
+            unread_reaction_count: 0,
+            unread_poll_vote_count: 0,
+            notification_settings: ChatNotificationSettings {
+                use_default_mute_for: !muted,
+                mute_for: if muted { i32::MAX } else { 0 },
+                ..Default::default()
+            },
+            available_reactions: ChatAvailableReactions::All(ChatAvailableReactionsAll::default()),
+            message_auto_delete_time: 0,
+            emoji_status: None,
+            background: None,
+            theme: None,
+            action_bar: None,
+            business_bot_manage_bar: None,
+            video_chat: Default::default(),
+            pending_join_requests: None,
+            reply_markup_message_id: 0,
+            draft_message: None,
+            client_data: String::new(),
+        }
+    }
+
+    /// Puts `chat` in `list` at `order`.
+    fn add(store: &Store, chat: Chat, list: ChatList, order: i64) {
+        let ordered = OrderedChat {
+            chat_id: chat.id,
+            position: ChatPosition {
+                list: list.clone(),
+                order,
+                is_pinned: false,
+                source: None,
+            },
+        };
+        store.chats().insert(chat.id, chat);
+        match list {
+            ChatList::Archive => store.archive_index().insert(ordered),
+            _ => store.chats_index().insert(ordered),
+        };
+    }
+
+    fn names(chats: &[crate::model::ChatListEntry]) -> Vec<&str> {
+        chats.iter().map(|chat| chat.chat_name.as_str()).collect()
+    }
+
+    #[test]
+    fn archived_chats_are_listed_apart_from_the_main_list() {
+        let store = Store::default();
+        add(&store, chat(1, "Friend", 0, false), ChatList::Main, 5);
+        add(&store, chat(2, "Old group", 0, true), ChatList::Archive, 1);
+        add(&store, chat(3, "Old bot", 0, true), ChatList::Archive, 2);
+
+        assert_eq!(names(&store.chat_list()), ["Friend"]);
+        assert_eq!(names(&store.archived_chat_list()), ["Old bot", "Old group"]);
+        assert!(store.is_archived(2));
+        assert!(!store.is_archived(1));
+    }
+
+    #[test]
+    fn the_archive_row_counts_unread_chats_and_names_them() {
+        let store = Store::default();
+        assert!(store.archive_entry().is_none());
+
+        add(&store, chat(2, "Old group", 4, true), ChatList::Archive, 1);
+        add(&store, chat(3, "Old bot", 0, false), ChatList::Archive, 2);
+        let entry = store.archive_entry().unwrap();
+        assert_eq!(entry.kind, ChatKind::Archive);
+        assert_eq!(entry.chat_name, ARCHIVE_NAME);
+        assert_eq!(entry.summary.as_deref(), Some("Old bot, Old group"));
+        assert_eq!(entry.unread_count, 1);
+        // Only muted chats are unread
+        assert!(entry.is_muted);
+
+        add(&store, chat(4, "Loud", 1, false), ChatList::Archive, 3);
+        let entry = store.archive_entry().unwrap();
+        assert_eq!(entry.unread_count, 2);
+        assert!(!entry.is_muted);
+    }
+}

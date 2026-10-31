@@ -6,7 +6,7 @@ use crate::ui::component_name::ComponentName::Prompt;
 use crate::ui::component_traits::{Component, HandleFocus};
 use crate::ui::{message, pane};
 use crossterm::event::{KeyCode, MouseButton, MouseEventKind};
-use libtgt::model::{ChatListEntry, MessageEntry, format_timestamp};
+use libtgt::model::{ChatKind, ChatListEntry, MessageEntry, format_timestamp};
 use libtgt::tdlib_rs::enums::{ChatList, UserStatus};
 use nucleo_matcher::{Matcher, Utf32Str};
 use ratatui::Frame;
@@ -101,12 +101,18 @@ pub(crate) fn chat_list_item_text(
     let badges_width: usize = badges.iter().map(Span::width).sum();
     let preview_width = width.saturating_sub(indent + badges_width + 1).max(1);
     let mut second = vec![Span::raw(" ".repeat(indent))];
-    second.extend(preview_spans(
-        entry.last_message.as_ref(),
-        entry.kind.is_group(),
-        app_context,
-        preview_width,
-    ));
+    match &entry.summary {
+        Some(summary) => second.push(Span::styled(
+            message::truncate_display_width(summary, preview_width),
+            theme.style(HighlightGroup::ChatPreview),
+        )),
+        None => second.extend(preview_spans(
+            entry.last_message.as_ref(),
+            entry.kind.is_group(),
+            app_context,
+            preview_width,
+        )),
+    }
 
     let mut lines = vec![spread(first, time, width), spread(second, badges, width)];
     if selected {
@@ -197,6 +203,53 @@ pub(crate) fn preview_spans(
     spans
 }
 
+/// Opens `chat`, from the chat list or the archived chats: its messages are
+/// loaded and the prompt focused, or for a forum the topic list. An already
+/// open chat is kept as it is.
+pub(crate) fn open_chat(app_context: &AppContext, chat: &ChatListEntry) {
+    let store = app_context.store();
+    let action_tx = app_context.action_tx();
+    let open_id = store.open_chat_id().as_i64();
+    tracing::info!(
+        open_id,
+        selected_chat_id = chat.chat_id,
+        "open_chat: comparing open vs selected chat"
+    );
+    let is_forum = store.is_forum(chat.chat_id);
+    // A forum's messages are in its topics: pick one first
+    let next_pane = if is_forum {
+        ComponentName::TopicList
+    } else {
+        Prompt
+    };
+    if open_id == chat.chat_id {
+        // Same chat already open: don't clear/reload (avoids wiping messages on re-confirm).
+        let _ = action_tx.send(Action::FocusComponent(next_pane));
+        let _ = action_tx.send(Action::LoadPinnedMessages);
+        let _ = action_tx.send(Action::ViewAllMessages);
+        return;
+    }
+    store.set_open_chat_user(chat.user.clone());
+    store.set_open_chat_id_i64(chat.chat_id);
+    store.set_open_chat_is_forum(is_forum);
+    store.set_open_topic_id(None);
+    store.set_open_chat_topics(Vec::new());
+    store.clear_open_chat_messages();
+    store.set_open_chat_pinned(Vec::new());
+    store.set_jump_target_message_id_i64(0);
+    if is_forum {
+        let _ = action_tx.send(Action::LoadForumTopics);
+        let _ = action_tx.send(Action::FocusComponent(next_pane));
+        return;
+    }
+    let _ = action_tx.send(Action::FocusComponent(Prompt));
+    // Start loading chat history immediately (same handle_app_actions run).
+    let _ = action_tx.send(Action::GetChatHistory);
+    let _ = action_tx.send(Action::LoadPinnedMessages);
+    // Mark all unread messages as read
+    let _ = action_tx.send(Action::ViewAllMessages);
+}
+
 /// `ChatListWindow` is a struct that represents a window for displaying a list
 /// of chat items. It is responsible for managing the layout and rendering of
 /// the chat list.
@@ -219,7 +272,7 @@ pub struct ChatListWindow {
     search_input: String,
     /// Whether search mode is active.
     search_mode: bool,
-    /// Last list content area (for click-to-select item when focused).
+    /// Where the rows were drawn last (for click-to-select item when focused).
     last_list_area: Option<Rect>,
     /// First visible item index after last draw (from ListState offset; used for click-to-item).
     last_list_offset: Option<usize>,
@@ -305,78 +358,32 @@ impl ChatListWindow {
     fn unselect(&mut self) {
         self.chat_list_state.select(None);
     }
-    /// Confirm the selection of the chat item in the list.
+    /// Confirm the selection of the chat item in the list: the archive row
+    /// shows the archived chats, any other opens its chat.
     fn confirm_selection(&mut self) {
-        if let Some(i) = self.chat_list_state.selected()
-            && let Some(chat) = self.visible_chats.get(i)
-        {
-            // Explicit i64 comparison (TDLib uses int64); avoid any type/guard mismatch.
-            let open_id: i64 = self.app_context.store().open_chat_id().as_i64();
-            let selected_chat_id: i64 = chat.chat_id;
-            tracing::info!(
-                open_id,
-                selected_chat_id,
-                selected_index = i,
-                "confirm_selection: comparing open vs selected chat"
-            );
-            let is_forum = self.app_context.store().is_forum(selected_chat_id);
-            // A forum's messages are in its topics: pick one first
-            let next_pane = if is_forum {
-                ComponentName::TopicList
-            } else {
-                Prompt
-            };
-            if open_id == selected_chat_id {
-                // Same chat already open: don't clear/reload (avoids wiping messages on re-confirm).
-                self.app_context
-                    .action_tx()
-                    .send(Action::FocusComponent(next_pane))
-                    .unwrap();
-                let _ = self
-                    .app_context
-                    .action_tx()
-                    .send(Action::LoadPinnedMessages);
-                let _ = self.app_context.action_tx().send(Action::ViewAllMessages);
-                return;
-            }
-            // Only clear and open a different chat when ChatList has focus (avoids clearing
-            // if ChatListOpen was forwarded while user had Chat or Prompt focused).
-            if self.app_context.focused_component() != Some(ComponentName::ChatList) {
-                return;
-            }
-            self.app_context
-                .store()
-                .set_open_chat_user(chat.user.clone());
-            self.app_context.store().set_open_chat_id_i64(chat.chat_id);
-            self.app_context.store().set_open_chat_is_forum(is_forum);
-            self.app_context.store().set_open_topic_id(None);
-            self.app_context.store().set_open_chat_topics(Vec::new());
-            self.app_context.store().clear_open_chat_messages();
-            self.app_context.store().set_open_chat_pinned(Vec::new());
-            self.app_context.store().set_jump_target_message_id_i64(0);
-            if is_forum {
-                let _ = self.app_context.action_tx().send(Action::LoadForumTopics);
-                self.app_context
-                    .action_tx()
-                    .send(Action::FocusComponent(next_pane))
-                    .unwrap();
-                return;
-            }
-            self.app_context
-                .action_tx()
-                .send(Action::FocusComponent(Prompt))
-                .unwrap();
-
-            // Start loading chat history immediately (same handle_app_actions run).
-            let _ = self.app_context.action_tx().send(Action::GetChatHistory);
-            let _ = self
-                .app_context
-                .action_tx()
-                .send(Action::LoadPinnedMessages);
-
-            // Mark all unread messages as read
-            let _ = self.app_context.action_tx().send(Action::ViewAllMessages);
+        let Some(chat) = self
+            .chat_list_state
+            .selected()
+            .and_then(|i| self.visible_chats.get(i))
+        else {
+            return;
+        };
+        let action_tx = self.app_context.action_tx();
+        if chat.kind == ChatKind::Archive {
+            let _ = action_tx.send(Action::FocusComponent(ComponentName::ArchiveList));
+            return;
         }
+        // Only open a different chat when ChatList has focus (avoids clearing
+        // if ChatListOpen was forwarded while user had Chat or Prompt focused).
+        let open_id = self.app_context.store().open_chat_id().as_i64();
+        if open_id != chat.chat_id
+            && self.app_context.focused_component() != Some(ComponentName::ChatList)
+        {
+            return;
+        }
+        // Left the archive for a chat outside it
+        let _ = action_tx.send(Action::CloseArchiveList);
+        open_chat(&self.app_context, chat);
     }
 
     /// Sets the string used to order the entries of the chat list.
@@ -394,7 +401,12 @@ impl ChatListWindow {
     /// so we don't confirm a wrong chat at a stale index.
     fn sync_selection_to_open_chat(&mut self) {
         let open_id: i64 = self.app_context.store().open_chat_id().as_i64();
-        match self.visible_chats.iter().position(|c| c.chat_id == open_id) {
+        // The archive row has no chat id
+        let row = self
+            .visible_chats
+            .iter()
+            .position(|c| c.kind != ChatKind::Archive && c.chat_id == open_id);
+        match row {
             Some(idx) => self.chat_list_state.select(Some(idx)),
             None => {
                 tracing::info!(
@@ -419,7 +431,10 @@ impl ChatListWindow {
     /// Rebuild visible_chats with option to preserve selection.
     fn rebuild_visible_chats_with_preserve_selection(&mut self, preserve_selection: bool) {
         let current_selection = self.chat_list_state.selected();
-        let mut items = self.app_context.store().chat_list();
+        let store = self.app_context.store();
+        // The archive sits on top of the chats, like in Telegram
+        let mut items: Vec<ChatListEntry> = store.archive_entry().into_iter().collect();
+        items.extend(store.chat_list());
         if let Some(s) = self.sort_string.as_ref()
             && !s.is_empty()
         {
@@ -548,26 +563,18 @@ impl Component for ChatListWindow {
                 let Some(list_area) = self.last_list_area else {
                     return Ok(None);
                 };
-                let col = mouse.column;
-                let row = mouse.row;
-                let in_rect = col >= list_area.x
-                    && col < list_area.x + list_area.width
-                    && row >= list_area.y
-                    && row < list_area.y + list_area.height;
-                if !in_rect || self.visible_chats.is_empty() {
-                    return Ok(None);
-                }
-                // List content: block has top border (1 row); items start at area.y+1.
-                let content_y = list_area.y + 1; // below top border
-                let content_height = list_area.height.saturating_sub(2); // top and bottom border
-                let row_in_content = row.saturating_sub(content_y);
-                if row_in_content >= content_height {
-                    return Ok(None);
-                }
                 // Use actual first visible item index from last draw (not inferred from selected).
                 let offset = self.last_list_offset.unwrap_or(0);
-                let item_index = offset + usize::from(row_in_content / CHAT_LIST_ITEM_ROWS);
-                if item_index < self.visible_chats.len() {
+                let item_index = pane::item_at(
+                    list_area,
+                    mouse.column,
+                    mouse.row,
+                    offset,
+                    CHAT_LIST_ITEM_ROWS,
+                );
+                if let Some(item_index) = item_index
+                    && item_index < self.visible_chats.len()
+                {
                     self.chat_list_state.select(Some(item_index));
                     return Ok(Some(Action::ChatListOpen));
                 }
@@ -676,8 +683,6 @@ impl Component for ChatListWindow {
         } else {
             (area, None)
         };
-        self.last_list_area = Some(list_area);
-
         // Lazy init: populate visible_chats on first draw when data is available (initial LoadChats
         // may run before TDLib has delivered chat list updates).
         if self.visible_chats.is_empty() {
@@ -701,8 +706,10 @@ impl Component for ChatListWindow {
             }
         }
 
-        let block = pane::block(theme, pane::title("Chats"), self.focused);
-        let width = usize::from(block.inner(list_area).width);
+        let block = pane::list_block(theme, pane::title("Chats"), self.focused);
+        let inner = block.inner(list_area);
+        self.last_list_area = Some(inner);
+        let width = usize::from(inner.width);
         let selected = self.chat_list_state.selected();
         let items = self.visible_chats.iter().enumerate().map(|(index, item)| {
             chat_list_item_text(item, &self.app_context, width, selected == Some(index))

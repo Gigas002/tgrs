@@ -18,6 +18,8 @@ pub enum ChatKind {
     Group,
     /// A channel.
     Channel,
+    /// Not a chat: the row standing for the Archive chat list.
+    Archive,
 }
 
 impl ChatKind {
@@ -30,6 +32,7 @@ impl ChatKind {
             Self::Secret => "🔒",
             Self::Group => "👥",
             Self::Channel => "📢",
+            Self::Archive => "📦",
         }
     }
 
@@ -39,7 +42,7 @@ impl ChatKind {
     }
 }
 
-/// One row of the main chat list, built from the store's chat index.
+/// One row of a chat list, built from the store's chat indexes.
 #[derive(Debug, Clone, Default)]
 pub struct ChatListEntry {
     pub chat_id: i64,
@@ -60,4 +63,6 @@ pub struct ChatListEntry {
     pub is_muted: bool,
     /// Unread messages that mention you.
     pub unread_mention_count: i32,
+    /// Shown instead of the last message (the archive row lists its chats).
+    pub summary: Option<String>,
 }

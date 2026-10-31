@@ -92,6 +92,8 @@ async fn run_telegram(settings: &Settings) -> Result<(), AppError> {
             }
             _ => {
                 client.load_chats(ChatList::Main, INITIAL_CHATS).await;
+                // For the archive row's preview and unread count
+                client.load_chats(ChatList::Archive, INITIAL_CHATS).await;
                 if settings.notifications.enabled {
                     client.enable_notifications().await;
                 }
@@ -461,6 +463,11 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::PinnedPopupNext
             | Action::Refresh
             | Action::ToggleChatList
+            | Action::ToggleArchiveList
+            | Action::CloseArchiveList
+            | Action::ArchiveListNext
+            | Action::ArchiveListPrevious
+            | Action::ArchiveListOpen
             | Action::ToggleTopicList
             | Action::LoadForumTopics
             | Action::TopicListNext

@@ -233,6 +233,10 @@ pub enum Action {
     UnfocusComponent,
     /// Toggle ChatList action.
     ToggleChatList,
+    /// Hide or show the archived chats.
+    ToggleArchiveList,
+    /// Hide the archived chats: a chat outside the archive was opened.
+    CloseArchiveList,
     /// Hide or show the topic list of a forum chat.
     ToggleTopicList,
     /// Increase ChatList size action.
@@ -264,6 +268,13 @@ pub enum Action {
     ChatListOpen,
     /// ChatListSortWithString action.
     ChatListSortWithString(String),
+
+    /// Select the next archived chat.
+    ArchiveListNext,
+    /// Select the previous archived chat.
+    ArchiveListPrevious,
+    /// Open the selected archived chat.
+    ArchiveListOpen,
 
     /// Load the topics of the open forum chat.
     LoadForumTopics,
@@ -445,11 +456,13 @@ impl FromStr for Action {
             "try_quit" => Ok(Action::TryQuit),
             "render" => Ok(Action::Render),
             "focus_chat_list" => Ok(Action::FocusComponent(ComponentName::ChatList)),
+            "focus_archive_list" => Ok(Action::FocusComponent(ComponentName::ArchiveList)),
             "focus_topic_list" => Ok(Action::FocusComponent(ComponentName::TopicList)),
             "focus_chat" => Ok(Action::FocusComponent(ComponentName::Chat)),
             "focus_prompt" => Ok(Action::FocusComponent(ComponentName::Prompt)),
             "unfocus_component" => Ok(Action::UnfocusComponent),
             "toggle_chat_list" => Ok(Action::ToggleChatList),
+            "toggle_archive_list" => Ok(Action::ToggleArchiveList),
             "toggle_topic_list" => Ok(Action::ToggleTopicList),
             "increase_chat_list_size" => Ok(Action::IncreaseChatListSize),
             "decrease_chat_list_size" => Ok(Action::DecreaseChatListSize),
@@ -461,6 +474,9 @@ impl FromStr for Action {
             "chat_list_open" => Ok(Action::ChatListOpen),
             "chat_list_search" => Ok(Action::ChatListSearch),
             "chat_list_restore_sort" => Ok(Action::ChatListRestoreSort),
+            "archive_list_next" => Ok(Action::ArchiveListNext),
+            "archive_list_previous" => Ok(Action::ArchiveListPrevious),
+            "archive_list_open" => Ok(Action::ArchiveListOpen),
             "topic_list_next" => Ok(Action::TopicListNext),
             "topic_list_previous" => Ok(Action::TopicListPrevious),
             "topic_list_open" => Ok(Action::TopicListOpen),

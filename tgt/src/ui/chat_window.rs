@@ -13,7 +13,7 @@ use libtgt::model::{MessageEntry, TdMessageReplyTo};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     text::{Line, Span},
-    widgets::{List, ListDirection, ListItem, ListState, Paragraph},
+    widgets::{List, ListDirection, ListItem, ListState, Padding, Paragraph},
 };
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
@@ -587,7 +587,8 @@ impl Component for ChatWindow {
         // One pane titled with the chat; the pinned strip (label and preview rows) on top
         let app_context = Arc::clone(&self.app_context);
         let theme = app_context.theme();
-        let block = pane::block(theme, self.pane_title(), self.focused);
+        // Padded on top like the gap under the newest message
+        let block = pane::block(theme, self.pane_title(), self.focused).padding(Padding::top(1));
         let inner = block.inner(area);
         frame.render_widget(block, area);
         if app_context.store().open_chat_id().as_i64() == 0 {

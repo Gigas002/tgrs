@@ -1,6 +1,6 @@
 //! TDLib client: requests, the login flow and the update loop.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -17,7 +17,7 @@ use tdlib_rs::types::{
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
-use crate::model::{MessageEntry, TdMessageReplyToMessage, TopicEntry};
+use crate::model::{MessageEntry, TdChatList, TdMessageReplyToMessage, TopicEntry};
 use crate::store::Store;
 
 mod auth;
@@ -53,7 +53,8 @@ pub struct Client {
     /// Whether the database was opened with [`TdParams::database_encryption_key`].
     database_encrypted: bool,
     can_quit: Arc<AtomicBool>,
-    full_chats_list: bool,
+    /// Chat lists TDLib has loaded every chat of.
+    full_chat_lists: HashSet<TdChatList>,
     updates: Option<JoinHandle<()>>,
 }
 
@@ -73,7 +74,7 @@ impl Client {
             have_authorization: false,
             database_encrypted: false,
             can_quit: Arc::new(AtomicBool::new(false)),
-            full_chats_list: false,
+            full_chat_lists: HashSet::new(),
             updates: None,
         }
     }
@@ -331,18 +332,19 @@ impl Client {
     }
 
     pub async fn load_chats(&mut self, chat_list: ChatList, limit: i32) {
-        if self.full_chats_list {
+        let list = TdChatList::from(chat_list.clone());
+        if self.full_chat_lists.contains(&list) {
             return;
         }
         // TDLib answers with a 404 once every chat is loaded
         if let Err(e) = functions::load_chats(Some(chat_list), limit, self.client_id).await {
-            tracing::info!("Stopped loading chats: {e:?}");
-            self.full_chats_list = true;
+            tracing::info!("Stopped loading chats of {list:?}: {e:?}");
+            self.full_chat_lists.insert(list);
         }
     }
 
     pub async fn load_all_chats(&mut self) {
-        while !self.full_chats_list {
+        while !self.full_chat_lists.contains(&TdChatList::Main) {
             self.load_chats(ChatList::Main, HISTORY_BATCH).await;
         }
     }

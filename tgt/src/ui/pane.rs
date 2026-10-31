@@ -2,8 +2,9 @@
 //! in the top border, and the focused one has a highlighted border.
 
 use ratatui::{
+    layout::Rect,
     text::{Line, Span},
-    widgets::{Block, Borders},
+    widgets::{Block, Borders, Padding},
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -23,6 +24,24 @@ pub fn block<'a>(theme: &Theme, title: impl Into<Line<'a>>, focused: bool) -> Bl
         .title(title)
         .title_style(theme.style(HighlightGroup::PaneTitle))
         .style(theme.style(HighlightGroup::Normal))
+}
+
+/// The frame of a list pane, padded so the rows sit as far from the top and
+/// the right as they do from the left (the selection marker's width) and the
+/// bottom (the blank spacer after each row).
+pub fn list_block<'a>(theme: &Theme, title: impl Into<Line<'a>>, focused: bool) -> Block<'a> {
+    let marker = u16::try_from(theme.selection_marker().width()).unwrap_or(0);
+    block(theme, title, focused).padding(Padding::new(0, marker, 1, 0))
+}
+
+/// The index of the list item at `column`, `row`: `area` is where the items
+/// are drawn, each `item_rows` tall, the first one shown being `offset`.
+pub fn item_at(area: Rect, column: u16, row: u16, offset: usize, item_rows: u16) -> Option<usize> {
+    let inside = column >= area.x
+        && column < area.x + area.width
+        && row >= area.y
+        && row < area.y + area.height;
+    inside.then(|| offset + usize::from((row - area.y) / item_rows))
 }
 
 /// The frame of the message composer, highlighted while typing.

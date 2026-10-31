@@ -36,7 +36,9 @@ Like concord: `left`/`right` move between the chat list, the chat and the prompt
 
 Groups with topics (forums) open into a topic list, a pane right of the chat list: `enter` on a topic shows its messages in the chat, and messages you send go to that topic. The topic list resizes like the other panes, `alt+t` focuses it and `alt+m` hides or shows it.
 
-`space` opens the leader menu, which lists what comes next: `1` hides or shows the chat list, `2` the topic list, `a` opens the actions of the selected message, `space` searches chats, `/` searches messages, `p` shows pinned messages, `u` uploads a file and `?` lists every key. Its entries are the `[leader_menu]` section of `keymap.toml`.
+Archived chats are behind the `📦 Archived chats` row at the top of the chat list, which names them and counts the unread ones: `enter` on it opens the archive, a pane right of the chat list, and `enter` there opens an archived chat. Opening a chat from the chat list closes the archive again; `alt+a` focuses it and `alt+b` hides or shows it.
+
+`space` opens the leader menu, which lists what comes next: `1` hides or shows the chat list, `2` the topic list, `3` the archive, `a` opens the actions of the selected message, `space` searches chats, `/` searches messages, `p` shows pinned messages, `u` uploads a file and `?` lists every key. Its entries are the `[leader_menu]` section of `keymap.toml`.
 
 ### Messages
 

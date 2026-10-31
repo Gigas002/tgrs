@@ -28,6 +28,10 @@ keymap = [
   { keys = ["space"], command = "show_leader_menu", description = "Open the leader menu"},
   # Toggle chat_list visibility
   { keys = ["alt+n"], command = "toggle_chat_list", description = "Toggle chat_list visibility"},
+  # Focus the archived chats, showing them
+  { keys = ["alt+a"], command = "focus_archive_list", description = "Focus the archived chats"},
+  # Toggle archive_list visibility
+  { keys = ["alt+b"], command = "toggle_archive_list", description = "Toggle archive_list visibility"},
   # Focus the topics of the open group with topics (forum)
   { keys = ["alt+t"], command = "focus_topic_list", description = "Focus the topic list"},
   # Toggle topic_list visibility; it is only shown for groups with topics
@@ -67,6 +71,19 @@ keymap = [
   # Restore the default sorting in the chat list window.
   { keys = ["alt+c"], command = "chat_list_restore_sort", description = "Restore the default ordering of the chat list"},
   # Open pinned messages for the current chat (no-op if none pinned).
+  { keys = ["shift+back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
+  { keys = ["back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
+]
+
+# The archive_list key bindings are only usable in the archived chats, shown
+# right of the chat list after opening its "Archived chats" row.
+[archive_list]
+keymap = [
+  { keys = ["down"], command = "archive_list_next", description = "Select the next archived chat"},
+  { keys = ["up"], command = "archive_list_previous", description = "Select the previous archived chat"},
+  { keys = ["left"], command = "focus_previous_pane", description = "Focus the chat list"},
+  { keys = ["right"], command = "focus_next_pane", description = "Focus the chat"},
+  { keys = ["enter"], command = "archive_list_open", description = "Open the selected archived chat"},
   { keys = ["shift+back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
   { keys = ["back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
 ]
@@ -190,6 +207,7 @@ keymap = [
 keymap = [
   { keys = ["1"], command = "toggle_chat_list", description = "Toggle the chat list"},
   { keys = ["2"], command = "toggle_topic_list", description = "Toggle the topic list"},
+  { keys = ["3"], command = "toggle_archive_list", description = "Toggle the archived chats"},
   { keys = ["a"], command = "show_message_actions", description = "Actions of the selected message"},
   { keys = ["space"], command = "chat_list_search", description = "Search chats"},
   { keys = ["/"], command = "chat_window_search", description = "Search messages"},

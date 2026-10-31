@@ -30,6 +30,7 @@ pub struct KeymapFile {
     /// Bindings usable in every component.
     pub core_window: Option<KeymapMode>,
     pub chat_list: Option<KeymapMode>,
+    pub archive_list: Option<KeymapMode>,
     pub topic_list: Option<KeymapMode>,
     pub chat: Option<KeymapMode>,
     pub prompt: Option<KeymapMode>,

@@ -589,3 +589,67 @@ fn a_forum_draws_the_topics_between_the_chats_and_the_chat() {
     let chat = top.find("Chat ").unwrap();
     assert!(chats < topics && topics < chat, "{top}");
 }
+
+#[test]
+fn the_archive_is_a_pane_once_opened_and_closes_for_another_chat() {
+    let mut window = create_forum_core_window();
+    assert!(!window.panes().contains(&ComponentName::ArchiveList));
+
+    window.update(Action::FocusComponent(ComponentName::ArchiveList));
+    assert_eq!(window.component_focused, Some(ComponentName::ArchiveList));
+    assert_eq!(
+        window.panes(),
+        [
+            ComponentName::ChatList,
+            ComponentName::ArchiveList,
+            ComponentName::TopicList,
+            ComponentName::Chat,
+            ComponentName::Prompt
+        ]
+    );
+    // The chat grows by taking from the pane next to it
+    window.focus_only(Some(ComponentName::Chat));
+    let (archive, topics) = (window.size_archive_list, window.size_topic_list);
+    window.update(Action::ResizePaneWider);
+    assert_eq!(window.size_topic_list, topics - 1);
+    assert_eq!(window.size_archive_list, archive);
+
+    window.focus_only(Some(ComponentName::ArchiveList));
+    window.update(Action::CloseArchiveList);
+    assert!(!window.panes().contains(&ComponentName::ArchiveList));
+    assert_eq!(window.component_focused, Some(ComponentName::ChatList));
+}
+
+#[test]
+fn the_archive_can_be_toggled() {
+    let mut window = create_test_core_window();
+    window.update(Action::ToggleArchiveList);
+    assert!(window.panes().contains(&ComponentName::ArchiveList));
+    window.update(Action::ToggleArchiveList);
+    assert!(!window.panes().contains(&ComponentName::ArchiveList));
+}
+
+#[test]
+fn wide_side_panes_are_narrowed_to_leave_room_for_the_chat() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut window = create_test_core_window();
+    window.update(Action::FocusComponent(ComponentName::ArchiveList));
+    for _ in 0..100 {
+        window.update(Action::IncreaseChatListSize);
+    }
+    window.focus_only(Some(ComponentName::ArchiveList));
+    for _ in 0..100 {
+        window.update(Action::ResizePaneWider);
+    }
+    assert!(window.side_panes_size() <= MAX_SIDE_PANES_SIZE);
+
+    // A forum opens: its topics get room from the others
+    window.app_context.store().set_open_chat_is_forum(true);
+    let mut terminal = Terminal::new(TestBackend::new(100, 20)).unwrap();
+    terminal
+        .draw(|frame| window.draw(frame, frame.area()).unwrap())
+        .unwrap();
+    assert!(window.side_panes_size() <= MAX_SIDE_PANES_SIZE);
+    assert!(window.size_chat_list >= MIN_CHAT_LIST_SIZE);
+    assert!(window.size_archive_list >= MIN_CHAT_LIST_SIZE);
+}

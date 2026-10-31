@@ -308,14 +308,14 @@ fn test_chat_list_left_click_on_item_when_focused_selects_and_returns_open() {
     let mut window = create_test_chat_list_window();
     setup_chats(&mut window, &["Alice", "Bob", "Charlie"]);
     window.focused = true;
-    // Items start below the top border at row 1, 3 rows each: Bob at rows 4-6.
-    window.last_list_area = Some(Rect::new(0, 0, 20, 10));
+    // Rows start below the top border and padding at row 2, 3 rows each: Bob at rows 5-7.
+    window.last_list_area = Some(Rect::new(1, 2, 16, 7));
     window.chat_list_state.select(Some(0));
 
     let mouse = MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
         column: 5,
-        row: 4, // first row of index 1 (Bob)
+        row: 5, // first row of index 1 (Bob)
         modifiers: crossterm::event::KeyModifiers::empty(),
     };
     let result = window.handle_mouse_events(mouse).unwrap();
@@ -330,4 +330,65 @@ fn test_chat_list_left_click_on_item_when_focused_selects_and_returns_open() {
         Some(1),
         "Clicked row (index 1) should be selected"
     );
+}
+
+#[test]
+fn the_archive_row_comes_first_and_opens_the_archived_chats() {
+    use libtgt::model::OrderedChat;
+    use libtgt::store::ARCHIVE_NAME;
+    use libtgt::tdlib_rs::types::ChatPosition;
+    let mut window = create_test_chat_list_window();
+    let store = window.app_context.store();
+    store.chats_index().insert(OrderedChat {
+        chat_id: 1,
+        position: ChatPosition {
+            list: ChatList::Main,
+            order: 1,
+            is_pinned: false,
+            source: None,
+        },
+    });
+    store.archive_index().insert(OrderedChat {
+        chat_id: 2,
+        position: ChatPosition {
+            list: ChatList::Archive,
+            order: 1,
+            is_pinned: false,
+            source: None,
+        },
+    });
+    window.rebuild_visible_chats();
+    let kinds: Vec<ChatKind> = window.visible_chats.iter().map(|c| c.kind).collect();
+    assert_eq!(kinds, [ChatKind::Archive, ChatKind::Private]);
+    assert_eq!(window.visible_chats[0].chat_name, ARCHIVE_NAME);
+    // No chat open: the archive row isn't taken for it
+    assert_eq!(window.chat_list_state.selected(), None);
+
+    window.chat_list_state.select(Some(0));
+    window.update(Action::ChatListOpen);
+    let actions: Vec<Action> = {
+        let mut rx = window.app_context.action_rx();
+        std::iter::from_fn(|| rx.try_recv().ok()).collect()
+    };
+    assert_eq!(
+        actions,
+        [Action::FocusComponent(ComponentName::ArchiveList)]
+    );
+    assert_eq!(window.app_context.store().open_chat_id().as_i64(), 0);
+}
+
+#[test]
+fn the_archive_row_lists_its_chats() {
+    let app_context = create_test_app_context();
+    let entry = ChatListEntry {
+        chat_name: "Archived chats".to_owned(),
+        kind: ChatKind::Archive,
+        summary: Some("Old group, Old bot".to_owned()),
+        unread_count: 2,
+        ..ChatListEntry::default()
+    };
+    let rows = row_text(&chat_list_item_text(&entry, &app_context, 40, false));
+    assert!(rows[0].contains("📦 Archived chats"), "{rows:?}");
+    assert!(rows[1].contains("Old group, Old bot"), "{rows:?}");
+    assert!(rows[1].ends_with(" 2 "), "{rows:?}");
 }
