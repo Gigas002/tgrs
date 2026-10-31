@@ -9,7 +9,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
     app::action::Action,
-    settings::{App, Dirs, HighlightGroup, Keymap, Settings, Theme},
+    settings::{App, Dirs, HighlightGroup, Keymap, Notifications, Settings, Theme},
     ui::component_name::ComponentName,
 };
 
@@ -28,6 +28,7 @@ macro_rules! theme_style_generate {
 pub struct AppContext {
     app: App,
     keymap: Keymap,
+    notifications: Notifications,
     dirs: Dirs,
     theme: Theme,
     /// Actions from components and background tasks to the run loop.
@@ -51,6 +52,7 @@ impl AppContext {
         Self {
             app: settings.app.clone(),
             keymap: settings.keymap.clone(),
+            notifications: settings.notifications,
             dirs: settings.dirs.clone(),
             theme: settings.theme.clone(),
             action_tx,
@@ -69,6 +71,10 @@ impl AppContext {
 
     pub fn keymap_config(&self) -> &Keymap {
         &self.keymap
+    }
+
+    pub fn notifications(&self) -> Notifications {
+        self.notifications
     }
 
     pub fn dirs(&self) -> &Dirs {

@@ -37,6 +37,8 @@ fn bundled_config_parses_when_uncommented() {
     let proxy = file.telegram.proxy.unwrap();
     assert_eq!(proxy.r#type, Some(ProxyType::Socks5));
     assert_eq!(proxy.port, Some(1080));
+    assert_eq!(file.notifications.enabled, Some(true));
+    assert_eq!(file.notifications.show_preview, Some(true));
 }
 
 #[test]

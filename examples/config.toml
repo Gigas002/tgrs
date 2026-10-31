@@ -80,3 +80,10 @@
 #   plain    - no keychain, the database is not encrypted.
 # Switching an encrypted database to `plain` requires logging in again.
 # store = "auto"
+
+[notifications]
+# Desktop notifications for new messages. Muted chats stay silent, and the
+# open chat is never notified about.
+# enabled = true
+# Include the message text; chats that hide previews in Telegram never show it.
+# show_preview = true

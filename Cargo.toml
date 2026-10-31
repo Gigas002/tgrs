@@ -21,6 +21,7 @@ futures = { version = "0.3", default-features = false, features = ["std", "async
 getrandom = "0.4"
 image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
 keyring-core = "1"
+notify-rust = "4"
 nucleo-matcher = "0.3"
 ratatui = "0.30"
 ratatui-explorer = "0.3"

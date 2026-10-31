@@ -15,6 +15,7 @@ A simple TUI for Telegram
 | `xdg-open` (`xdg-utils`)                        | opening media             | Media is opened with your default applications, e.g. mpv for videos and audio, an image viewer for photos.                                                         |
 | D-Bus (`libdbus-1`)                             | `keychain` (default)      | Found with `pkg-config` (`dbus-1`); talks to the keychain.                                                                                                         |
 | A Secret Service provider                       | `keychain` (default)      | E.g. GNOME Keyring or KeePassXC. Without one, `store = "auto"` leaves the TDLib database unencrypted.                                                              |
+| A notification server                           | `notifications` (default) | E.g. mako, dunst or your desktop's own; reached over D-Bus.                                                                                                        |
 
 For example, on Arch Linux: `sudo pacman -S tdlib pkgconf xdg-utils dbus gnome-keyring`.
 
@@ -24,9 +25,10 @@ Build features can be combined (e.g. `cargo build --release --no-default-feature
 
 | Feature         | Description                                                                                                                                                 |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `default`       | Enables `keychain` and `media-preview`.                                                                                                                     |
+| `default`       | Enables `keychain`, `media-preview` and `notifications`.                                                                                                    |
 | `keychain`      | Encrypt the TDLib database (your login session) with a key kept in the system keychain (Secret Service). See `[credentials]` in `config.toml`.              |
 | `media-preview` | Image previews in the chat: photos, static stickers and the thumbnails of videos, GIFs, video messages and files.                                            |
+| `notifications` | Desktop notifications for new messages, following each chat's Telegram notification settings. See `[notifications]` in `config.toml`.                       |
 
 ### Navigation
 

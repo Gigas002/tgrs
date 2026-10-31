@@ -12,7 +12,7 @@ use tdlib_rs::enums::{
 use tdlib_rs::functions;
 use tdlib_rs::types::{
     FormattedText, InputFileLocal, InputMessageDocument, InputMessageText, LogStreamFile,
-    OptionValueBoolean, ReactionTypeEmoji,
+    OptionValueBoolean, OptionValueInteger, ReactionTypeEmoji,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
@@ -40,6 +40,8 @@ const HISTORY_BATCH: i32 = 50;
 const TOPICS_BATCH: i32 = 100;
 /// Topics loaded for a forum at most.
 const MAX_TOPICS: usize = 1000;
+/// Chats with notifications shown at once; any positive value enables them.
+const NOTIFICATION_GROUP_COUNT_MAX: i64 = 25;
 
 pub struct Client {
     client_id: i32,
@@ -748,6 +750,23 @@ impl Client {
     pub async fn disable_animated_emoji(&self, disable: bool) {
         self.set_bool_option("disable_animated_emoji", disable)
             .await;
+    }
+
+    /// Asks TDLib to announce new messages worth a notification as
+    /// [`Notification::NewMessage`], honoring the chats' notification settings.
+    pub async fn enable_notifications(&self) {
+        match functions::set_option(
+            "notification_group_count_max".to_owned(),
+            Some(OptionValue::Integer(OptionValueInteger {
+                value: NOTIFICATION_GROUP_COUNT_MAX,
+            })),
+            self.client_id,
+        )
+        .await
+        {
+            Ok(()) => tracing::info!("Enabled notifications"),
+            Err(e) => tracing::error!("Failed to enable notifications: {e:?}"),
+        }
     }
 
     async fn set_bool_option(&self, name: &str, value: bool) {

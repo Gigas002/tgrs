@@ -34,6 +34,7 @@ use crate::{
         error::AppError,
         event::Event,
     },
+    notifier,
     settings::{ActionBinding, Command, Settings, is_plain_char},
     ui::component_name::ComponentName,
     ui::{Tui, terminal::TuiBackend},
@@ -91,6 +92,9 @@ async fn run_telegram(settings: &Settings) -> Result<(), AppError> {
             }
             _ => {
                 client.load_chats(ChatList::Main, INITIAL_CHATS).await;
+                if settings.notifications.enabled {
+                    client.enable_notifications().await;
+                }
                 let app_context = Arc::new(AppContext::new(settings, store));
                 run_tui(app_context, &mut client, notify_rx).await
             }
@@ -236,6 +240,13 @@ fn handle_notification(
         Notification::OpenChatPinsChanged => action_tx.send(Action::LoadPinnedMessages)?,
         Notification::OpenChatHistoryInvalidated => action_tx.send(Action::GetChatHistory)?,
         Notification::OpenChatTopicsChanged => app_context.mark_dirty(),
+        // The open chat's messages are on screen already
+        Notification::NewMessage(alert)
+            if alert.chat_id != app_context.store().open_chat_id_i64() =>
+        {
+            notifier::show(alert, app_context.notifications().show_preview);
+        }
+        Notification::NewMessage(_) => {}
     }
     Ok(())
 }

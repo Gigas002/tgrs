@@ -1,5 +1,6 @@
 //! Client-side data model: identifiers, messages and chat list rows.
 
+pub mod alert;
 pub mod chat;
 pub mod ids;
 pub mod message;
@@ -10,6 +11,7 @@ pub mod topic;
 #[cfg(test)]
 mod tests;
 
+pub use alert::MessageAlert;
 pub use chat::{ChatKind, ChatListEntry};
 pub use ids::{ChatId, MessageId};
 pub use message::{

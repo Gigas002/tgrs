@@ -6,6 +6,7 @@ pub mod config;
 pub mod credentials;
 pub mod logger;
 pub mod media;
+pub mod notifier;
 pub mod settings;
 pub mod ui;
 pub mod utils;

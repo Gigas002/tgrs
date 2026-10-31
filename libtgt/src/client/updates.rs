@@ -4,15 +4,15 @@ use std::sync::MutexGuard;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use tdlib_rs::enums::{AuthorizationState, ChatList, Update};
+use tdlib_rs::enums::{AuthorizationState, ChatList, NotificationType, Update};
 use tdlib_rs::types::{Chat, ChatPosition};
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::model::{MessageEntry, OrderedChat};
+use crate::model::{MessageAlert, MessageEntry, OrderedChat};
 use crate::store::Store;
 
 /// What changed in the [`Store`], for the UI to react to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Notification {
     /// Chats were added, reordered or changed (rate limited).
     ChatListChanged,
@@ -26,6 +26,8 @@ pub enum Notification {
     OpenChatHistoryInvalidated,
     /// A topic of the open forum chat changed, or a message arrived in one.
     OpenChatTopicsChanged,
+    /// A message to notify the user about (see [`super::Client::enable_notifications`]).
+    NewMessage(MessageAlert),
 }
 
 /// Minimum gap between two [`Notification::ChatListChanged`] (~1 frame at 60fps).
@@ -384,6 +386,17 @@ async fn apply(
             drop(messages);
             // The chat's last message may have changed
             throttle.request(notify);
+        }
+        // Notifications shown before a restart (updateActiveNotifications) are
+        // not repeated; edits of shown ones (updateNotification) are ignored.
+        Update::NotificationGroup(update) => {
+            for notification in update.added_notifications {
+                if let NotificationType::NewMessage(new) = notification.r#type {
+                    let alert =
+                        store.message_alert(&new.message, new.show_preview, notification.is_silent);
+                    let _ = notify.send(Notification::NewMessage(alert));
+                }
+            }
         }
         Update::ForumTopicInfo(update) => {
             let changed = store.set_open_chat_topic_info(&update.info);

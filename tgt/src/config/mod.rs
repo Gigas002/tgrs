@@ -36,6 +36,7 @@ pub struct FileConfig {
     pub logger: LoggerFile,
     pub telegram: TelegramFile,
     pub credentials: CredentialsFile,
+    pub notifications: NotificationsFile,
 }
 
 /// `[app]`: terminal and UI behavior.
@@ -98,6 +99,14 @@ pub struct ProxyFile {
 #[serde(default)]
 pub struct CredentialsFile {
     pub store: Option<CredentialStore>,
+}
+
+/// `[notifications]`: desktop notifications for new messages.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct NotificationsFile {
+    pub enabled: Option<bool>,
+    pub show_preview: Option<bool>,
 }
 
 /// Where the key of the encrypted TDLib database is kept.

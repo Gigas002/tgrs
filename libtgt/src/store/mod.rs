@@ -9,13 +9,14 @@ use std::sync::{Mutex, MutexGuard};
 use tdlib_rs::{
     enums::{ChatType, MessageTopic, UserStatus, UserType},
     types::{
-        BasicGroup, BasicGroupFullInfo, Chat, ForumTopicInfo, MessageTopicForum, SecretChat,
-        Supergroup, SupergroupFullInfo, UpdateForumTopic, User, UserFullInfo,
+        BasicGroup, BasicGroupFullInfo, Chat, ForumTopicInfo, Message, MessageTopicForum,
+        SecretChat, Supergroup, SupergroupFullInfo, UpdateForumTopic, User, UserFullInfo,
     },
 };
 
 use crate::model::{
-    ChatKind, ChatListEntry, MessageEntry, OrderedChat, TopicEntry, format_timestamp,
+    ChatKind, ChatListEntry, MessageAlert, MessageEntry, OrderedChat, TdMessageSender, TopicEntry,
+    format_timestamp,
     ids::{AtomicChatId, AtomicMessageId, ChatId, MessageId},
 };
 
@@ -375,6 +376,43 @@ impl Store {
             .then(|| self.try_name_from_chats_or_users(me))
             .flatten()
             .filter(|name| !name.is_empty())
+    }
+
+    /// A user's full name, or a chat's title.
+    pub fn sender_name(&self, sender: TdMessageSender) -> Option<String> {
+        match sender {
+            TdMessageSender::User(user_id) => self.users().get(&user_id).map(|user| {
+                format!("{} {}", user.first_name, user.last_name)
+                    .trim()
+                    .to_owned()
+            }),
+            TdMessageSender::Chat(chat_id) => self.name_from_chats(chat_id),
+        }
+    }
+
+    /// Describes a new message for a desktop notification; the text is left
+    /// out unless `show_preview`.
+    pub fn message_alert(
+        &self,
+        message: &Message,
+        show_preview: bool,
+        is_silent: bool,
+    ) -> MessageAlert {
+        let entry = MessageEntry::from(message);
+        let chat_title = self.name_from_chats(message.chat_id).unwrap_or_default();
+        // Private and secret chats and channels are named after their only sender
+        let sender_name = (entry.sender_id() != message.chat_id)
+            .then(|| self.sender_name(entry.sender()))
+            .flatten()
+            .filter(|name| !name.is_empty() && *name != chat_title);
+        MessageAlert {
+            chat_id: message.chat_id,
+            message_id: message.id,
+            chat_title,
+            sender_name,
+            text: show_preview.then(|| entry.message_content_to_string()),
+            is_silent,
+        }
     }
 
     pub fn name_of_open_chat_id(&self) -> Option<String> {

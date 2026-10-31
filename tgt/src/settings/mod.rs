@@ -71,6 +71,7 @@ pub struct Settings {
     pub warnings: Vec<String>,
     /// Where the key of the encrypted TDLib database is kept.
     pub credentials: CredentialStore,
+    pub notifications: Notifications,
     pub command: Command,
 }
 
@@ -94,6 +95,14 @@ pub struct App {
     pub use_emoji_icons: bool,
     /// Where downloaded media is saved.
     pub download_dir: PathBuf,
+}
+
+/// `[notifications]`, resolved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Notifications {
+    pub enabled: bool,
+    /// Include the message text.
+    pub show_preview: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -208,6 +217,10 @@ impl Settings {
             theme,
             warnings,
             credentials: file.credentials.store.unwrap_or_default(),
+            notifications: Notifications {
+                enabled: file.notifications.enabled.unwrap_or(true),
+                show_preview: file.notifications.show_preview.unwrap_or(true),
+            },
             command: cli.command,
         })
     }
