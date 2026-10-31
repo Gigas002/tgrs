@@ -207,6 +207,7 @@ impl CommandGuide {
             ("Pinned Messages", ComponentName::PinnedMessagesPopup),
             ("Reaction and URL Picker", ComponentName::Picker),
             ("Sticker Picker", ComponentName::StickerPicker),
+            ("Chat Actions", ComponentName::ChatActions),
             ("Leader Menu (Space)", ComponentName::LeaderMenu),
         ] {
             let section_lines = self
@@ -265,7 +266,7 @@ impl CommandGuide {
         lines.push(Line::from("  ]"));
         lines.push(Line::from(""));
         lines.push(Line::from(
-            "Available components: core_window, chat_list, archive_list, topic_list, chat, prompt, command_guide, search_overlay, message_actions, file_upload_explorer, pinned_messages_popup, picker, sticker_picker, leader_menu",
+            "Available components: core_window, chat_list, archive_list, topic_list, chat, prompt, command_guide, search_overlay, message_actions, file_upload_explorer, pinned_messages_popup, picker, sticker_picker, chat_actions, leader_menu",
         ));
         lines.push(Line::from(""));
         lines.push(Line::from("Example:"));

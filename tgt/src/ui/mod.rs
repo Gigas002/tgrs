@@ -8,6 +8,7 @@ pub const MAX_PROMPT_SIZE: u16 = 20;
 pub const MIN_PROMPT_SIZE: u16 = 3;
 
 pub mod archive_list_window;
+pub mod chat_actions;
 pub mod chat_list_window;
 pub mod chat_window;
 pub mod command_guide;

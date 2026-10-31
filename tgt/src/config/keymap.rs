@@ -41,6 +41,7 @@ pub struct KeymapFile {
     pub pinned_messages_popup: Option<KeymapMode>,
     pub picker: Option<KeymapMode>,
     pub sticker_picker: Option<KeymapMode>,
+    pub chat_actions: Option<KeymapMode>,
     pub leader_menu: Option<KeymapMode>,
 }
 

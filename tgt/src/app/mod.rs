@@ -29,7 +29,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
     app::{
-        action::{Action, PickerKind, ReactionChoice},
+        action::{Action, ChatCommand, PickerKind, ReactionChoice},
         auth::StdinAuthenticator,
         context::AppContext,
         error::AppError,
@@ -38,7 +38,7 @@ use crate::{
     notifier,
     settings::{ActionBinding, Command, Settings, is_plain_char},
     ui::component_name::ComponentName,
-    ui::{Tui, terminal::TuiBackend},
+    ui::{Tui, chat_actions, terminal::TuiBackend},
 };
 
 /// Messages per history request.
@@ -436,6 +436,11 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::SearchOverlaySubmit
             | Action::SearchOverlayConfirm
             | Action::ShowMessageActionsFor(_)
+            | Action::ShowChatActionsFor(..)
+            | Action::HideChatActions
+            | Action::ChatActionsNext
+            | Action::ChatActionsPrevious
+            | Action::ChatActionsConfirm
             | Action::HideMessageActions
             | Action::MessageActionsPrevious
             | Action::MessageActionsNext
@@ -497,6 +502,62 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::GetChatHistoryNewer
             | Action::ChatHistoryAppended
     ) || preview_changes_ui(action)
+}
+
+/// Runs a chat action and says how it went in the status bar. A chat that is
+/// left or deleted while open is closed.
+async fn run_chat_command(
+    app_context: &AppContext,
+    client: &Client,
+    command: ChatCommand,
+    chat_id: i64,
+) {
+    let Some(state) = app_context.store().chat_state(chat_id) else {
+        return;
+    };
+    let label = chat_actions::command_label(command, &state);
+    let result = match command {
+        ChatCommand::ToggleMute => client.set_chat_muted(chat_id, !state.is_muted).await,
+        ChatCommand::ToggleArchive => client.set_chat_archived(chat_id, !state.is_archived).await,
+        ChatCommand::TogglePin => client.set_chat_pinned(chat_id, !state.is_pinned).await,
+        ChatCommand::ToggleRead => {
+            client
+                .set_chat_read(chat_id, state.is_unread, state.last_message_id)
+                .await
+        }
+        ChatCommand::Remove if state.is_left() => client.leave_chat(chat_id).await,
+        ChatCommand::Remove => client.delete_chat(chat_id).await,
+    };
+    let message = match result {
+        Ok(()) => {
+            if command == ChatCommand::Remove {
+                close_chat(app_context, chat_id);
+            }
+            format!(
+                "{}: {}",
+                state.title,
+                chat_actions::done_label(command, &state)
+            )
+        }
+        Err(e) => format!("Can't {label}: {}", e.message),
+    };
+    media::status(app_context, message);
+}
+
+/// Closes `chat_id` if it's the open chat.
+fn close_chat(app_context: &AppContext, chat_id: i64) {
+    let store = app_context.store();
+    if store.open_chat_id().as_i64() != chat_id {
+        return;
+    }
+    store.set_open_chat_id_i64(0);
+    store.set_open_chat_user(None);
+    store.set_open_chat_is_forum(false);
+    store.set_open_topic_id(None);
+    store.set_open_chat_topics(Vec::new());
+    store.clear_open_chat_messages();
+    store.set_open_chat_pinned(Vec::new());
+    store.clear_reply_message();
 }
 
 #[cfg(feature = "media-preview")]
@@ -590,6 +651,9 @@ async fn handle_app_actions(
                     )
                     .await;
                 app_context.action_tx().send(Action::HideChatWindowReply)?;
+            }
+            Action::RunChatCommand(command, chat_id) => {
+                run_chat_command(&app_context, client, *command, *chat_id).await;
             }
             Action::LoadStickerSets => match client.get_sticker_sets().await {
                 Ok(sets) => app_context

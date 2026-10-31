@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, Ordering};
 use std::sync::{Mutex, MutexGuard};
 
 use tdlib_rs::{
-    enums::{ChatType, MessageTopic, UserStatus, UserType},
+    enums::{ChatList, ChatType, MessageTopic, UserStatus, UserType},
     types::{
         BasicGroup, BasicGroupFullInfo, Chat, ForumTopicInfo, Message, MessageTopicForum,
         SecretChat, Supergroup, SupergroupFullInfo, UpdateForumTopic, User, UserFullInfo,
@@ -15,8 +15,8 @@ use tdlib_rs::{
 };
 
 use crate::model::{
-    ChatKind, ChatListEntry, MessageAlert, MessageEntry, OrderedChat, TdMessageSender, TopicEntry,
-    format_timestamp,
+    ChatKind, ChatListEntry, ChatState, MessageAlert, MessageEntry, OrderedChat, TdMessageSender,
+    TopicEntry, format_timestamp,
     ids::{AtomicChatId, AtomicMessageId, ChatId, MessageId},
 };
 
@@ -595,6 +595,31 @@ impl Store {
         self.entries_of(&chats, &archive_index)
     }
 
+    /// The state of a chat that the chat actions toggle; None for an unknown chat.
+    pub fn chat_state(&self, chat_id: i64) -> Option<ChatState> {
+        let chats = self.chats();
+        let chat = chats.get(&chat_id)?;
+        let user = match &chat.r#type {
+            ChatType::Private(p) => self.users().get(&p.user_id).cloned(),
+            _ => None,
+        };
+        let position = |list: &ChatList| chat.positions.iter().find(|p| p.list == *list);
+        let archived = position(&ChatList::Archive);
+        let settings = &chat.notification_settings;
+        Some(ChatState {
+            chat_id,
+            title: chat.title.clone(),
+            kind: self.kind_of(chat, user.as_ref()),
+            is_muted: !settings.use_default_mute_for && settings.mute_for > 0,
+            is_archived: archived.is_some(),
+            is_pinned: archived
+                .or(position(&ChatList::Main))
+                .is_some_and(|p| p.is_pinned),
+            is_unread: chat.unread_count > 0 || chat.is_marked_as_unread,
+            last_message_id: chat.last_message.as_ref().map_or(0, |m| m.id),
+        })
+    }
+
     /// Whether a chat is in the Archive chat list.
     pub fn is_archived(&self, chat_id: i64) -> bool {
         self.archive_index()
@@ -612,7 +637,7 @@ impl Store {
         }
         let unread: Vec<&ChatListEntry> = archived
             .iter()
-            .filter(|chat| chat.unread_count > 0)
+            .filter(|chat| chat.unread_count > 0 || chat.is_marked_as_unread)
             .collect();
         let names: Vec<&str> = archived
             .iter()
@@ -651,7 +676,7 @@ impl Store {
                 ..ChatListEntry::default()
             };
             if let Some(chat) = chats.get(&ord_chat.chat_id) {
-                entry.is_marked_as_unread = chat.unread_count > 0;
+                entry.is_marked_as_unread = chat.is_marked_as_unread;
                 entry.chat_name = chat.title.clone();
                 entry.last_read_inbox_message_id = Some(chat.last_read_inbox_message_id);
                 entry.last_read_outbox_message_id = Some(chat.last_read_outbox_message_id);

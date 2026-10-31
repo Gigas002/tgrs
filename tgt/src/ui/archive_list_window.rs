@@ -3,6 +3,7 @@
 use crate::app::action::Action;
 use crate::app::context::AppContext;
 use crate::settings::HighlightGroup;
+use crate::ui::chat_actions::chat_command_action;
 use crate::ui::chat_list_window::{CHAT_LIST_ITEM_ROWS, chat_list_item_text, open_chat};
 use crate::ui::component_name::ComponentName;
 use crate::ui::component_traits::{Component, HandleFocus};
@@ -167,6 +168,15 @@ impl Component for ArchiveListWindow {
             Action::ArchiveListNext => self.step(1),
             Action::ArchiveListPrevious => self.step(-1),
             Action::ArchiveListOpen => self.confirm_selection(),
+            Action::ShowChatActions | Action::SelectedChat(_) => {
+                self.refresh();
+                if let Some(chat_id) = self.selected_chat_id {
+                    let _ = self.app_context.action_tx().send(match action {
+                        Action::SelectedChat(command) => chat_command_action(command, chat_id),
+                        _ => Action::ShowChatActionsFor(chat_id, None),
+                    });
+                }
+            }
             // Shown again: start at the open chat, or the first
             Action::FocusComponent(ComponentName::ArchiveList) => self.select(None),
             _ => {}

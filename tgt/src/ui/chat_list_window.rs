@@ -1,6 +1,7 @@
 use crate::app::action::Action;
 use crate::app::context::AppContext;
 use crate::settings::{HighlightGroup, Theme};
+use crate::ui::chat_actions::chat_command_action;
 use crate::ui::component_name::ComponentName;
 use crate::ui::component_name::ComponentName::Prompt;
 use crate::ui::component_traits::{Component, HandleFocus};
@@ -46,7 +47,7 @@ pub(crate) fn chat_list_item_text(
     let marker = pane::selection_marker(theme, selected);
     let icon = format!("{} ", entry.kind.icon());
     let indent = marker.width() + icon.width();
-    let unread = entry.unread_count > 0;
+    let unread = entry.unread_count > 0 || entry.is_marked_as_unread;
 
     // Line 1: icon, name, online dot ... time
     let time: Vec<Span<'static>> = entry
@@ -91,13 +92,25 @@ pub(crate) fn chat_list_item_text(
     }
 
     // Line 2: preview ... badges
-    let badges = badge_spans(
+    let mut badges = badge_spans(
         theme,
         entry.is_pinned,
         entry.unread_mention_count,
         entry.unread_count,
         entry.is_muted,
     );
+    // Marked as unread without unread messages: an empty unread badge
+    if entry.is_marked_as_unread && entry.unread_count == 0 {
+        let group = if entry.is_muted {
+            HighlightGroup::MutedChat
+        } else {
+            HighlightGroup::NotificationBadge
+        };
+        if !badges.is_empty() {
+            badges.push(Span::raw(" "));
+        }
+        badges.push(Span::styled("  ", theme.style(group)));
+    }
     let badges_width: usize = badges.iter().map(Span::width).sum();
     let preview_width = width.saturating_sub(indent + badges_width + 1).max(1);
     let mut second = vec![Span::raw(" ".repeat(indent))];
@@ -386,6 +399,30 @@ impl ChatListWindow {
         open_chat(&self.app_context, chat);
     }
 
+    /// Runs `action` (the chat actions menu or one of its commands) on the
+    /// selected chat.
+    fn act_on_selected(&self, action: &Action) {
+        let action_tx = self.app_context.action_tx();
+        let chat = self
+            .chat_list_state
+            .selected()
+            .and_then(|i| self.visible_chats.get(i));
+        let chat_id = match chat {
+            Some(chat) if chat.kind != ChatKind::Archive => chat.chat_id,
+            Some(_) => {
+                let _ = action_tx.send(Action::StatusMessage(
+                    "Open the archive to act on its chats.".into(),
+                ));
+                return;
+            }
+            None => return,
+        };
+        let _ = action_tx.send(match action {
+            Action::SelectedChat(command) => chat_command_action(*command, chat_id),
+            _ => Action::ShowChatActionsFor(chat_id, None),
+        });
+    }
+
     /// Sets the string used to order the entries of the chat list.
     fn sort(&mut self, s: String) {
         self.sort_string = Some(s);
@@ -617,6 +654,7 @@ impl Component for ChatListWindow {
                 self.rebuild_visible_chats();
             }
             Action::ChatListSearch => self.start_search(),
+            Action::ShowChatActions | Action::SelectedChat(_) => self.act_on_selected(&action),
             Action::LoadChats(..) => {
                 // Preserve selection when loading more chats (user is scrolling)
                 self.rebuild_visible_chats_with_preserve_selection(true);

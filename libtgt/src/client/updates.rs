@@ -247,9 +247,13 @@ async fn apply(
             });
         }
         Update::ChatNotificationSettings(update) => {
-            with_chat(store, update.chat_id, |chat| {
+            // Muted chats are dimmed in the chat list
+            let changed = with_chat(store, update.chat_id, |chat| {
                 chat.notification_settings = update.notification_settings
             });
+            if changed {
+                throttle.request(notify);
+            }
         }
         Update::ChatPendingJoinRequests(update) => {
             with_chat(store, update.chat_id, |chat| {

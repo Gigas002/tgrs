@@ -72,6 +72,13 @@ keymap = [
   { keys = ["alt+r"], command = "chat_list_search", description = "Focus on prompt to start searching"},
   # Restore the default sorting in the chat list window.
   { keys = ["alt+c"], command = "chat_list_restore_sort", description = "Restore the default ordering of the chat list"},
+  # Chat actions on the selected chat: a lists them, the others run one
+  { keys = ["a"], command = "show_chat_actions", description = "Open chat actions"},
+  { keys = ["m"], command = "toggle_chat_mute", description = "Mute or unmute the chat"},
+  { keys = ["A"], command = "toggle_chat_archive", description = "Archive or unarchive the chat"},
+  { keys = ["P"], command = "toggle_chat_pin", description = "Pin or unpin the chat"},
+  { keys = ["u"], command = "toggle_chat_read", description = "Mark the chat as read or unread"},
+  { keys = ["D"], command = "leave_chat", description = "Leave or delete the chat (press twice)"},
   # Open pinned messages for the current chat (no-op if none pinned).
   { keys = ["shift+back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
   { keys = ["back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
@@ -86,6 +93,13 @@ keymap = [
   { keys = ["left"], command = "focus_previous_pane", description = "Focus the chat list"},
   { keys = ["right"], command = "focus_next_pane", description = "Focus the chat"},
   { keys = ["enter"], command = "archive_list_open", description = "Open the selected archived chat"},
+  # Chat actions on the selected chat: a lists them, the others run one
+  { keys = ["a"], command = "show_chat_actions", description = "Open chat actions"},
+  { keys = ["m"], command = "toggle_chat_mute", description = "Mute or unmute the chat"},
+  { keys = ["A"], command = "toggle_chat_archive", description = "Archive or unarchive the chat"},
+  { keys = ["P"], command = "toggle_chat_pin", description = "Pin or unpin the chat"},
+  { keys = ["u"], command = "toggle_chat_read", description = "Mark the chat as read or unread"},
+  { keys = ["D"], command = "leave_chat", description = "Leave or delete the chat (press twice)"},
   { keys = ["shift+back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
   { keys = ["back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
 ]
@@ -191,6 +205,20 @@ keymap = [
 
 # The message_actions key bindings are only usable when the message actions menu is open.
 # Besides these, the chat keys of each action (e.g. "e" to edit) run it directly.
+# The chat actions menu opens with a in the chat list and the archive (the
+# selected chat) or space c (the open chat). The chat list keys of an action,
+# like m to mute, run it directly; leaving or deleting a chat asks to confirm.
+[chat_actions]
+keymap = [
+  { keys = ["esc"], command = "hide_chat_actions", description = "Close chat actions"},
+  { keys = ["q"], command = "hide_chat_actions", description = "Close chat actions"},
+  { keys = ["enter"], command = "chat_actions_confirm", description = "Run the highlighted action"},
+  { keys = ["up"], command = "chat_actions_previous", description = "Previous action"},
+  { keys = ["k"], command = "chat_actions_previous", description = "Previous action"},
+  { keys = ["down"], command = "chat_actions_next", description = "Next action"},
+  { keys = ["j"], command = "chat_actions_next", description = "Next action"},
+]
+
 [message_actions]
 keymap = [
   { keys = ["esc"], command = "hide_message_actions", description = "Close message actions"},
@@ -216,6 +244,7 @@ keymap = [
   { keys = ["p"], command = "show_pinned_messages_popup", description = "Pinned messages"},
   { keys = ["u"], command = "show_file_upload_explorer", description = "Upload a file"},
   { keys = ["s"], command = "show_sticker_picker", description = "Send a sticker"},
+  { keys = ["c"], command = "show_chat_actions", description = "Actions of the open chat"},
   { keys = ["?"], command = "show_command_guide", description = "Help: every key"},
 ]
 

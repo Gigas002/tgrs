@@ -397,4 +397,35 @@ mod archive {
         assert_eq!(entry.unread_count, 2);
         assert!(!entry.is_muted);
     }
+
+    #[test]
+    fn chat_state_tells_what_chat_actions_toggle() {
+        let store = Store::default();
+        assert!(store.chat_state(2).is_none());
+
+        let mut archived = chat(2, "Old group", 0, true);
+        archived.is_marked_as_unread = true;
+        archived.positions = vec![ChatPosition {
+            list: ChatList::Archive,
+            order: 1,
+            is_pinned: true,
+            source: None,
+        }];
+        store.chats().insert(2, archived);
+        let state = store.chat_state(2).unwrap();
+        assert_eq!(state.title, "Old group");
+        assert!(state.is_muted && state.is_archived && state.is_pinned && state.is_unread);
+        assert!(!state.is_left(), "a private chat is deleted");
+
+        let mut main = chat(3, "Friend", 0, false);
+        main.positions = vec![ChatPosition {
+            list: ChatList::Main,
+            order: 1,
+            is_pinned: false,
+            source: None,
+        }];
+        store.chats().insert(3, main);
+        let state = store.chat_state(3).unwrap();
+        assert!(!state.is_muted && !state.is_archived && !state.is_pinned && !state.is_unread);
+    }
 }

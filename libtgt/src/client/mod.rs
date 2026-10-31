@@ -39,6 +39,8 @@ pub type TdError = tdlib_rs::types::Error;
 
 /// Messages per `getChatHistory` request.
 const HISTORY_BATCH: i32 = 50;
+/// `mute_for` that TDLib takes as forever (more than a year, in seconds).
+const MUTE_FOREVER: i32 = i32::MAX;
 /// Topics per `getForumTopics` request (TDLib's maximum).
 const TOPICS_BATCH: i32 = 100;
 /// Topics loaded for a forum at most.
@@ -375,6 +377,89 @@ impl Client {
         {
             tracing::error!("Failed to view all messages: {e:?}");
         }
+    }
+
+    /// Turns a chat's notifications off for good, or back on. Its other
+    /// notification settings are kept.
+    pub async fn set_chat_muted(&self, chat_id: i64, muted: bool) -> Result<(), TdError> {
+        let Some(mut settings) = self
+            .store
+            .chats()
+            .get(&chat_id)
+            .map(|chat| chat.notification_settings.clone())
+        else {
+            return Ok(());
+        };
+        settings.use_default_mute_for = false;
+        settings.mute_for = if muted { MUTE_FOREVER } else { 0 };
+        functions::set_chat_notification_settings(chat_id, settings, self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to mute chat {chat_id}: {e:?}"))
+    }
+
+    /// Moves a chat to the archive, or back to the main chat list.
+    pub async fn set_chat_archived(&self, chat_id: i64, archived: bool) -> Result<(), TdError> {
+        let list = if archived {
+            ChatList::Archive
+        } else {
+            ChatList::Main
+        };
+        functions::add_chat_to_list(chat_id, list, self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to move chat {chat_id}: {e:?}"))
+    }
+
+    /// Pins a chat at the top of its chat list (the archive for an archived
+    /// chat), or unpins it.
+    pub async fn set_chat_pinned(&self, chat_id: i64, pinned: bool) -> Result<(), TdError> {
+        let list = if self.store.is_archived(chat_id) {
+            ChatList::Archive
+        } else {
+            ChatList::Main
+        };
+        functions::toggle_chat_is_pinned(list, chat_id, pinned, self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to pin chat {chat_id}: {e:?}"))
+    }
+
+    /// Reads a chat up to `last_message_id` (0: nothing to read) with its
+    /// mentions, or marks it as unread.
+    pub async fn set_chat_read(
+        &self,
+        chat_id: i64,
+        read: bool,
+        last_message_id: i64,
+    ) -> Result<(), TdError> {
+        if !read {
+            return functions::toggle_chat_is_marked_as_unread(chat_id, true, self.client_id)
+                .await
+                .inspect_err(|e| tracing::error!("Failed to mark chat {chat_id} unread: {e:?}"));
+        }
+        if last_message_id != 0 {
+            functions::view_messages(chat_id, vec![last_message_id], None, true, self.client_id)
+                .await
+                .inspect_err(|e| tracing::error!("Failed to read chat {chat_id}: {e:?}"))?;
+        }
+        functions::read_all_chat_mentions(chat_id, self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to read mentions of {chat_id}: {e:?}"))?;
+        functions::toggle_chat_is_marked_as_unread(chat_id, false, self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to mark chat {chat_id} read: {e:?}"))
+    }
+
+    /// Leaves a group or channel.
+    pub async fn leave_chat(&self, chat_id: i64) -> Result<(), TdError> {
+        functions::leave_chat(chat_id, self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to leave chat {chat_id}: {e:?}"))
+    }
+
+    /// Deletes a chat's history for you and removes it from the chat list.
+    pub async fn delete_chat(&self, chat_id: i64) -> Result<(), TdError> {
+        functions::delete_chat_history(chat_id, true, false, self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to delete chat {chat_id}: {e:?}"))
     }
 
     /// The topics of a forum chat, in topic list order.

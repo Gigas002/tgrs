@@ -11,6 +11,7 @@ use crate::{
     },
     ui::{
         archive_list_window::ArchiveListWindow,
+        chat_actions::{ChatActions, chat_command_action},
         chat_list_window::ChatListWindow,
         chat_window::ChatWindow,
         command_guide::CommandGuide,
@@ -59,6 +60,8 @@ pub struct CoreWindow {
     focus_before_leader: Option<ComponentName>,
     /// The pane focused when the sticker picker opened, focused again after.
     focus_before_stickers: Option<ComponentName>,
+    /// The pane focused when the chat actions opened, focused again after.
+    focus_before_chat_actions: Option<ComponentName>,
     /// The size of the message reply component.
     size_message_reply: u16,
     /// The size of the chat list component.
@@ -160,6 +163,12 @@ impl CoreWindow {
                     .new_boxed(),
             ),
             (
+                ComponentName::ChatActions,
+                ChatActions::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::ChatActions.to_string())
+                    .new_boxed(),
+            ),
+            (
                 ComponentName::StickerPicker,
                 StickerPicker::new(Arc::clone(&app_context))
                     .with_name(ComponentName::StickerPicker.to_string())
@@ -206,6 +215,7 @@ impl CoreWindow {
             prompt_extra_rows: 0,
             focus_before_leader: None,
             focus_before_stickers: None,
+            focus_before_chat_actions: None,
             size_message_reply,
             small_area,
             component_focused,
@@ -446,6 +456,7 @@ impl CoreWindow {
             ComponentName::PinnedMessagesPopup => Action::HidePinnedMessagesPopup,
             ComponentName::Picker => Action::HidePicker,
             ComponentName::StickerPicker => Action::HideStickerPicker,
+            ComponentName::ChatActions => Action::HideChatActions,
             ComponentName::LeaderMenu => Action::HideLeaderMenu,
             _ => return None,
         })
@@ -721,6 +732,32 @@ impl Component for CoreWindow {
             Action::ShowPicker(_) => self.show_popup(ComponentName::Picker, action),
             Action::HidePicker => {
                 self.close_popup(ComponentName::Picker, Some(ComponentName::Chat))
+            }
+            // The chat lists act on their selected chat, other panes on the open one
+            Action::ShowChatActions | Action::SelectedChat(_) => {
+                if let Some(list @ (ComponentName::ChatList | ComponentName::ArchiveList)) =
+                    self.component_focused
+                {
+                    if let Some(component) = self.components.get_mut(&list) {
+                        component.update(action);
+                    }
+                    return;
+                }
+                let action_tx = self.app_context.action_tx();
+                let chat_id = self.app_context.store().open_chat_id().as_i64();
+                let _ = action_tx.send(match (chat_id, action) {
+                    (0, _) => Action::StatusMessage("Open a chat first.".into()),
+                    (_, Action::SelectedChat(command)) => chat_command_action(command, chat_id),
+                    _ => Action::ShowChatActionsFor(chat_id, None),
+                });
+            }
+            Action::ShowChatActionsFor(..) => {
+                self.focus_before_chat_actions = self.component_focused.filter(|c| !c.is_popup());
+                self.show_popup(ComponentName::ChatActions, action);
+            }
+            Action::HideChatActions => {
+                let refocus = self.focus_before_chat_actions.take();
+                self.close_popup(ComponentName::ChatActions, refocus);
             }
             Action::ShowStickerPicker => {
                 if self.app_context.store().open_chat_id().is_none() {

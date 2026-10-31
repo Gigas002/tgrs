@@ -36,13 +36,15 @@ pub enum ComponentName {
     Picker,
     /// Popup to pick a sticker to send.
     StickerPicker,
+    /// The actions menu of a chat.
+    ChatActions,
     /// The leader menu (Space), like concord's.
     LeaderMenu,
 }
 
 impl ComponentName {
     /// Every component, in a fixed order.
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 18] = [
         Self::CoreWindow,
         Self::ChatList,
         Self::ArchiveList,
@@ -59,11 +61,12 @@ impl ComponentName {
         Self::PinnedMessagesPopup,
         Self::Picker,
         Self::StickerPicker,
+        Self::ChatActions,
         Self::LeaderMenu,
     ];
 
     /// The popups (modal overlays); only one is shown at a time.
-    pub const POPUPS: [Self; 8] = [
+    pub const POPUPS: [Self; 9] = [
         Self::CommandGuide,
         Self::SearchOverlay,
         Self::MessageActions,
@@ -71,6 +74,7 @@ impl ComponentName {
         Self::PinnedMessagesPopup,
         Self::Picker,
         Self::StickerPicker,
+        Self::ChatActions,
         Self::LeaderMenu,
     ];
 
@@ -100,6 +104,7 @@ impl Display for ComponentName {
             ComponentName::PinnedMessagesPopup => write!(f, "Pinned Messages"),
             ComponentName::Picker => write!(f, "Picker"),
             ComponentName::StickerPicker => write!(f, "Sticker Picker"),
+            ComponentName::ChatActions => write!(f, "Chat Actions"),
             ComponentName::LeaderMenu => write!(f, "Leader Menu"),
         }
     }

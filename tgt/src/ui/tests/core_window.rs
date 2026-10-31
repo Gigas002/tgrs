@@ -1,5 +1,9 @@
 use super::*;
-use crate::{app::action::Action, app::event::Event, ui::tests::create_test_app_context};
+use crate::{
+    app::action::{Action, ChatCommand},
+    app::event::Event,
+    ui::tests::create_test_app_context,
+};
 
 fn create_test_core_window() -> CoreWindow {
     let app_context = create_test_app_context();
@@ -668,4 +672,38 @@ fn the_sticker_picker_needs_an_open_chat_and_gives_the_focus_back() {
     window.update(Action::HideStickerPicker);
     assert_eq!(window.component_focused, Some(ComponentName::Chat));
     assert!(!window.is_popup_visible(ComponentName::StickerPicker));
+}
+
+fn sent_actions(window: &CoreWindow) -> Vec<Action> {
+    let mut rx = window.app_context.action_rx();
+    std::iter::from_fn(|| rx.try_recv().ok()).collect()
+}
+
+#[test]
+fn chat_actions_act_on_the_open_chat_outside_the_chat_lists() {
+    let mut window = create_test_core_window();
+    window.focus_only(Some(ComponentName::Chat));
+    window.update(Action::ShowChatActions);
+    assert_eq!(
+        sent_actions(&window),
+        [Action::StatusMessage("Open a chat first.".into())]
+    );
+
+    window.app_context.store().set_open_chat_id_i64(5);
+    window.update(Action::ShowChatActions);
+    window.update(Action::SelectedChat(ChatCommand::ToggleMute));
+    window.update(Action::SelectedChat(ChatCommand::Remove));
+    assert_eq!(
+        sent_actions(&window),
+        [
+            Action::ShowChatActionsFor(5, None),
+            Action::RunChatCommand(ChatCommand::ToggleMute, 5),
+            Action::ShowChatActionsFor(5, Some(ChatCommand::Remove)),
+        ]
+    );
+
+    window.update(Action::ShowChatActionsFor(5, None));
+    assert_eq!(window.component_focused, Some(ComponentName::ChatActions));
+    window.update(Action::HideChatActions);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
 }

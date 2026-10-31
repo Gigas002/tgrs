@@ -65,6 +65,37 @@ impl MessageCommand {
     }
 }
 
+/// Something to do with a chat, from a chat list key or the chat actions menu.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum ChatCommand {
+    /// Turn notifications off, or back on.
+    ToggleMute,
+    /// Move the chat to the archive, or back to the main chat list.
+    ToggleArchive,
+    /// Pin the chat at the top of its chat list, or unpin it.
+    TogglePin,
+    /// Mark the chat as read, or as unread.
+    ToggleRead,
+    /// Leave a group or channel, delete any other chat; asks to confirm.
+    Remove,
+}
+
+impl ChatCommand {
+    /// Every command, in the order of the chat actions menu.
+    pub const ALL: [Self; 5] = [
+        Self::ToggleMute,
+        Self::ToggleArchive,
+        Self::TogglePin,
+        Self::ToggleRead,
+        Self::Remove,
+    ];
+
+    /// Whether the command runs only once confirmed.
+    pub fn needs_confirmation(self) -> bool {
+        self == Self::Remove
+    }
+}
+
 /// A list to pick one entry from, shown in the picker popup.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PickerKind {
@@ -346,6 +377,24 @@ pub enum Action {
     ShowMessageActionsFor(i64),
     /// Close the message actions menu.
     HideMessageActions,
+
+    /// Open the actions menu for the selected chat in a chat list, or the open chat.
+    ShowChatActions,
+    /// Open the actions menu for this chat, with this command selected and
+    /// waiting for its confirmation.
+    ShowChatActionsFor(i64, Option<ChatCommand>),
+    /// Close the chat actions menu.
+    HideChatActions,
+    /// Highlight the next entry of the chat actions menu.
+    ChatActionsNext,
+    /// Highlight the previous entry of the chat actions menu.
+    ChatActionsPrevious,
+    /// Run the highlighted entry of the chat actions menu.
+    ChatActionsConfirm,
+    /// Run a command on the selected chat in a chat list, or the open chat.
+    SelectedChat(ChatCommand),
+    /// Run a command on a chat.
+    RunChatCommand(ChatCommand, i64),
     /// Run the action highlighted in the message actions menu.
     MessageActionsConfirm,
     /// Highlight the previous action in the message actions menu.
@@ -550,6 +599,16 @@ impl FromStr for Action {
             "open_message_media" => Ok(Action::SelectedMessage(MessageCommand::OpenMedia)),
             "download_message_media" => Ok(Action::SelectedMessage(MessageCommand::DownloadMedia)),
             "show_message_actions" => Ok(Action::ShowMessageActions),
+            "show_chat_actions" => Ok(Action::ShowChatActions),
+            "hide_chat_actions" => Ok(Action::HideChatActions),
+            "chat_actions_next" => Ok(Action::ChatActionsNext),
+            "chat_actions_previous" => Ok(Action::ChatActionsPrevious),
+            "chat_actions_confirm" => Ok(Action::ChatActionsConfirm),
+            "toggle_chat_mute" => Ok(Action::SelectedChat(ChatCommand::ToggleMute)),
+            "toggle_chat_archive" => Ok(Action::SelectedChat(ChatCommand::ToggleArchive)),
+            "toggle_chat_pin" => Ok(Action::SelectedChat(ChatCommand::TogglePin)),
+            "toggle_chat_read" => Ok(Action::SelectedChat(ChatCommand::ToggleRead)),
+            "leave_chat" => Ok(Action::SelectedChat(ChatCommand::Remove)),
             "hide_message_actions" => Ok(Action::HideMessageActions),
             "message_actions_confirm" => Ok(Action::MessageActionsConfirm),
             "message_actions_previous" => Ok(Action::MessageActionsPrevious),

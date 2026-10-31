@@ -66,3 +66,29 @@ pub struct ChatListEntry {
     /// Shown instead of the last message (the archive row lists its chats).
     pub summary: Option<String>,
 }
+
+/// What the chat actions see of a chat: its state, which they toggle.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ChatState {
+    pub chat_id: i64,
+    pub title: String,
+    pub kind: ChatKind,
+    /// Notifications are turned off.
+    pub is_muted: bool,
+    /// The chat is in the Archive chat list.
+    pub is_archived: bool,
+    /// The chat is pinned in its chat list (the main one or the archive).
+    pub is_pinned: bool,
+    /// The chat has unread messages or is marked as unread.
+    pub is_unread: bool,
+    /// The newest message, read when the chat is marked as read; 0 if none.
+    pub last_message_id: i64,
+}
+
+impl ChatState {
+    /// Whether leaving is how the chat goes away: groups and channels are
+    /// left, other chats are deleted.
+    pub fn is_left(&self) -> bool {
+        matches!(self.kind, ChatKind::Group | ChatKind::Channel)
+    }
+}

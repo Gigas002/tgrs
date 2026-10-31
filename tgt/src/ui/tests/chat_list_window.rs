@@ -392,3 +392,48 @@ fn the_archive_row_lists_its_chats() {
     assert!(rows[1].contains("Old group, Old bot"), "{rows:?}");
     assert!(rows[1].ends_with(" 2 "), "{rows:?}");
 }
+
+#[test]
+fn chat_keys_act_on_the_selected_chat_but_not_the_archive_row() {
+    use crate::app::action::ChatCommand;
+    let mut window = create_test_chat_list_window();
+    setup_chats(&mut window, &["Alice", "Bob"]);
+    let mut archive_row = create_mock_chat(0, "Archived chats");
+    archive_row.kind = ChatKind::Archive;
+    window.visible_chats.insert(0, archive_row);
+    let sent = |window: &ChatListWindow| -> Vec<Action> {
+        let mut rx = window.app_context.action_rx();
+        std::iter::from_fn(|| rx.try_recv().ok()).collect()
+    };
+
+    window.chat_list_state.select(Some(0));
+    window.update(Action::ShowChatActions);
+    assert!(matches!(sent(&window)[..], [Action::StatusMessage(_)]));
+
+    window.chat_list_state.select(Some(2));
+    let bob = window.visible_chats[2].chat_id;
+    window.update(Action::ShowChatActions);
+    window.update(Action::SelectedChat(ChatCommand::ToggleArchive));
+    assert_eq!(
+        sent(&window),
+        [
+            Action::ShowChatActionsFor(bob, None),
+            Action::RunChatCommand(ChatCommand::ToggleArchive, bob)
+        ]
+    );
+}
+
+#[test]
+fn a_chat_marked_as_unread_has_an_empty_badge() {
+    let app_context = create_test_app_context();
+    let mut entry = create_mock_chat(1, "Alice");
+    entry.is_marked_as_unread = true;
+    let rows = row_text(&chat_list_item_text(&entry, &app_context, 30, false));
+    assert!(rows[1].ends_with("  "), "{rows:?}");
+    let text = chat_list_item_text(&entry, &app_context, 30, false);
+    let badge = text.lines[1].spans.last().unwrap();
+    assert_eq!(
+        badge.style,
+        app_context.theme().style(HighlightGroup::NotificationBadge)
+    );
+}

@@ -13,7 +13,7 @@ pub mod topic;
 mod tests;
 
 pub use alert::MessageAlert;
-pub use chat::{ChatKind, ChatListEntry};
+pub use chat::{ChatKind, ChatListEntry, ChatState};
 pub use ids::{ChatId, MessageId};
 pub use message::{
     Media, MediaFile, MediaKind, MessageContentType, MessageEntry, Reaction, TextLine, TextSpan,
