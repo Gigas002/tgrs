@@ -34,13 +34,15 @@ pub enum ComponentName {
     PinnedMessagesPopup,
     /// Popup to pick a reaction or a link.
     Picker,
+    /// Popup to pick a sticker to send.
+    StickerPicker,
     /// The leader menu (Space), like concord's.
     LeaderMenu,
 }
 
 impl ComponentName {
     /// Every component, in a fixed order.
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 17] = [
         Self::CoreWindow,
         Self::ChatList,
         Self::ArchiveList,
@@ -56,17 +58,19 @@ impl ComponentName {
         Self::FileUploadExplorer,
         Self::PinnedMessagesPopup,
         Self::Picker,
+        Self::StickerPicker,
         Self::LeaderMenu,
     ];
 
     /// The popups (modal overlays); only one is shown at a time.
-    pub const POPUPS: [Self; 7] = [
+    pub const POPUPS: [Self; 8] = [
         Self::CommandGuide,
         Self::SearchOverlay,
         Self::MessageActions,
         Self::FileUploadExplorer,
         Self::PinnedMessagesPopup,
         Self::Picker,
+        Self::StickerPicker,
         Self::LeaderMenu,
     ];
 
@@ -95,6 +99,7 @@ impl Display for ComponentName {
             ComponentName::FileUploadExplorer => write!(f, "File Upload Explorer"),
             ComponentName::PinnedMessagesPopup => write!(f, "Pinned Messages"),
             ComponentName::Picker => write!(f, "Picker"),
+            ComponentName::StickerPicker => write!(f, "Sticker Picker"),
             ComponentName::LeaderMenu => write!(f, "Leader Menu"),
         }
     }

@@ -38,11 +38,13 @@ Groups with topics (forums) open into a topic list, a pane right of the chat lis
 
 Archived chats are behind the `📦 Archived chats` row at the top of the chat list, which names them and counts the unread ones: `enter` on it opens the archive, a pane right of the chat list, and `enter` there opens an archived chat. Opening a chat from the chat list closes the archive again; `alt+a` focuses it and `alt+b` hides or shows it.
 
-`space` opens the leader menu, which lists what comes next: `1` hides or shows the chat list, `2` the topic list, `3` the archive, `a` opens the actions of the selected message, `space` searches chats, `/` searches messages, `p` shows pinned messages, `u` uploads a file and `?` lists every key. Its entries are the `[leader_menu]` section of `keymap.toml`.
+`space` opens the leader menu, which lists what comes next: `1` hides or shows the chat list, `2` the topic list, `3` the archive, `a` opens the actions of the selected message, `space` searches chats, `/` searches messages, `p` shows pinned messages, `u` uploads a file, `s` sends a sticker and `?` lists every key. Its entries are the `[leader_menu]` section of `keymap.toml`.
 
 ### Messages
 
 In the prompt, Enter sends; Alt+Enter or Ctrl+J start a new line (also Shift+Enter in terminals with the kitty keyboard protocol, e.g. kitty, foot, WezTerm, Ghostty).
+
+`alt+s` opens the sticker picker: your recent stickers and installed sets as tabs (`tab`/`shift+tab`) over a grid of stickers (arrows or `h`/`j`/`k`/`l`), drawn as images with the `media-preview` feature and as their emoji otherwise. `enter` sends the selected one, as a reply when you're replying.
 
 Select a message in the chat (`up`/`down`) and press a key, or `Enter` for the actions menu, which lists every action with its key and dims the ones that don't apply. The keys follow [concord](https://github.com/chojs23/concord)'s:
 

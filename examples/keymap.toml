@@ -49,6 +49,8 @@ keymap = [
   # Show command guide with keybindings
   { keys = ["alt+f1"], command = "show_command_guide", description = "Show command guide with all keybindings"},
 
+  # Pick a sticker to send to the open chat
+  { keys = ["alt+s"], command = "show_sticker_picker", description = "Send a sticker"},
   # Upload file (opens the file explorer popup)
   { keys = ["alt+u"], command = "show_file_upload_explorer", description = "Upload file"},
 ]
@@ -213,6 +215,7 @@ keymap = [
   { keys = ["/"], command = "chat_window_search", description = "Search messages"},
   { keys = ["p"], command = "show_pinned_messages_popup", description = "Pinned messages"},
   { keys = ["u"], command = "show_file_upload_explorer", description = "Upload a file"},
+  { keys = ["s"], command = "show_sticker_picker", description = "Send a sticker"},
   { keys = ["?"], command = "show_command_guide", description = "Help: every key"},
 ]
 
@@ -227,6 +230,26 @@ keymap = [
   { keys = ["k"], command = "picker_previous", description = "Previous entry"},
   { keys = ["down"], command = "picker_next", description = "Next entry"},
   { keys = ["j"], command = "picker_next", description = "Next entry"},
+]
+
+# The sticker_picker key bindings are only usable while the sticker picker is
+# open: arrows (or h/j/k/l) pick a sticker, tab and shift+tab switch sets.
+[sticker_picker]
+keymap = [
+  { keys = ["esc"], command = "hide_sticker_picker", description = "Close the sticker picker"},
+  { keys = ["q"], command = "hide_sticker_picker", description = "Close the sticker picker"},
+  { keys = ["enter"], command = "sticker_picker_send", description = "Send the selected sticker"},
+  { keys = ["left"], command = "sticker_picker_left", description = "Previous sticker"},
+  { keys = ["h"], command = "sticker_picker_left", description = "Previous sticker"},
+  { keys = ["right"], command = "sticker_picker_right", description = "Next sticker"},
+  { keys = ["l"], command = "sticker_picker_right", description = "Next sticker"},
+  { keys = ["up"], command = "sticker_picker_up", description = "Sticker above"},
+  { keys = ["k"], command = "sticker_picker_up", description = "Sticker above"},
+  { keys = ["down"], command = "sticker_picker_down", description = "Sticker below"},
+  { keys = ["j"], command = "sticker_picker_down", description = "Sticker below"},
+  { keys = ["tab"], command = "sticker_picker_next_set", description = "Next sticker set"},
+  { keys = ["back_tab"], command = "sticker_picker_previous_set", description = "Previous sticker set"},
+  { keys = ["shift+back_tab"], command = "sticker_picker_previous_set", description = "Previous sticker set"},
 ]
 
 [file_upload_explorer]

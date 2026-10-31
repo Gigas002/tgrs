@@ -22,6 +22,7 @@ use crate::{
         pinned_messages_popup::PinnedMessagesPopup,
         prompt_window::PromptWindow,
         search_overlay::SearchOverlay,
+        sticker_picker::StickerPicker,
         topic_list_window::TopicListWindow,
     },
 };
@@ -56,6 +57,8 @@ pub struct CoreWindow {
     prompt_extra_rows: u16,
     /// The pane focused when the leader menu opened, focused again after.
     focus_before_leader: Option<ComponentName>,
+    /// The pane focused when the sticker picker opened, focused again after.
+    focus_before_stickers: Option<ComponentName>,
     /// The size of the message reply component.
     size_message_reply: u16,
     /// The size of the chat list component.
@@ -157,6 +160,12 @@ impl CoreWindow {
                     .new_boxed(),
             ),
             (
+                ComponentName::StickerPicker,
+                StickerPicker::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::StickerPicker.to_string())
+                    .new_boxed(),
+            ),
+            (
                 ComponentName::FileUploadExplorer,
                 FileUploadExplorer::new(Arc::clone(&app_context))
                     .with_name(ComponentName::FileUploadExplorer.to_string())
@@ -196,6 +205,7 @@ impl CoreWindow {
             size_prompt,
             prompt_extra_rows: 0,
             focus_before_leader: None,
+            focus_before_stickers: None,
             size_message_reply,
             small_area,
             component_focused,
@@ -435,6 +445,7 @@ impl CoreWindow {
             ComponentName::FileUploadExplorer => Action::HideFileUploadExplorer,
             ComponentName::PinnedMessagesPopup => Action::HidePinnedMessagesPopup,
             ComponentName::Picker => Action::HidePicker,
+            ComponentName::StickerPicker => Action::HideStickerPicker,
             ComponentName::LeaderMenu => Action::HideLeaderMenu,
             _ => return None,
         })
@@ -680,6 +691,10 @@ impl Component for CoreWindow {
                 }
             }
             Action::HideChatWindowReply => {
+                // The prompt stops replying too
+                if let Some(prompt) = self.components.get_mut(&ComponentName::Prompt) {
+                    prompt.update(action);
+                }
                 self.show_reply_message = false;
                 self.app_context
                     .store()
@@ -707,6 +722,29 @@ impl Component for CoreWindow {
             Action::HidePicker => {
                 self.close_popup(ComponentName::Picker, Some(ComponentName::Chat))
             }
+            Action::ShowStickerPicker => {
+                if self.app_context.store().open_chat_id().is_none() {
+                    let _ = self.app_context.action_tx().send(Action::StatusMessage(
+                        "Open a chat before sending a sticker.".into(),
+                    ));
+                    return;
+                }
+                self.focus_before_stickers = self.component_focused.filter(|c| !c.is_popup());
+                self.show_popup(ComponentName::StickerPicker, action);
+            }
+            Action::HideStickerPicker => {
+                let refocus = self
+                    .focus_before_stickers
+                    .take()
+                    .or(Some(ComponentName::Prompt));
+                self.close_popup(ComponentName::StickerPicker, refocus);
+            }
+            // Answers to the picker's requests, wherever the focus went meanwhile
+            Action::StickerSetsLoaded(_) | Action::StickerSetLoaded(_) => {
+                if let Some(picker) = self.components.get_mut(&ComponentName::StickerPicker) {
+                    picker.update(action);
+                }
+            }
             Action::RunMessageCommand(..) => {
                 // From the message actions menu, which may still be focused
                 if let Some(chat) = self.components.get_mut(&ComponentName::Chat) {
@@ -715,8 +753,11 @@ impl Component for CoreWindow {
             }
             #[cfg(feature = "media-preview")]
             Action::PreviewDecoded(_) => {
-                if let Some(chat) = self.components.get_mut(&ComponentName::Chat) {
-                    chat.update(action);
+                // Each keeps only the previews it asked for
+                for name in [ComponentName::Chat, ComponentName::StickerPicker] {
+                    if let Some(component) = self.components.get_mut(&name) {
+                        component.update(action.clone());
+                    }
                 }
             }
             Action::ShowFileUploadExplorer => {

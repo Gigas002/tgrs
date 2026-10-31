@@ -628,3 +628,68 @@ mod message {
         assert_eq!(format_duration(-1), "0:00");
     }
 }
+
+mod sticker {
+    use tdlib_rs::enums::{StickerFormat, StickerFullType, ThumbnailFormat};
+    use tdlib_rs::types::{File, Sticker, StickerFullTypeRegular, Thumbnail};
+
+    use crate::model::{StickerEntry, StickerSetEntry};
+
+    fn sticker(format: StickerFormat, thumbnail: Option<ThumbnailFormat>) -> Sticker {
+        Sticker {
+            id: 9,
+            set_id: 1,
+            width: 512,
+            height: 512,
+            emoji: "😀".to_owned(),
+            format,
+            full_type: StickerFullType::Regular(StickerFullTypeRegular::default()),
+            thumbnail: thumbnail.map(|format| Thumbnail {
+                format,
+                width: 128,
+                height: 128,
+                file: File {
+                    id: 2,
+                    ..File::default()
+                },
+            }),
+            sticker: File {
+                id: 1,
+                ..File::default()
+            },
+        }
+    }
+
+    fn preview_id(sticker: &Sticker) -> Option<i32> {
+        StickerEntry::from(sticker).preview.map(|file| file.id)
+    }
+
+    #[test]
+    fn the_preview_is_a_still_thumbnail_or_the_webp_itself() {
+        let webp = sticker(StickerFormat::Webp, Some(ThumbnailFormat::Webp));
+        assert_eq!(preview_id(&webp), Some(2));
+        assert_eq!(preview_id(&sticker(StickerFormat::Webp, None)), Some(1));
+        // Animated: only a still thumbnail can be shown
+        assert_eq!(preview_id(&sticker(StickerFormat::Tgs, None)), None);
+        let tgs = sticker(StickerFormat::Tgs, Some(ThumbnailFormat::Tgs));
+        assert_eq!(preview_id(&tgs), None);
+        let webm = sticker(StickerFormat::Webm, Some(ThumbnailFormat::Jpeg));
+        assert_eq!(preview_id(&webm), Some(2));
+
+        let entry = StickerEntry::from(&webp);
+        assert_eq!((entry.file_id, entry.emoji.as_str()), (1, "😀"));
+    }
+
+    #[test]
+    fn a_set_is_loaded_once_it_has_its_stickers() {
+        let recent = StickerSetEntry::recent(vec![StickerEntry::default()]);
+        assert_eq!(recent.id, StickerSetEntry::RECENT);
+        assert!(recent.is_loaded());
+        let installed = StickerSetEntry {
+            id: 5,
+            size: 3,
+            ..StickerSetEntry::default()
+        };
+        assert!(!installed.is_loaded());
+    }
+}

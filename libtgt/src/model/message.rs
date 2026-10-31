@@ -603,7 +603,7 @@ fn chat_photo_size(sizes: &[tdlib_rs::types::PhotoSize]) -> Option<MediaFile> {
         .map(|size| MediaFile::from(&size.photo))
 }
 
-fn still_thumbnail(thumbnail: Option<&Thumbnail>) -> Option<MediaFile> {
+pub(crate) fn still_thumbnail(thumbnail: Option<&Thumbnail>) -> Option<MediaFile> {
     thumbnail
         .filter(|thumbnail| {
             matches!(

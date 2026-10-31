@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use crossterm::event::{KeyCode, KeyModifiers};
-use libtgt::model::{TdChatList, TdMessageReplyToMessage};
+use libtgt::model::{StickerEntry, StickerSetEntry, TdChatList, TdMessageReplyToMessage};
 use ratatui::layout::Rect;
 
 use crate::{app::error::AppError, ui::component_name::ComponentName};
@@ -390,6 +390,35 @@ pub enum Action {
     /// Pick the highlighted entry.
     PickerConfirm,
 
+    /// Show the sticker picker for the open chat.
+    ShowStickerPicker,
+    /// Close the sticker picker.
+    HideStickerPicker,
+    /// Load the sticker sets for the sticker picker.
+    LoadStickerSets,
+    /// The installed sticker sets (the recent stickers first), without their stickers.
+    StickerSetsLoaded(Vec<StickerSetEntry>),
+    /// Load the stickers of a set.
+    LoadStickerSet(i64),
+    /// A set with its stickers.
+    StickerSetLoaded(StickerSetEntry),
+    /// Move the sticker picker's selection left.
+    StickerPickerLeft,
+    /// Move the sticker picker's selection right.
+    StickerPickerRight,
+    /// Move the sticker picker's selection up a row.
+    StickerPickerUp,
+    /// Move the sticker picker's selection down a row.
+    StickerPickerDown,
+    /// Show the next sticker set.
+    StickerPickerNextSet,
+    /// Show the previous sticker set.
+    StickerPickerPreviousSet,
+    /// Send the selected sticker.
+    StickerPickerSend,
+    /// Send a sticker to the open chat, replying to the pending reply.
+    SendSticker(StickerEntry),
+
     /// Open the media of a message with the default application (downloads it first).
     OpenMedia(i64),
     /// Save the media of a message to the download directory (downloads it first).
@@ -509,6 +538,15 @@ impl FromStr for Action {
             "picker_previous" => Ok(Action::PickerPrevious),
             "picker_next" => Ok(Action::PickerNext),
             "picker_confirm" => Ok(Action::PickerConfirm),
+            "show_sticker_picker" => Ok(Action::ShowStickerPicker),
+            "hide_sticker_picker" => Ok(Action::HideStickerPicker),
+            "sticker_picker_left" => Ok(Action::StickerPickerLeft),
+            "sticker_picker_right" => Ok(Action::StickerPickerRight),
+            "sticker_picker_up" => Ok(Action::StickerPickerUp),
+            "sticker_picker_down" => Ok(Action::StickerPickerDown),
+            "sticker_picker_next_set" => Ok(Action::StickerPickerNextSet),
+            "sticker_picker_previous_set" => Ok(Action::StickerPickerPreviousSet),
+            "sticker_picker_send" => Ok(Action::StickerPickerSend),
             "open_message_media" => Ok(Action::SelectedMessage(MessageCommand::OpenMedia)),
             "download_message_media" => Ok(Action::SelectedMessage(MessageCommand::DownloadMedia)),
             "show_message_actions" => Ok(Action::ShowMessageActions),

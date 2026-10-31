@@ -982,6 +982,10 @@ impl Component for PromptWindow {
             Action::EditMessage(message_id, message) => {
                 self.input.edit_message(message_id, message);
             }
+            // A sticker answered the message; the text stays
+            Action::HideChatWindowReply if matches!(self.input.mode, Mode::Reply(_)) => {
+                self.input.mode = Mode::Normal;
+            }
             Action::ReplyMessage(message_id, _) => {
                 self.input.mode = Mode::Reply(message_id);
             }

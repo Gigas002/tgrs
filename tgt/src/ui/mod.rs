@@ -28,6 +28,7 @@ pub mod prompt_window;
 pub mod reply_message;
 pub mod search_overlay;
 pub mod status_bar;
+pub mod sticker_picker;
 pub mod terminal;
 pub mod title_bar;
 pub mod topic_list_window;

@@ -40,6 +40,7 @@ pub struct KeymapFile {
     pub file_upload_explorer: Option<KeymapMode>,
     pub pinned_messages_popup: Option<KeymapMode>,
     pub picker: Option<KeymapMode>,
+    pub sticker_picker: Option<KeymapMode>,
     pub leader_menu: Option<KeymapMode>,
 }
 

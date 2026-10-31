@@ -20,6 +20,7 @@ use std::{
 
 use libtgt::{
     client::{Client, Notification},
+    model::TdMessageReplyToMessage,
     store::Store,
     tdlib_rs::enums::ChatList,
 };
@@ -451,6 +452,16 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::HidePicker
             | Action::PickerPrevious
             | Action::PickerNext
+            | Action::ShowStickerPicker
+            | Action::HideStickerPicker
+            | Action::StickerSetsLoaded(_)
+            | Action::StickerSetLoaded(_)
+            | Action::StickerPickerLeft
+            | Action::StickerPickerRight
+            | Action::StickerPickerUp
+            | Action::StickerPickerDown
+            | Action::StickerPickerNextSet
+            | Action::StickerPickerPreviousSet
             | Action::RunMessageCommand(..)
             | Action::StatusMessage(_)
             | Action::ShowFileUploadExplorer
@@ -579,6 +590,39 @@ async fn handle_app_actions(
                     )
                     .await;
                 app_context.action_tx().send(Action::HideChatWindowReply)?;
+            }
+            Action::LoadStickerSets => match client.get_sticker_sets().await {
+                Ok(sets) => app_context
+                    .action_tx()
+                    .send(Action::StickerSetsLoaded(sets))?,
+                Err(e) => media::status(&app_context, format!("No stickers: {}", e.message)),
+            },
+            Action::LoadStickerSet(set_id) => match client.get_sticker_set(*set_id).await {
+                Ok(set) => app_context
+                    .action_tx()
+                    .send(Action::StickerSetLoaded(set))?,
+                Err(e) => media::status(&app_context, format!("No stickers: {}", e.message)),
+            },
+            Action::SendSticker(sticker) => {
+                let store = app_context.store();
+                let chat_id = store.open_chat_id().as_i64();
+                if chat_id == 0 {
+                    continue;
+                }
+                // Answers the message being replied to, like a text message would
+                let reply_to = Some(store.reply_message_id().as_i64())
+                    .filter(|id| *id > 0)
+                    .map(|message_id| TdMessageReplyToMessage {
+                        chat_id: 0,
+                        message_id,
+                    });
+                let replying = reply_to.is_some();
+                let topic = store.open_send_topic();
+                if let Err(e) = client.send_sticker(sticker, chat_id, topic, reply_to).await {
+                    media::status(&app_context, format!("Sticker not sent: {}", e.message));
+                } else if replying {
+                    app_context.action_tx().send(Action::HideChatWindowReply)?;
+                }
             }
             Action::SendMessageEdited(message_id, message) => {
                 client.edit_message(*message_id, message.to_string()).await;

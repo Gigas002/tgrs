@@ -101,21 +101,37 @@ enum Entry {
 
 /// Previews shown in the chat, keyed by file id: message ids repeat across
 /// chats, file ids don't.
-#[derive(Default)]
 pub struct ChatPreviews {
     entries: HashMap<i32, Entry>,
     /// File ids from the least recently requested.
     order: VecDeque<i32>,
+    /// Previews kept decoded at most.
+    capacity: usize,
+}
+
+impl Default for ChatPreviews {
+    fn default() -> Self {
+        Self::with_capacity(CHAT_CACHE_SIZE)
+    }
 }
 
 impl ChatPreviews {
+    /// Keeps up to `capacity` previews decoded.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            entries: HashMap::new(),
+            order: VecDeque::new(),
+            capacity,
+        }
+    }
+
     /// The action that loads the preview of `file`, unless it's loaded or
     /// already loading.
     pub fn request(&mut self, message_id: i64, file: &MediaFile) -> Option<Action> {
         if self.entries.contains_key(&file.id) {
             return None;
         }
-        while self.order.len() >= CHAT_CACHE_SIZE {
+        while self.order.len() >= self.capacity {
             if let Some(old) = self.order.pop_front() {
                 self.entries.remove(&old);
             }
@@ -139,6 +155,24 @@ impl ChatPreviews {
                     Entry::Failed
                 }
             };
+        }
+    }
+
+    /// Draws the preview of `file_id` in `area` if it's loaded, centered
+    /// vertically; false otherwise.
+    pub fn draw_loaded(
+        &mut self,
+        frame: &mut Frame<'_>,
+        file_id: i32,
+        area: Rect,
+        alignment: Alignment,
+    ) -> bool {
+        match self.entries.get_mut(&file_id) {
+            Some(Entry::Loaded(image)) => {
+                image.draw(frame, area, alignment, false);
+                true
+            }
+            _ => false,
         }
     }
 

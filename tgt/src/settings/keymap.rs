@@ -60,6 +60,7 @@ const SECTIONS: &[(ComponentName, &str)] = &[
     (ComponentName::FileUploadExplorer, "file_upload_explorer"),
     (ComponentName::PinnedMessagesPopup, "pinned_messages_popup"),
     (ComponentName::Picker, "picker"),
+    (ComponentName::StickerPicker, "sticker_picker"),
     (ComponentName::LeaderMenu, "leader_menu"),
 ];
 
@@ -76,6 +77,7 @@ fn section(file: &KeymapFile, component: ComponentName) -> Option<&KeymapMode> {
         ComponentName::FileUploadExplorer => file.file_upload_explorer.as_ref(),
         ComponentName::PinnedMessagesPopup => file.pinned_messages_popup.as_ref(),
         ComponentName::Picker => file.picker.as_ref(),
+        ComponentName::StickerPicker => file.sticker_picker.as_ref(),
         ComponentName::LeaderMenu => file.leader_menu.as_ref(),
         _ => file.core_window.as_ref(),
     }

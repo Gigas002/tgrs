@@ -221,3 +221,12 @@ fn an_empty_prompt_sends_nothing() {
         "{sent:?}"
     );
 }
+
+#[test]
+fn a_reply_sent_elsewhere_ends_reply_mode() {
+    let mut window = create_test_prompt_window();
+    window.update(Action::ReplyMessage(42, "hello".to_string()));
+    // A sticker answered the message
+    window.update(Action::HideChatWindowReply);
+    assert!(matches!(window.current_mode(), Mode::Normal));
+}

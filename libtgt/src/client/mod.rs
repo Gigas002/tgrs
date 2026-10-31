@@ -7,17 +7,20 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tdlib_rs::enums::{
     self, AuthorizationState, ChatList, ForumTopics, FoundChatMessages, InputMessageContent,
     InputMessageReplyTo, LogStream, MessageTopic, Messages, OptionValue, ReactionType,
-    SearchMessagesFilter, User,
+    SearchMessagesFilter, StickerSets, StickerType, User,
 };
 use tdlib_rs::functions;
 use tdlib_rs::types::{
-    FormattedText, InputFileLocal, InputMessageDocument, InputMessageText, LogStreamFile,
-    OptionValueBoolean, OptionValueInteger, ReactionTypeEmoji,
+    FormattedText, InputFileId, InputFileLocal, InputMessageDocument, InputMessageSticker,
+    InputMessageText, InputSticker, LogStreamFile, OptionValueBoolean, OptionValueInteger,
+    ReactionTypeEmoji,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
-use crate::model::{MessageEntry, TdChatList, TdMessageReplyToMessage, TopicEntry};
+use crate::model::{
+    MessageEntry, StickerEntry, StickerSetEntry, TdChatList, TdMessageReplyToMessage, TopicEntry,
+};
 use crate::store::Store;
 
 mod auth;
@@ -624,6 +627,71 @@ impl Client {
             Ok(enums::Message::Message(message)) => Ok(message),
             Err(e) => {
                 tracing::error!("Failed to send document: {e:?}");
+                Err(e)
+            }
+        }
+    }
+
+    /// Sends a sticker, to a forum topic when `topic` is given, and clears
+    /// the pending reply.
+    pub async fn send_sticker(
+        &self,
+        sticker: &StickerEntry,
+        chat_id: i64,
+        topic: Option<MessageTopic>,
+        reply_to: Option<TdMessageReplyToMessage>,
+    ) -> Result<tdlib_rs::types::Message, TdError> {
+        self.store.clear_reply_message();
+        let reply_to = reply_to.map(|r| InputMessageReplyTo::Message((&r).into()));
+        let content = InputMessageContent::InputMessageSticker(InputMessageSticker {
+            sticker: InputSticker {
+                sticker: enums::InputFile::Id(InputFileId {
+                    id: sticker.file_id,
+                }),
+                thumbnail: None,
+                width: sticker.width,
+                height: sticker.height,
+            },
+            emoji: sticker.emoji.clone(),
+        });
+        match functions::send_message(chat_id, topic, reply_to, None, content, self.client_id).await
+        {
+            Ok(enums::Message::Message(message)) => Ok(message),
+            Err(e) => {
+                tracing::error!("Failed to send sticker: {e:?}");
+                Err(e)
+            }
+        }
+    }
+
+    /// The installed sticker sets, without their stickers, and before them
+    /// the recently sent stickers when there are any.
+    pub async fn get_sticker_sets(&self) -> Result<Vec<StickerSetEntry>, TdError> {
+        let StickerSets::StickerSets(installed) =
+            functions::get_installed_sticker_sets(StickerType::Regular, self.client_id)
+                .await
+                .inspect_err(|e| tracing::error!("Failed to get sticker sets: {e:?}"))?;
+        let recent = match functions::get_recent_stickers(false, self.client_id).await {
+            Ok(enums::Stickers::Stickers(recent)) => recent.stickers,
+            Err(e) => {
+                tracing::error!("Failed to get recent stickers: {e:?}");
+                Vec::new()
+            }
+        };
+        let recent = (!recent.is_empty())
+            .then(|| StickerSetEntry::recent(recent.iter().map(StickerEntry::from).collect()));
+        Ok(recent
+            .into_iter()
+            .chain(installed.sets.iter().map(StickerSetEntry::from))
+            .collect())
+    }
+
+    /// A sticker set with its stickers.
+    pub async fn get_sticker_set(&self, set_id: i64) -> Result<StickerSetEntry, TdError> {
+        match functions::get_sticker_set(set_id, self.client_id).await {
+            Ok(enums::StickerSet::StickerSet(set)) => Ok(StickerSetEntry::from(&set)),
+            Err(e) => {
+                tracing::error!("Failed to get sticker set {set_id}: {e:?}");
                 Err(e)
             }
         }

@@ -653,3 +653,19 @@ fn wide_side_panes_are_narrowed_to_leave_room_for_the_chat() {
     assert!(window.size_chat_list >= MIN_CHAT_LIST_SIZE);
     assert!(window.size_archive_list >= MIN_CHAT_LIST_SIZE);
 }
+
+#[test]
+fn the_sticker_picker_needs_an_open_chat_and_gives_the_focus_back() {
+    let mut window = create_test_core_window();
+    window.focus_only(Some(ComponentName::Chat));
+    window.update(Action::ShowStickerPicker);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+    assert!(!window.is_popup_visible(ComponentName::StickerPicker));
+
+    window.app_context.store().set_open_chat_id_i64(5);
+    window.update(Action::ShowStickerPicker);
+    assert_eq!(window.component_focused, Some(ComponentName::StickerPicker));
+    window.update(Action::HideStickerPicker);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+    assert!(!window.is_popup_visible(ComponentName::StickerPicker));
+}
