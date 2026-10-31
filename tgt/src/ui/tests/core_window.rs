@@ -496,3 +496,96 @@ mod leader {
         assert!(window.size_chat_list > 0);
     }
 }
+
+/// A core window whose open chat is a forum.
+fn create_forum_core_window() -> CoreWindow {
+    let window = create_test_core_window();
+    window.app_context.store().set_open_chat_is_forum(true);
+    window
+}
+
+#[test]
+fn the_topic_list_is_a_pane_only_in_a_forum() {
+    let mut window = create_test_core_window();
+    assert!(!window.panes().contains(&ComponentName::TopicList));
+    window.update(Action::FocusComponent(ComponentName::TopicList));
+    assert_ne!(window.component_focused, Some(ComponentName::TopicList));
+
+    let mut window = create_forum_core_window();
+    assert_eq!(
+        window.panes(),
+        [
+            ComponentName::ChatList,
+            ComponentName::TopicList,
+            ComponentName::Chat,
+            ComponentName::Prompt
+        ]
+    );
+    window.focus_only(Some(ComponentName::ChatList));
+    window.update(Action::FocusNextPane);
+    assert_eq!(window.component_focused, Some(ComponentName::TopicList));
+    window.update(Action::FocusNextPane);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+}
+
+#[test]
+fn the_topic_list_can_be_hidden_and_shown_again() {
+    let mut window = create_forum_core_window();
+    window.focus_only(Some(ComponentName::TopicList));
+    window.update(Action::ToggleTopicList);
+    assert!(!window.topic_list_shown());
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+    assert!(!window.panes().contains(&ComponentName::TopicList));
+
+    // Focusing it shows it again
+    window.update(Action::FocusComponent(ComponentName::TopicList));
+    assert!(window.topic_list_shown());
+    assert_eq!(window.component_focused, Some(ComponentName::TopicList));
+}
+
+#[test]
+fn the_topic_list_resizes_and_leaves_room_for_the_chat() {
+    let mut window = create_forum_core_window();
+    window.focus_only(Some(ComponentName::TopicList));
+    let start = window.size_topic_list;
+    window.update(Action::ResizePaneWider);
+    assert_eq!(window.size_topic_list, start + 1);
+    // The chat grows by taking from the topic list, not the chat list
+    window.focus_only(Some(ComponentName::Chat));
+    let chat_list = window.size_chat_list;
+    window.update(Action::ResizePaneWider);
+    assert_eq!(window.size_topic_list, start);
+    assert_eq!(window.size_chat_list, chat_list);
+
+    window.focus_only(Some(ComponentName::TopicList));
+    for _ in 0..100 {
+        window.update(Action::ResizePaneWider);
+    }
+    for _ in 0..100 {
+        window.update(Action::IncreaseChatListSize);
+    }
+    assert!(window.size_chat_list + window.size_topic_list <= MAX_SIDE_PANES_SIZE);
+    for _ in 0..100 {
+        window.update(Action::ResizePaneNarrower);
+    }
+    assert_eq!(window.size_topic_list, MIN_CHAT_LIST_SIZE);
+}
+
+#[test]
+fn a_forum_draws_the_topics_between_the_chats_and_the_chat() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut window = create_forum_core_window();
+    let (width, height) = (100, 20);
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+    terminal
+        .draw(|frame| window.draw(frame, frame.area()).unwrap())
+        .unwrap();
+    let top: String = terminal.backend().buffer().content()[..usize::from(width)]
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect();
+    let chats = top.find("Chats").unwrap();
+    let topics = top.find("Topics").expect(&top);
+    let chat = top.find("Chat ").unwrap();
+    assert!(chats < topics && topics < chat, "{top}");
+}

@@ -24,6 +24,8 @@ pub enum Notification {
     OpenChatPinsChanged,
     /// TDLib evicted open chat messages from its cache; history should be reloaded.
     OpenChatHistoryInvalidated,
+    /// A topic of the open forum chat changed, or a message arrived in one.
+    OpenChatTopicsChanged,
 }
 
 /// Minimum gap between two [`Notification::ChatListChanged`] (~1 frame at 60fps).
@@ -314,9 +316,18 @@ async fn apply(
         // Only the open chat's messages are cached; updates for other chats are ignored.
         Update::NewMessage(update) if update.message.chat_id == open_chat_id => {
             let message = update.message;
+            let entry = MessageEntry::from(&message);
+            let topic = message.topic_id.as_ref();
+            if store.add_open_chat_topic_message(topic, &entry) {
+                let _ = notify.send(Notification::OpenChatTopicsChanged);
+            }
+            // A forum shows only the open topic's messages
+            if !store.shows_message_topic(topic) {
+                return;
+            }
             store
                 .open_chat_messages()
-                .insert_messages(std::iter::once(MessageEntry::from(&message)));
+                .insert_messages(std::iter::once(entry));
             let _ = notify.send(Notification::OpenChatMessageAdded(message.id));
             // Let the main loop process the message before blocking in receive() again.
             tokio::task::yield_now().await;
@@ -373,6 +384,18 @@ async fn apply(
             drop(messages);
             // The chat's last message may have changed
             throttle.request(notify);
+        }
+        Update::ForumTopicInfo(update) => {
+            let changed = store.set_open_chat_topic_info(&update.info);
+            if changed {
+                let _ = notify.send(Notification::OpenChatTopicsChanged);
+            }
+        }
+        Update::ForumTopic(update) => {
+            let changed = store.update_open_chat_topic(&update);
+            if changed {
+                let _ = notify.send(Notification::OpenChatTopicsChanged);
+            }
         }
         _ => {}
     }

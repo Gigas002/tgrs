@@ -53,6 +53,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+- Groups with topics (forums): opening one shows its topics in a resizable pane right of the chat list; the chat shows the open topic's messages, and sending, uploads, search and pinned messages stay in that topic. Commands `focus_topic_list` (`alt+t`), `toggle_topic_list` (`alt+m`, leader `2`), `topic_list_next`, `topic_list_previous` and `topic_list_open`; keymap section `[topic_list]`.
 - The two-step verification password is masked with `*` when logging in on the terminal (Backspace and Ctrl+U edit it, Ctrl+C quits).
 - Concord-like media handling: `x` opens the media of the selected message (photo, video, GIF, audio, voice/video message, sticker or file) in the default application via `xdg-open`, `s` downloads to `app.download_dir` (default `$XDG_DOWNLOAD_DIR` or `~/Downloads`) without overwriting files. Programs and scripts are refused by `x` and can only be downloaded.
 - Message actions menu (`Enter` in the chat) listing every message action with its key; unavailable actions are dimmed.

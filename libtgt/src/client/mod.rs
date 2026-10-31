@@ -5,9 +5,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use tdlib_rs::enums::{
-    self, AuthorizationState, ChatList, FoundChatMessages, InputMessageContent,
-    InputMessageReplyTo, LogStream, Messages, OptionValue, ReactionType, SearchMessagesFilter,
-    User,
+    self, AuthorizationState, ChatList, ForumTopics, FoundChatMessages, InputMessageContent,
+    InputMessageReplyTo, LogStream, MessageTopic, Messages, OptionValue, ReactionType,
+    SearchMessagesFilter, User,
 };
 use tdlib_rs::functions;
 use tdlib_rs::types::{
@@ -17,7 +17,7 @@ use tdlib_rs::types::{
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
-use crate::model::{MessageEntry, TdMessageReplyToMessage};
+use crate::model::{MessageEntry, TdMessageReplyToMessage, TopicEntry};
 use crate::store::Store;
 
 mod auth;
@@ -36,6 +36,10 @@ pub type TdError = tdlib_rs::types::Error;
 
 /// Messages per `getChatHistory` request.
 const HISTORY_BATCH: i32 = 50;
+/// Topics per `getForumTopics` request (TDLib's maximum).
+const TOPICS_BATCH: i32 = 100;
+/// Topics loaded for a forum at most.
+const MAX_TOPICS: usize = 1000;
 
 pub struct Client {
     client_id: i32,
@@ -366,26 +370,76 @@ impl Client {
         }
     }
 
-    /// Fetches one batch of chat history. `offset` 0 means `from_message_id` and older;
-    /// a negative offset includes newer messages (TDLib requires `limit >= -offset`).
+    /// The topics of a forum chat, in topic list order.
+    pub async fn get_forum_topics(&self, chat_id: i64) -> Result<Vec<TopicEntry>, TdError> {
+        let mut topics: Vec<TopicEntry> = Vec::new();
+        let (mut offset_date, mut offset_message_id, mut offset_topic_id) = (0, 0, 0);
+        while topics.len() < MAX_TOPICS {
+            let ForumTopics::ForumTopics(found) = functions::get_forum_topics(
+                chat_id,
+                String::new(),
+                offset_date,
+                offset_message_id,
+                offset_topic_id,
+                TOPICS_BATCH,
+                self.client_id,
+            )
+            .await
+            .inspect_err(|e| tracing::error!("Failed to get forum topics: {e:?}"))?;
+            let next = (
+                found.next_offset_date,
+                found.next_offset_message_id,
+                found.next_offset_forum_topic_id,
+            );
+            let done = found.topics.is_empty()
+                || next == (offset_date, offset_message_id, offset_topic_id)
+                || topics.len() + found.topics.len() >= found.total_count as usize;
+            topics.extend(found.topics.iter().map(TopicEntry::from));
+            if done {
+                break;
+            }
+            (offset_date, offset_message_id, offset_topic_id) = next;
+        }
+        Ok(topics)
+    }
+
+    /// Fetches one batch of chat history, or of a forum topic's history.
+    /// `offset` 0 means `from_message_id` and older; a negative offset includes
+    /// newer messages (TDLib requires `limit >= -offset`).
     /// Returns the entries and whether more may follow.
     pub async fn get_chat_history_batch(
         &self,
         chat_id: i64,
+        topic_id: Option<i32>,
         from_message_id: i64,
         offset: i32,
         limit: i32,
     ) -> (Vec<MessageEntry>, bool) {
-        match functions::get_chat_history(
-            chat_id,
-            from_message_id,
-            offset,
-            limit,
-            false,
-            self.client_id,
-        )
-        .await
-        {
+        let history = match topic_id {
+            Some(topic_id) => {
+                functions::get_forum_topic_history(
+                    chat_id,
+                    topic_id,
+                    from_message_id,
+                    offset,
+                    limit,
+                    self.client_id,
+                )
+                .await
+            }
+            None => {
+                functions::get_chat_history(
+                    chat_id,
+                    from_message_id,
+                    offset,
+                    limit,
+                    false,
+                    self.client_id,
+                )
+                .await
+            }
+        };
+        match history {
             Ok(Messages::Messages(messages)) => {
                 let entries: Vec<MessageEntry> = messages
                     .messages
@@ -411,7 +465,13 @@ impl Client {
         while self.store.open_chat_messages().len() < start_len + WINDOW {
             let from_message_id = self.store.from_message_id();
             let (entries, has_more) = self
-                .get_chat_history_batch(chat_id, from_message_id, 0, HISTORY_BATCH)
+                .get_chat_history_batch(
+                    chat_id,
+                    self.store.open_topic_id(),
+                    from_message_id,
+                    0,
+                    HISTORY_BATCH,
+                )
                 .await;
             let Some(last) = entries.last() else {
                 tracing::info!("No more messages to get");
@@ -425,16 +485,17 @@ impl Client {
         }
     }
 
-    /// Server-side search in a chat.
+    /// Server-side search in a chat, or in one of its topics.
     pub async fn search_chat_messages(
         &self,
         chat_id: i64,
+        topic: Option<MessageTopic>,
         query: String,
         limit: i32,
     ) -> Result<Vec<MessageEntry>, TdError> {
         match functions::search_chat_messages(
             chat_id,
-            None, // all topics
+            topic, // None: all topics
             query,
             None, // any sender
             0,
@@ -455,14 +516,20 @@ impl Client {
         }
     }
 
-    /// All pinned messages in a chat (paginated server search), newest first.
-    pub async fn fetch_all_pinned_messages(&self, chat_id: i64) -> Vec<MessageEntry> {
+    /// All pinned messages in a chat or one of its topics (paginated server
+    /// search), newest first.
+    pub async fn fetch_all_pinned_messages(
+        &self,
+        chat_id: i64,
+        topic: Option<MessageTopic>,
+    ) -> Vec<MessageEntry> {
+        let in_topic = topic.is_some();
         let mut by_id: HashMap<i64, MessageEntry> = HashMap::new();
         let mut from_message_id: i64 = 0;
         loop {
             match functions::search_chat_messages(
                 chat_id,
-                None,
+                topic.clone(),
                 String::new(),
                 None,
                 from_message_id,
@@ -487,7 +554,8 @@ impl Client {
                 }
             }
         }
-        if by_id.is_empty() {
+        // The chat's pinned message may be in another topic
+        if by_id.is_empty() && !in_topic {
             match functions::get_chat_pinned_message(chat_id, self.client_id).await {
                 Ok(enums::Message::Message(m)) => {
                     by_id.insert(m.id, MessageEntry::from(&m));
@@ -502,18 +570,20 @@ impl Client {
         pins
     }
 
-    /// Sends a text message and clears the pending reply.
+    /// Sends a text message, to a forum topic when `topic` is given, and
+    /// clears the pending reply.
     pub async fn send_message(
         &self,
         message: String,
         chat_id: i64,
+        topic: Option<MessageTopic>,
         reply_to: Option<TdMessageReplyToMessage>,
     ) -> Result<tdlib_rs::types::Message, TdError> {
         self.store.clear_reply_message();
         let reply_to = reply_to.map(|r| InputMessageReplyTo::Message((&r).into()));
         match functions::send_message(
             chat_id,
-            None,
+            topic,
             reply_to,
             None,
             text_content(message),
@@ -529,11 +599,13 @@ impl Client {
         }
     }
 
-    /// Sends a local file as a document and clears the pending reply.
+    /// Sends a local file as a document, to a forum topic when `topic` is
+    /// given, and clears the pending reply.
     pub async fn send_document(
         &self,
         file_path: String,
         chat_id: i64,
+        topic: Option<MessageTopic>,
     ) -> Result<tdlib_rs::types::Message, TdError> {
         self.store.clear_reply_message();
         let content = InputMessageContent::InputMessageDocument(InputMessageDocument {
@@ -544,7 +616,7 @@ impl Client {
             },
             caption: None,
         });
-        match functions::send_message(chat_id, None, None, None, content, self.client_id).await {
+        match functions::send_message(chat_id, topic, None, None, content, self.client_id).await {
             Ok(enums::Message::Message(message)) => Ok(message),
             Err(e) => {
                 tracing::error!("Failed to send document: {e:?}");

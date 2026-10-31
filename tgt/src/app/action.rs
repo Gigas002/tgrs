@@ -233,6 +233,8 @@ pub enum Action {
     UnfocusComponent,
     /// Toggle ChatList action.
     ToggleChatList,
+    /// Hide or show the topic list of a forum chat.
+    ToggleTopicList,
     /// Increase ChatList size action.
     IncreaseChatListSize,
     /// Decrease ChatList size action.
@@ -262,6 +264,15 @@ pub enum Action {
     ChatListOpen,
     /// ChatListSortWithString action.
     ChatListSortWithString(String),
+
+    /// Load the topics of the open forum chat.
+    LoadForumTopics,
+    /// Select the next topic.
+    TopicListNext,
+    /// Select the previous topic.
+    TopicListPrevious,
+    /// Open the selected topic.
+    TopicListOpen,
 
     /// ChatWindowNext action.
     ChatWindowNext,
@@ -434,10 +445,12 @@ impl FromStr for Action {
             "try_quit" => Ok(Action::TryQuit),
             "render" => Ok(Action::Render),
             "focus_chat_list" => Ok(Action::FocusComponent(ComponentName::ChatList)),
+            "focus_topic_list" => Ok(Action::FocusComponent(ComponentName::TopicList)),
             "focus_chat" => Ok(Action::FocusComponent(ComponentName::Chat)),
             "focus_prompt" => Ok(Action::FocusComponent(ComponentName::Prompt)),
             "unfocus_component" => Ok(Action::UnfocusComponent),
             "toggle_chat_list" => Ok(Action::ToggleChatList),
+            "toggle_topic_list" => Ok(Action::ToggleTopicList),
             "increase_chat_list_size" => Ok(Action::IncreaseChatListSize),
             "decrease_chat_list_size" => Ok(Action::DecreaseChatListSize),
             "increase_prompt_size" => Ok(Action::IncreasePromptSize),
@@ -448,6 +461,9 @@ impl FromStr for Action {
             "chat_list_open" => Ok(Action::ChatListOpen),
             "chat_list_search" => Ok(Action::ChatListSearch),
             "chat_list_restore_sort" => Ok(Action::ChatListRestoreSort),
+            "topic_list_next" => Ok(Action::TopicListNext),
+            "topic_list_previous" => Ok(Action::TopicListPrevious),
+            "topic_list_open" => Ok(Action::TopicListOpen),
             "chat_window_search" => Ok(Action::ChatWindowSearch),
             "chat_window_restore_sort" => Ok(Action::ChatWindowRestoreSort),
             "chat_window_next" => Ok(Action::ChatWindowNext),

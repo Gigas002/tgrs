@@ -235,6 +235,7 @@ fn handle_notification(
         Notification::OpenChatMessageChanged(_) => app_context.mark_dirty(),
         Notification::OpenChatPinsChanged => action_tx.send(Action::LoadPinnedMessages)?,
         Notification::OpenChatHistoryInvalidated => action_tx.send(Action::GetChatHistory)?,
+        Notification::OpenChatTopicsChanged => app_context.mark_dirty(),
     }
     Ok(())
 }
@@ -449,6 +450,11 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::PinnedPopupNext
             | Action::Refresh
             | Action::ToggleChatList
+            | Action::ToggleTopicList
+            | Action::LoadForumTopics
+            | Action::TopicListNext
+            | Action::TopicListPrevious
+            | Action::TopicListOpen
             | Action::IncreaseChatListSize
             | Action::DecreaseChatListSize
             | Action::IncreasePromptSize
@@ -550,6 +556,7 @@ async fn handle_app_actions(
                     .send_message(
                         message.to_string(),
                         app_context.store().open_chat_id().as_i64(),
+                        app_context.store().open_send_topic(),
                         reply_to.clone(),
                     )
                     .await;
@@ -566,7 +573,10 @@ async fn handle_app_actions(
                     ));
                     continue;
                 }
-                let _ = client.send_document(file_path.to_string(), chat_id).await;
+                let topic = app_context.store().open_send_topic();
+                let _ = client
+                    .send_document(file_path.to_string(), chat_id, topic)
+                    .await;
             }
             Action::OpenMedia(message_id) => {
                 media::open(&app_context, client.files(), *message_id);
@@ -624,9 +634,20 @@ async fn handle_app_actions(
             Action::LoadPreview(request) => {
                 media::load_preview(&app_context, client.files(), request.clone());
             }
+            Action::LoadForumTopics => {
+                let chat_id = app_context.store().open_chat_id().as_i64();
+                match client.get_forum_topics(chat_id).await {
+                    Ok(topics) if app_context.store().open_chat_id().as_i64() == chat_id => {
+                        app_context.store().set_open_chat_topics(topics);
+                    }
+                    Ok(_) => {}
+                    Err(e) => media::status(&app_context, format!("No topics: {}", e.message)),
+                }
+            }
             Action::GetChatHistory if !app_context.store().is_history_loading() => {
                 app_context.store().set_history_loading(true);
                 let chat_id = app_context.store().open_chat_id().as_i64();
+                let topic_id = app_context.store().open_topic_id();
                 let cache_len_before = app_context.store().open_chat_messages().len();
 
                 // An empty cache (initial load) gets two batches to fill the window,
@@ -639,21 +660,31 @@ async fn handle_app_actions(
                 let mut loaded_count = 0;
 
                 while loaded_count < target_load {
-                    if app_context.store().open_chat_id().as_i64() != chat_id {
+                    if app_context.store().open_chat_id().as_i64() != chat_id
+                        || app_context.store().open_topic_id() != topic_id
+                    {
                         break;
                     }
 
                     // Always use the oldest message in cache (or 0 if empty) to ensure continuity
                     let from_message_id = app_context.store().oldest_message_id().unwrap_or(0);
                     let (entries, _has_more) = client
-                        .get_chat_history_batch(chat_id, from_message_id, 0, HISTORY_BATCH)
+                        .get_chat_history_batch(
+                            chat_id,
+                            topic_id,
+                            from_message_id,
+                            0,
+                            HISTORY_BATCH,
+                        )
                         .await;
 
                     if entries.is_empty() {
                         break;
                     }
 
-                    if app_context.store().open_chat_id().as_i64() != chat_id {
+                    if app_context.store().open_chat_id().as_i64() != chat_id
+                        || app_context.store().open_topic_id() != topic_id
+                    {
                         break;
                     }
 
@@ -672,13 +703,18 @@ async fn handle_app_actions(
                 if chat_id == 0 {
                     continue;
                 }
-                let pins = client.fetch_all_pinned_messages(chat_id).await;
-                if app_context.store().open_chat_id().as_i64() == chat_id {
+                let topic_id = app_context.store().open_topic_id();
+                let topic = app_context.store().open_message_topic();
+                let pins = client.fetch_all_pinned_messages(chat_id, topic).await;
+                if app_context.store().open_chat_id().as_i64() == chat_id
+                    && app_context.store().open_topic_id() == topic_id
+                {
                     app_context.store().set_open_chat_pinned(pins);
                 }
             }
             Action::GetChatHistoryNewer if !app_context.store().is_history_loading() => {
                 let chat_id = app_context.store().open_chat_id().as_i64();
+                let topic_id = app_context.store().open_topic_id();
                 let newest = app_context.store().open_chat_messages().newest_message_id();
                 if let Some(from_id) = newest {
                     app_context.store().set_history_loading(true);
@@ -687,12 +723,15 @@ async fn handle_app_actions(
                     let (entries, _) = client
                         .get_chat_history_batch(
                             chat_id,
+                            topic_id,
                             from_id,
                             -(HISTORY_BATCH - 1),
                             HISTORY_BATCH,
                         )
                         .await;
-                    if app_context.store().open_chat_id().as_i64() == chat_id && !entries.is_empty()
+                    if app_context.store().open_chat_id().as_i64() == chat_id
+                        && app_context.store().open_topic_id() == topic_id
+                        && !entries.is_empty()
                     {
                         // Skip the first message if it's the boundary message we already have
                         let new_messages = if entries.first().map(|e| e.id()) == Some(from_id) {
@@ -719,8 +758,9 @@ async fn handle_app_actions(
                     ));
                     continue;
                 }
+                let topic = app_context.store().open_message_topic();
                 match client
-                    .search_chat_messages(chat_id, query.clone(), HISTORY_BATCH)
+                    .search_chat_messages(chat_id, topic, query.clone(), HISTORY_BATCH)
                     .await
                 {
                     Ok(entries) => {
@@ -741,6 +781,7 @@ async fn handle_app_actions(
             }
             Action::JumpToMessage(message_id) => {
                 let chat_id = app_context.store().open_chat_id().as_i64();
+                let topic_id = app_context.store().open_topic_id();
                 if chat_id == 0 {
                     continue;
                 }
@@ -774,7 +815,7 @@ async fn handle_app_actions(
 
                 // Get target + 99 older messages (offset 0 = include from_message_id)
                 let (mut all_entries, _) = client
-                    .get_chat_history_batch(chat_id, *message_id, 0, OLDER_LIMIT)
+                    .get_chat_history_batch(chat_id, topic_id, *message_id, 0, OLDER_LIMIT)
                     .await;
 
                 // Load newer messages in multiple batches (TDLib offset limit is -100)
@@ -783,6 +824,7 @@ async fn handle_app_actions(
                     let (entries_newer, _) = client
                         .get_chat_history_batch(
                             chat_id,
+                            topic_id,
                             current_from_id,
                             -(NEWER_BATCH_SIZE - 1),
                             NEWER_BATCH_SIZE,

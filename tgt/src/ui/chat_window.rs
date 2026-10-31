@@ -345,7 +345,8 @@ impl ChatWindow {
         0
     }
 
-    /// ` 👥 Name · status `, like concord's channel pane title.
+    /// ` 👥 Name · status ` or ` 👥 Name › 💬 Topic `, like concord's channel
+    /// pane title.
     fn pane_title(&self) -> Line<'static> {
         let store = self.app_context.store();
         let theme = self.app_context.theme();
@@ -360,6 +361,13 @@ impl ChatWindow {
             ));
         }
         spans.push(Span::raw(name));
+        if let Some(topic) = store.open_topic() {
+            spans.push(Span::styled(
+                format!(" › {} ", topic.icon()),
+                theme.style(HighlightGroup::ChatTypeMarker),
+            ));
+            spans.push(Span::raw(topic.name));
+        }
         let status = store.open_chat_user_status();
         if !status.trim().is_empty() {
             spans.push(Span::styled(

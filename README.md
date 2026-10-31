@@ -32,7 +32,9 @@ Build features can be combined (e.g. `cargo build --release --no-default-feature
 
 Like concord: `left`/`right` move between the chat list, the chat and the prompt, `up`/`down` select inside a pane, and `i` in the chat starts writing (`esc` goes back to the chat). `alt+right`/`alt+left` make the focused pane wider or narrower, `alt+up`/`alt+down` taller or shorter. `alt+1`/`alt+2`/`alt+3` focus the chat list, chat and prompt directly.
 
-`space` opens the leader menu, which lists what comes next: `1` hides or shows the chat list, `a` opens the actions of the selected message, `space` searches chats, `/` searches messages, `p` shows pinned messages, `u` uploads a file and `?` lists every key. Its entries are the `[leader_menu]` section of `keymap.toml`.
+Groups with topics (forums) open into a topic list, a pane right of the chat list: `enter` on a topic shows its messages in the chat, and messages you send go to that topic. The topic list resizes like the other panes, `alt+t` focuses it and `alt+m` hides or shows it.
+
+`space` opens the leader menu, which lists what comes next: `1` hides or shows the chat list, `2` the topic list, `a` opens the actions of the selected message, `space` searches chats, `/` searches messages, `p` shows pinned messages, `u` uploads a file and `?` lists every key. Its entries are the `[leader_menu]` section of `keymap.toml`.
 
 ### Messages
 

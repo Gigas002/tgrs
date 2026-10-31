@@ -1,12 +1,12 @@
 use crate::app::action::Action;
 use crate::app::context::AppContext;
-use crate::settings::HighlightGroup;
+use crate::settings::{HighlightGroup, Theme};
 use crate::ui::component_name::ComponentName;
 use crate::ui::component_name::ComponentName::Prompt;
 use crate::ui::component_traits::{Component, HandleFocus};
 use crate::ui::{message, pane};
 use crossterm::event::{KeyCode, MouseButton, MouseEventKind};
-use libtgt::model::{ChatListEntry, format_timestamp};
+use libtgt::model::{ChatListEntry, MessageEntry, format_timestamp};
 use libtgt::tdlib_rs::enums::{ChatList, UserStatus};
 use nucleo_matcher::{Matcher, Utf32Str};
 use ratatui::Frame;
@@ -18,7 +18,11 @@ use tokio::sync::mpsc::UnboundedSender;
 use unicode_width::UnicodeWidthStr;
 
 /// `left`, then `right` aligned to the end of a `width` columns wide row.
-fn spread(mut left: Vec<Span<'static>>, right: Vec<Span<'static>>, width: usize) -> Line<'static> {
+pub(crate) fn spread(
+    mut left: Vec<Span<'static>>,
+    right: Vec<Span<'static>>,
+    width: usize,
+) -> Line<'static> {
     let used: usize = left.iter().chain(&right).map(Span::width).sum();
     left.push(Span::raw(" ".repeat(width.saturating_sub(used).max(1))));
     left.extend(right);
@@ -87,36 +91,22 @@ pub(crate) fn chat_list_item_text(
     }
 
     // Line 2: preview ... badges
-    let mut badges: Vec<Span<'static>> = Vec::new();
-    if entry.is_pinned {
-        badges.push(Span::styled("📌", theme.style(HighlightGroup::PinnedBadge)));
-    }
-    if entry.unread_mention_count > 0 {
-        badges.push(Span::styled("@", theme.style(HighlightGroup::MentionBadge)));
-    }
-    if unread {
-        let group = if entry.is_muted {
-            HighlightGroup::MutedChat
-        } else {
-            HighlightGroup::NotificationBadge
-        };
-        badges.push(Span::styled(
-            format!(" {} ", entry.unread_count),
-            theme.style(group),
-        ));
-    }
-    let badges: Vec<Span<'static>> = badges
-        .into_iter()
-        .enumerate()
-        .flat_map(|(index, badge)| {
-            let gap = (index > 0).then(|| Span::raw(" "));
-            gap.into_iter().chain(std::iter::once(badge))
-        })
-        .collect();
+    let badges = badge_spans(
+        theme,
+        entry.is_pinned,
+        entry.unread_mention_count,
+        entry.unread_count,
+        entry.is_muted,
+    );
     let badges_width: usize = badges.iter().map(Span::width).sum();
     let preview_width = width.saturating_sub(indent + badges_width + 1).max(1);
     let mut second = vec![Span::raw(" ".repeat(indent))];
-    second.extend(preview_spans(entry, app_context, preview_width));
+    second.extend(preview_spans(
+        entry.last_message.as_ref(),
+        entry.kind.is_group(),
+        app_context,
+        preview_width,
+    ));
 
     let mut lines = vec![spread(first, time, width), spread(second, badges, width)];
     if selected {
@@ -129,21 +119,57 @@ pub(crate) fn chat_list_item_text(
     Text::from(lines)
 }
 
+/// The badges at the end of a row: pinned, mentions and the unread count,
+/// a space apart.
+pub(crate) fn badge_spans(
+    theme: &Theme,
+    is_pinned: bool,
+    unread_mention_count: i32,
+    unread_count: i32,
+    is_muted: bool,
+) -> Vec<Span<'static>> {
+    let mut badges: Vec<Span<'static>> = Vec::new();
+    if is_pinned {
+        badges.push(Span::styled("📌", theme.style(HighlightGroup::PinnedBadge)));
+    }
+    if unread_mention_count > 0 {
+        badges.push(Span::styled("@", theme.style(HighlightGroup::MentionBadge)));
+    }
+    if unread_count > 0 {
+        let group = if is_muted {
+            HighlightGroup::MutedChat
+        } else {
+            HighlightGroup::NotificationBadge
+        };
+        badges.push(Span::styled(
+            format!(" {unread_count} "),
+            theme.style(group),
+        ));
+    }
+    badges
+        .into_iter()
+        .enumerate()
+        .flat_map(|(index, badge)| {
+            let gap = (index > 0).then(|| Span::raw(" "));
+            gap.into_iter().chain(std::iter::once(badge))
+        })
+        .collect()
+}
+
 /// `You: text`, `Name: text` in groups, or the text of the last message,
 /// on one line of `width` columns.
-fn preview_spans(
-    entry: &ChatListEntry,
+pub(crate) fn preview_spans(
+    last_message: Option<&MessageEntry>,
+    is_group: bool,
     app_context: &AppContext,
     width: usize,
 ) -> Vec<Span<'static>> {
     let theme = app_context.theme();
-    let text = entry
-        .last_message
-        .as_ref()
+    let text = last_message
         .map(|message| message.message_content_to_string())
         .unwrap_or_default();
     let first_line = text.lines().map(str::trim).find(|line| !line.is_empty());
-    let (Some(message), Some(first_line)) = (&entry.last_message, first_line) else {
+    let (Some(message), Some(first_line)) = (last_message, first_line) else {
         return vec![Span::styled(
             "No messages",
             theme.style(HighlightGroup::Placeholder),
@@ -152,7 +178,7 @@ fn preview_spans(
     let store = app_context.store();
     let author = if message.sender_id() == store.me() {
         Some("You".to_owned())
-    } else if entry.kind.is_group() {
+    } else if is_group {
         store.try_name_from_chats_or_users(message.sender_id())
     } else {
         None
@@ -293,11 +319,18 @@ impl ChatListWindow {
                 selected_index = i,
                 "confirm_selection: comparing open vs selected chat"
             );
+            let is_forum = self.app_context.store().is_forum(selected_chat_id);
+            // A forum's messages are in its topics: pick one first
+            let next_pane = if is_forum {
+                ComponentName::TopicList
+            } else {
+                Prompt
+            };
             if open_id == selected_chat_id {
                 // Same chat already open: don't clear/reload (avoids wiping messages on re-confirm).
                 self.app_context
                     .action_tx()
-                    .send(Action::FocusComponent(Prompt))
+                    .send(Action::FocusComponent(next_pane))
                     .unwrap();
                 let _ = self
                     .app_context
@@ -315,9 +348,20 @@ impl ChatListWindow {
                 .store()
                 .set_open_chat_user(chat.user.clone());
             self.app_context.store().set_open_chat_id_i64(chat.chat_id);
+            self.app_context.store().set_open_chat_is_forum(is_forum);
+            self.app_context.store().set_open_topic_id(None);
+            self.app_context.store().set_open_chat_topics(Vec::new());
             self.app_context.store().clear_open_chat_messages();
             self.app_context.store().set_open_chat_pinned(Vec::new());
             self.app_context.store().set_jump_target_message_id_i64(0);
+            if is_forum {
+                let _ = self.app_context.action_tx().send(Action::LoadForumTopics);
+                self.app_context
+                    .action_tx()
+                    .send(Action::FocusComponent(next_pane))
+                    .unwrap();
+                return;
+            }
             self.app_context
                 .action_tx()
                 .send(Action::FocusComponent(Prompt))

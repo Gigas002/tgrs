@@ -159,6 +159,17 @@ impl CommandGuide {
             lines.push(Line::from(line));
         }
 
+        // Topic List
+        let topic_list_lines = self.get_keybindings_section(
+            "Topic List",
+            keymap_config
+                .section(ComponentName::TopicList)
+                .unwrap_or(&empty),
+        );
+        for line in topic_list_lines {
+            lines.push(Line::from(line));
+        }
+
         // Chat — copy (y/Ctrl+C), edit (e), reply (r), delete (d/D)
         let chat_lines = self.get_keybindings_section(
             "Chat",
@@ -242,7 +253,7 @@ impl CommandGuide {
         lines.push(Line::from("  ]"));
         lines.push(Line::from(""));
         lines.push(Line::from(
-            "Available components: core_window, chat_list, chat, prompt, command_guide, search_overlay, message_actions, file_upload_explorer, pinned_messages_popup, picker, leader_menu",
+            "Available components: core_window, chat_list, topic_list, chat, prompt, command_guide, search_overlay, message_actions, file_upload_explorer, pinned_messages_popup, picker, leader_menu",
         ));
         lines.push(Line::from(""));
         lines.push(Line::from("Example:"));

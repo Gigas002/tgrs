@@ -28,6 +28,10 @@ keymap = [
   { keys = ["space"], command = "show_leader_menu", description = "Open the leader menu"},
   # Toggle chat_list visibility
   { keys = ["alt+n"], command = "toggle_chat_list", description = "Toggle chat_list visibility"},
+  # Focus the topics of the open group with topics (forum)
+  { keys = ["alt+t"], command = "focus_topic_list", description = "Focus the topic list"},
+  # Toggle topic_list visibility; it is only shown for groups with topics
+  { keys = ["alt+m"], command = "toggle_topic_list", description = "Toggle topic_list visibility"},
   # Increase the chat list size
   { keys = ["alt+l"], command = "increase_chat_list_size", description = "Increase the chat list size"},
   # Decrease the chat list size
@@ -65,6 +69,19 @@ keymap = [
   # Open pinned messages for the current chat (no-op if none pinned).
   { keys = ["shift+back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
   { keys = ["back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
+]
+
+# The topic_list key bindings are only usable in the topic list, shown right of
+# the chat list when the open chat is a group with topics (a forum).
+[topic_list]
+keymap = [
+  { keys = ["down"], command = "topic_list_next", description = "Select the next topic"},
+  { keys = ["up"], command = "topic_list_previous", description = "Select the previous topic"},
+  { keys = ["left"], command = "focus_previous_pane", description = "Focus the chat list"},
+  { keys = ["right"], command = "focus_next_pane", description = "Focus the chat"},
+  { keys = ["enter"], command = "topic_list_open", description = "Open the selected topic"},
+  { keys = ["shift+back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open topic"},
+  { keys = ["back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open topic"},
 ]
 
 # The chat key bindings are only usable in the chat component.
@@ -172,6 +189,7 @@ keymap = [
 [leader_menu]
 keymap = [
   { keys = ["1"], command = "toggle_chat_list", description = "Toggle the chat list"},
+  { keys = ["2"], command = "toggle_topic_list", description = "Toggle the topic list"},
   { keys = ["a"], command = "show_message_actions", description = "Actions of the selected message"},
   { keys = ["space"], command = "chat_list_search", description = "Search chats"},
   { keys = ["/"], command = "chat_window_search", description = "Search messages"},

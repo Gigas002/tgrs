@@ -5,6 +5,7 @@ pub mod ids;
 pub mod message;
 pub mod ordered_chat;
 pub mod td_enums;
+pub mod topic;
 
 #[cfg(test)]
 mod tests;
@@ -17,3 +18,4 @@ pub use message::{
 };
 pub use ordered_chat::OrderedChat;
 pub use td_enums::{TdChatList, TdMessageReplyTo, TdMessageReplyToMessage, TdMessageSender};
+pub use topic::TopicEntry;

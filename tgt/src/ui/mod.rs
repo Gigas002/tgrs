@@ -2,6 +2,8 @@ pub const SMALL_AREA_WIDTH: u16 = 100;
 pub const SMALL_AREA_HEIGHT: u16 = 20;
 pub const MAX_CHAT_LIST_SIZE: u16 = 50;
 pub const MIN_CHAT_LIST_SIZE: u16 = 10;
+/// The chat list and the topic list together take at most this much of the width, in percent.
+pub const MAX_SIDE_PANES_SIZE: u16 = 70;
 pub const MAX_PROMPT_SIZE: u16 = 20;
 pub const MIN_PROMPT_SIZE: u16 = 3;
 
@@ -27,6 +29,7 @@ pub mod search_overlay;
 pub mod status_bar;
 pub mod terminal;
 pub mod title_bar;
+pub mod topic_list_window;
 mod tui;
 
 pub use tui::Tui;

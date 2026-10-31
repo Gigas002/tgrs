@@ -116,3 +116,166 @@ mod open_chat {
         );
     }
 }
+
+mod topics {
+    use tdlib_rs::enums::{MessageSender, MessageTopic};
+    use tdlib_rs::types::{ForumTopicInfo, MessageSenderUser, MessageTopicForum, UpdateForumTopic};
+
+    use crate::model::{MessageEntry, TdMessageSender, TopicEntry};
+    use crate::store::Store;
+
+    const CHAT: i64 = -100;
+
+    fn topic(topic_id: i32, name: &str, order: i64) -> TopicEntry {
+        TopicEntry {
+            chat_id: CHAT,
+            topic_id,
+            name: name.to_owned(),
+            order,
+            is_general: topic_id == 1,
+            ..TopicEntry::default()
+        }
+    }
+
+    fn in_topic(topic_id: i32) -> MessageTopic {
+        MessageTopic::Forum(MessageTopicForum {
+            forum_topic_id: topic_id,
+        })
+    }
+
+    /// A forum chat with General (1), Rust (2) and Go (3) open, nothing selected.
+    fn forum() -> Store {
+        let store = Store::default();
+        store.set_open_chat_id_i64(CHAT);
+        store.set_open_chat_is_forum(true);
+        store.set_open_chat_topics(vec![
+            topic(1, "General", 10),
+            topic(3, "Go", 30),
+            topic(2, "Rust", 20),
+        ]);
+        store
+    }
+
+    fn names(store: &Store) -> Vec<String> {
+        store
+            .open_chat_topics_snapshot()
+            .into_iter()
+            .map(|t| t.name)
+            .collect()
+    }
+
+    #[test]
+    fn topics_are_sorted_by_order() {
+        assert_eq!(names(&forum()), ["Go", "Rust", "General"]);
+    }
+
+    #[test]
+    fn only_the_open_topic_is_shown() {
+        let store = Store::default();
+        // Not a forum: everything is
+        assert!(store.shows_message_topic(None));
+
+        let store = forum();
+        assert!(!store.shows_message_topic(Some(&in_topic(2))));
+        store.set_open_topic_id(Some(2));
+        assert!(store.shows_message_topic(Some(&in_topic(2))));
+        assert!(!store.shows_message_topic(Some(&in_topic(3))));
+        assert!(!store.shows_message_topic(None));
+        // Messages without a topic are in General
+        store.set_open_topic_id(Some(1));
+        assert!(store.shows_message_topic(None));
+    }
+
+    #[test]
+    fn messages_to_general_are_sent_without_a_topic() {
+        let store = forum();
+        store.set_open_topic_id(Some(1));
+        assert_eq!(store.open_send_topic(), None);
+        assert_eq!(store.open_message_topic(), Some(in_topic(1)));
+        store.set_open_topic_id(Some(2));
+        assert_eq!(store.open_send_topic(), Some(in_topic(2)));
+    }
+
+    #[test]
+    fn a_new_message_moves_its_topic_up_and_counts_as_unread() {
+        let store = forum();
+        store.set_me(1);
+        store.set_open_topic_id(Some(3));
+        let message = MessageEntry::plain(5, TdMessageSender::User(2), "hi", 0);
+
+        assert!(store.add_open_chat_topic_message(None, &message));
+        assert_eq!(names(&store), ["General", "Go", "Rust"]);
+        let general = &store.open_chat_topics_snapshot()[0];
+        assert_eq!(general.unread_count, 1);
+        assert_eq!(general.last_message.as_ref().map(MessageEntry::id), Some(5));
+
+        // Not in the open topic's unread count, nor in ours
+        let mine = MessageEntry::plain(6, TdMessageSender::User(1), "me", 0);
+        assert!(store.add_open_chat_topic_message(Some(&in_topic(2)), &mine));
+        let seen = MessageEntry::plain(7, TdMessageSender::User(2), "seen", 0);
+        assert!(store.add_open_chat_topic_message(Some(&in_topic(3)), &seen));
+        let topics = store.open_chat_topics_snapshot();
+        assert!(
+            topics
+                .iter()
+                .filter(|t| !t.is_general)
+                .all(|t| t.unread_count == 0)
+        );
+
+        assert!(!store.add_open_chat_topic_message(Some(&in_topic(9)), &seen));
+    }
+
+    #[test]
+    fn reading_a_topic_clears_its_unread_count() {
+        let store = forum();
+        let message = MessageEntry::plain(5, TdMessageSender::User(2), "hi", 0);
+        store.add_open_chat_topic_message(Some(&in_topic(2)), &message);
+        let update = UpdateForumTopic {
+            chat_id: CHAT,
+            forum_topic_id: 2,
+            is_pinned: true,
+            last_read_inbox_message_id: 5,
+            last_read_outbox_message_id: 0,
+            unread_mention_count: 0,
+            unread_reaction_count: 0,
+            unread_poll_vote_count: 0,
+            notification_settings: Default::default(),
+            draft_message: None,
+        };
+
+        assert!(store.update_open_chat_topic(&update));
+        let rust = &store.open_chat_topics_snapshot()[0];
+        assert_eq!((rust.name.as_str(), rust.unread_count), ("Rust", 0));
+        assert!(rust.is_pinned);
+        assert!(!store.update_open_chat_topic(&UpdateForumTopic {
+            chat_id: 7,
+            ..update
+        }));
+    }
+
+    #[test]
+    fn topic_info_renames_or_adds_a_topic() {
+        let store = forum();
+        let info = |forum_topic_id, name: &str| ForumTopicInfo {
+            chat_id: CHAT,
+            forum_topic_id,
+            name: name.to_owned(),
+            icon: Default::default(),
+            creation_date: 0,
+            creator_id: MessageSender::User(MessageSenderUser { user_id: 1 }),
+            is_general: false,
+            is_outgoing: false,
+            is_closed: false,
+            is_hidden: false,
+            is_name_implicit: false,
+        };
+
+        assert!(store.set_open_chat_topic_info(&info(2, "Rust 🦀")));
+        assert!(store.set_open_chat_topic_info(&info(4, "Zig")));
+        assert_eq!(names(&store), ["Zig", "Go", "Rust 🦀", "General"]);
+        assert!(!store.set_open_chat_topic_info(&ForumTopicInfo {
+            chat_id: 7,
+            ..info(5, "elsewhere")
+        }));
+    }
+}

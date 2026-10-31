@@ -5,7 +5,10 @@ use crate::{
     app::event::Event,
     settings::ActionBinding,
     ui::component_name::ComponentName,
-    ui::{MAX_CHAT_LIST_SIZE, MAX_PROMPT_SIZE, MIN_CHAT_LIST_SIZE, MIN_PROMPT_SIZE},
+    ui::{
+        MAX_CHAT_LIST_SIZE, MAX_PROMPT_SIZE, MAX_SIDE_PANES_SIZE, MIN_CHAT_LIST_SIZE,
+        MIN_PROMPT_SIZE,
+    },
     ui::{
         chat_list_window::ChatListWindow,
         chat_window::ChatWindow,
@@ -18,6 +21,7 @@ use crate::{
         pinned_messages_popup::PinnedMessagesPopup,
         prompt_window::PromptWindow,
         search_overlay::SearchOverlay,
+        topic_list_window::TopicListWindow,
     },
 };
 use crossterm::event::{MouseButton, MouseEventKind};
@@ -26,6 +30,9 @@ use std::{collections::HashMap, io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::reply_message::ReplyMessage;
+
+/// Width of the chat list and the topic list when shown, in percent.
+const DEFAULT_SIDE_PANE_SIZE: u16 = 20;
 
 /// `CoreWindow` is a struct that represents the core window of the application.
 /// It is responsible for managing the layout and rendering of the core window.
@@ -52,6 +59,8 @@ pub struct CoreWindow {
     size_message_reply: u16,
     /// The size of the chat list component.
     size_chat_list: u16,
+    /// The size of the topic list, shown while the open chat is a forum; 0 hides it.
+    size_topic_list: u16,
     /// The name of the component that currently has focus. It is an optional
     /// value because no component may have focus. The focus is a component
     /// inside the `CoreWindow`.
@@ -80,6 +89,12 @@ impl CoreWindow {
                 ComponentName::ChatList,
                 ChatListWindow::new(Arc::clone(&app_context))
                     .with_name(ComponentName::ChatList.to_string())
+                    .new_boxed(),
+            ),
+            (
+                ComponentName::TopicList,
+                TopicListWindow::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::TopicList.to_string())
                     .new_boxed(),
             ),
             (
@@ -151,7 +166,7 @@ impl CoreWindow {
             components_iter.into_iter().collect();
         let size_prompt = 3;
         let size_message_reply = 3;
-        let size_chat_list = 20;
+        let size_chat_list = DEFAULT_SIDE_PANE_SIZE;
         let small_area = false;
         let component_focused = None;
         let focused = true;
@@ -164,6 +179,7 @@ impl CoreWindow {
             action_tx,
             components,
             size_chat_list,
+            size_topic_list: DEFAULT_SIDE_PANE_SIZE,
             size_prompt,
             prompt_extra_rows: 0,
             focus_before_leader: None,
@@ -198,14 +214,55 @@ impl CoreWindow {
 
     /// Toggle the chat list component.
     pub fn toggle_chat_list(&mut self) {
-        self.size_chat_list = if self.size_chat_list == 0 { 20 } else { 0 };
+        self.size_chat_list = if self.size_chat_list == 0 {
+            DEFAULT_SIDE_PANE_SIZE.min(MAX_SIDE_PANES_SIZE - self.shown_topic_list_size())
+        } else {
+            0
+        };
     }
     /// Increase the size of the chat list component.
     pub fn increase_chat_list_size(&mut self) {
-        if self.size_chat_list == MAX_CHAT_LIST_SIZE {
+        if self.size_chat_list == MAX_CHAT_LIST_SIZE
+            || self.size_chat_list + self.shown_topic_list_size() >= MAX_SIDE_PANES_SIZE
+        {
             return;
         }
         self.size_chat_list += 1;
+    }
+
+    /// Whether the topic list is drawn: the open chat is a forum and it isn't hidden.
+    fn topic_list_shown(&self) -> bool {
+        self.size_topic_list > 0 && self.app_context.store().open_chat_is_forum()
+    }
+
+    /// The width the topic list takes, 0 while it isn't shown.
+    fn shown_topic_list_size(&self) -> u16 {
+        if self.topic_list_shown() {
+            self.size_topic_list
+        } else {
+            0
+        }
+    }
+
+    /// Hides or shows the topic list.
+    pub fn toggle_topic_list(&mut self) {
+        self.size_topic_list = if self.size_topic_list == 0 {
+            DEFAULT_SIDE_PANE_SIZE.min(MAX_SIDE_PANES_SIZE - self.size_chat_list)
+        } else {
+            0
+        };
+    }
+    /// Makes the topic list wider (`true`) or narrower, within the chat list's limits.
+    fn resize_topic_list(&mut self, wider: bool) {
+        if wider {
+            if self.size_topic_list < MAX_CHAT_LIST_SIZE
+                && self.size_topic_list + self.size_chat_list < MAX_SIDE_PANES_SIZE
+            {
+                self.size_topic_list += 1;
+            }
+        } else if self.size_topic_list > MIN_CHAT_LIST_SIZE {
+            self.size_topic_list -= 1;
+        }
     }
     /// Increase the size of the chat list component.
     pub fn increase_size_prompt(&mut self) {
@@ -229,12 +286,16 @@ impl CoreWindow {
         self.size_prompt -= 1;
     }
 
-    /// Panes in the order Left/Right move through; a hidden chat list is skipped.
+    /// Panes in the order Left/Right move through; hidden lists are skipped.
     fn panes(&self) -> Vec<ComponentName> {
-        let mut panes = vec![ComponentName::Chat, ComponentName::Prompt];
+        let mut panes = Vec::new();
         if self.size_chat_list > 0 {
-            panes.insert(0, ComponentName::ChatList);
+            panes.push(ComponentName::ChatList);
         }
+        if self.topic_list_shown() {
+            panes.push(ComponentName::TopicList);
+        }
+        panes.extend([ComponentName::Chat, ComponentName::Prompt]);
         panes
     }
 
@@ -258,21 +319,29 @@ impl CoreWindow {
     }
 
     /// Like concord: Alt+Right makes the focused pane wider, Alt+Left narrower.
-    /// The chat and the prompt share the right side, so they grow together.
+    /// The chat and the prompt share the right side, so they grow together,
+    /// taking from the pane left of them.
     fn resize_focused_width(&mut self, wider: bool) {
-        if self.size_chat_list == 0 {
-            return;
-        }
-        match (self.component_focused, wider) {
-            (Some(ComponentName::ChatList), true)
-            | (Some(ComponentName::Chat | ComponentName::Prompt), false) => {
-                self.increase_chat_list_size();
+        let chat_list = self.size_chat_list > 0;
+        let topic_list = self.topic_list_shown();
+        match self.component_focused {
+            Some(ComponentName::ChatList) if chat_list => self.resize_chat_list(wider),
+            Some(ComponentName::TopicList) if topic_list => self.resize_topic_list(wider),
+            Some(ComponentName::Chat | ComponentName::Prompt) if topic_list => {
+                self.resize_topic_list(!wider);
             }
-            (Some(ComponentName::ChatList), false)
-            | (Some(ComponentName::Chat | ComponentName::Prompt), true) => {
-                self.decrease_chat_list_size();
+            Some(ComponentName::Chat | ComponentName::Prompt) if chat_list => {
+                self.resize_chat_list(!wider);
             }
             _ => {}
+        }
+    }
+
+    fn resize_chat_list(&mut self, wider: bool) {
+        if wider {
+            self.increase_chat_list_size();
+        } else {
+            self.decrease_chat_list_size();
         }
     }
 
@@ -416,6 +485,7 @@ impl Component for CoreWindow {
                 let row = mouse.row;
                 for name in [
                     ComponentName::ChatList,
+                    ComponentName::TopicList,
                     ComponentName::Chat,
                     ComponentName::Prompt,
                 ] {
@@ -457,7 +527,13 @@ impl Component for CoreWindow {
 
     fn update(&mut self, action: Action) {
         match action {
+            // The topic list is only there for a forum; focusing it shows it again
+            Action::FocusComponent(ComponentName::TopicList)
+                if !self.app_context.store().open_chat_is_forum() => {}
             Action::FocusComponent(component_name) => {
+                if component_name == ComponentName::TopicList && self.size_topic_list == 0 {
+                    self.toggle_topic_list();
+                }
                 // If the previously focused component was a popup, hide it automatically
                 if let Some(prev_focused) = self.component_focused
                     && prev_focused.is_popup()
@@ -490,6 +566,20 @@ impl Component for CoreWindow {
                     && self.component_focused == Some(ComponentName::ChatList)
                 {
                     self.focus_only(Some(ComponentName::Chat));
+                }
+            }
+            Action::ToggleTopicList => {
+                self.toggle_topic_list();
+                // A hidden topic list can't keep the focus
+                if self.size_topic_list == 0
+                    && self.component_focused == Some(ComponentName::TopicList)
+                {
+                    self.focus_only(Some(ComponentName::Chat));
+                }
+            }
+            Action::LoadForumTopics => {
+                if let Some(topics) = self.components.get_mut(&ComponentName::TopicList) {
+                    topics.update(action);
                 }
             }
             Action::IncreaseChatListSize => {
@@ -733,11 +823,13 @@ impl Component for CoreWindow {
     }
 
     fn draw(&mut self, frame: &mut ratatui::Frame<'_>, area: Rect) -> io::Result<()> {
+        let size_topic_list = self.shown_topic_list_size();
         let core_layout = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Percentage(self.size_chat_list),
-                Constraint::Percentage(100 - self.size_chat_list),
+                Constraint::Percentage(size_topic_list),
+                Constraint::Fill(1),
             ])
             .split(area);
 
@@ -754,11 +846,13 @@ impl Component for CoreWindow {
                 },
                 Constraint::Length(self.size_prompt + self.prompt_extra_rows),
             ])
-            .split(core_layout[1]);
+            .split(core_layout[2]);
 
-        // Store areas for click-to-focus (chat list, chat window, prompt)
+        // Store areas for click-to-focus (chat list, topic list, chat window, prompt)
         self.last_focusable_areas
             .insert(ComponentName::ChatList, core_layout[0]);
+        self.last_focusable_areas
+            .insert(ComponentName::TopicList, core_layout[1]);
         self.last_focusable_areas
             .insert(ComponentName::Chat, sub_core_layout[0]);
         self.last_focusable_areas
@@ -768,6 +862,13 @@ impl Component for CoreWindow {
             .get_mut(&ComponentName::ChatList)
             .unwrap_or_else(|| panic!("Failed to get component: {}", ComponentName::ChatList))
             .draw(frame, core_layout[0])?;
+
+        if size_topic_list > 0 {
+            self.components
+                .get_mut(&ComponentName::TopicList)
+                .unwrap_or_else(|| panic!("Failed to get component: {}", ComponentName::TopicList))
+                .draw(frame, core_layout[1])?;
+        }
 
         self.components
             .get_mut(&ComponentName::Chat)

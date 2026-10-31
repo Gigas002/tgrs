@@ -1051,10 +1051,14 @@ impl Component for PromptWindow {
                 let preview = tg_context.reply_message_text();
                 Self::reply_title(&preview)
             }
-            Mode::Normal => match self.app_context.store().name_of_open_chat_id() {
-                Some(name) => format!("Message {name}"),
-                None => "Message".into(),
-            },
+            Mode::Normal => {
+                let store = self.app_context.store();
+                match (store.name_of_open_chat_id(), store.open_topic()) {
+                    (Some(name), Some(topic)) => format!("Message {name} › {}", topic.name),
+                    (Some(name), None) => format!("Message {name}"),
+                    (None, _) => "Message".into(),
+                }
+            }
         };
 
         let counter_style = if character_count > MESSAGE_MAX_CHARS {

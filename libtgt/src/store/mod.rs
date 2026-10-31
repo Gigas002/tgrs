@@ -3,19 +3,19 @@
 //! The client's update loop writes here; the UI reads through the accessors.
 
 use std::collections::{BTreeSet, HashMap};
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, Ordering};
 use std::sync::{Mutex, MutexGuard};
 
 use tdlib_rs::{
-    enums::{ChatType, UserStatus, UserType},
+    enums::{ChatType, MessageTopic, UserStatus, UserType},
     types::{
-        BasicGroup, BasicGroupFullInfo, Chat, SecretChat, Supergroup, SupergroupFullInfo, User,
-        UserFullInfo,
+        BasicGroup, BasicGroupFullInfo, Chat, ForumTopicInfo, MessageTopicForum, SecretChat,
+        Supergroup, SupergroupFullInfo, UpdateForumTopic, User, UserFullInfo,
     },
 };
 
 use crate::model::{
-    ChatKind, ChatListEntry, MessageEntry, OrderedChat, format_timestamp,
+    ChatKind, ChatListEntry, MessageEntry, OrderedChat, TopicEntry, format_timestamp,
     ids::{AtomicChatId, AtomicMessageId, ChatId, MessageId},
 };
 
@@ -50,6 +50,12 @@ pub struct Store {
     /// message cache is cleared (e.g. jump-to-message reload).
     open_chat_pinned: Mutex<Vec<MessageEntry>>,
     open_chat_user: Mutex<Option<User>>,
+    /// Whether the open chat is a forum, whose messages are in topics.
+    open_chat_is_forum: AtomicBool,
+    /// Topics of the open chat when it is a forum, in topic list order.
+    open_chat_topics: Mutex<Vec<TopicEntry>>,
+    /// The open topic of a forum chat (0 = none); its messages are the open chat's.
+    open_topic_id: AtomicI32,
 
     last_acknowledged_message_id: AtomicI64,
 
@@ -279,6 +285,9 @@ impl Store {
     }
 
     pub fn last_read_inbox_message_id(&self) -> i64 {
+        if let Some(topic) = self.open_topic() {
+            return topic.last_read_inbox_message_id;
+        }
         let opened_chat = self.chats().get(&self.open_chat_id().as_i64()).cloned();
         if let Some(opened_chat) = opened_chat {
             return opened_chat.last_read_inbox_message_id;
@@ -375,6 +384,152 @@ impl Store {
         None
     }
 
+    /// Whether a chat is a forum: a supergroup whose messages are split into topics.
+    pub fn is_forum(&self, chat_id: i64) -> bool {
+        let supergroup_id = match self.chats().get(&chat_id).map(|chat| &chat.r#type) {
+            Some(ChatType::Supergroup(group)) if !group.is_channel => group.supergroup_id,
+            _ => return false,
+        };
+        self.supergroups()
+            .get(&supergroup_id)
+            .is_some_and(|group| group.is_forum)
+    }
+
+    pub fn open_chat_is_forum(&self) -> bool {
+        self.open_chat_is_forum.load(Ordering::Relaxed)
+    }
+
+    /// Set together with the open chat, see [`Self::is_forum`].
+    pub fn set_open_chat_is_forum(&self, is_forum: bool) {
+        self.open_chat_is_forum.store(is_forum, Ordering::Relaxed);
+    }
+
+    /// Topics of the open forum chat, in topic list order.
+    pub fn open_chat_topics_snapshot(&self) -> Vec<TopicEntry> {
+        self.open_chat_topics.lock().unwrap().clone()
+    }
+
+    /// Replaces the open chat's topics (backend / load task).
+    pub fn set_open_chat_topics(&self, mut topics: Vec<TopicEntry>) {
+        sort_topics(&mut topics);
+        *self.open_chat_topics.lock().unwrap() = topics;
+    }
+
+    /// The open topic of a forum chat, if any.
+    pub fn open_topic_id(&self) -> Option<i32> {
+        Some(self.open_topic_id.load(Ordering::Relaxed)).filter(|id| *id != 0)
+    }
+
+    /// Opens a topic of the open chat (`None` closes it).
+    pub fn set_open_topic_id(&self, topic_id: Option<i32>) {
+        self.open_topic_id
+            .store(topic_id.unwrap_or(0), Ordering::Relaxed);
+    }
+
+    pub fn open_topic(&self) -> Option<TopicEntry> {
+        let topic_id = self.open_topic_id()?;
+        self.open_chat_topics
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|topic| topic.topic_id == topic_id)
+            .cloned()
+    }
+
+    /// The open topic, to search or list its messages.
+    pub fn open_message_topic(&self) -> Option<MessageTopic> {
+        self.open_topic_id()
+            .map(|forum_topic_id| MessageTopic::Forum(MessageTopicForum { forum_topic_id }))
+    }
+
+    /// The open topic, to send messages to: none for the General topic, where
+    /// messages without a topic go.
+    pub fn open_send_topic(&self) -> Option<MessageTopic> {
+        self.open_topic()
+            .filter(|topic| !topic.is_general)
+            .and(self.open_message_topic())
+    }
+
+    /// Whether a message of the open chat in `topic` is shown: in a forum only
+    /// the open topic's messages are.
+    pub fn shows_message_topic(&self, topic: Option<&MessageTopic>) -> bool {
+        match self.open_topic() {
+            Some(open) => open.contains(topic),
+            None => !self.open_chat_is_forum(),
+        }
+    }
+
+    /// A message arrived in the open forum chat: it becomes its topic's last
+    /// message and moves the topic up. False when no topic has it.
+    pub fn add_open_chat_topic_message(
+        &self,
+        topic: Option<&MessageTopic>,
+        message: &MessageEntry,
+    ) -> bool {
+        let unread = message.sender_id() != self.me() && !self.shows_message_topic(topic);
+        let mut topics = self.open_chat_topics.lock().unwrap();
+        let top = topics.iter().map(|t| t.order).max().unwrap_or(0);
+        let Some(entry) = topics.iter_mut().find(|t| t.contains(topic)) else {
+            return false;
+        };
+        entry.last_message = Some(message.clone());
+        entry.order = entry.order.max(top + 1);
+        if unread {
+            entry.unread_count += 1;
+        }
+        sort_topics(&mut topics);
+        true
+    }
+
+    /// A topic of the open chat was created or renamed, opened or closed.
+    pub fn set_open_chat_topic_info(&self, info: &ForumTopicInfo) -> bool {
+        if info.chat_id != self.open_chat_id().as_i64() {
+            return false;
+        }
+        let mut topics = self.open_chat_topics.lock().unwrap();
+        match topics
+            .iter_mut()
+            .find(|t| t.topic_id == info.forum_topic_id)
+        {
+            Some(entry) => entry.set_info(info),
+            None => {
+                let top = topics.iter().map(|t| t.order).max().unwrap_or(0);
+                let mut entry = TopicEntry {
+                    chat_id: info.chat_id,
+                    topic_id: info.forum_topic_id,
+                    order: top + 1,
+                    ..TopicEntry::default()
+                };
+                entry.set_info(info);
+                topics.push(entry);
+                sort_topics(&mut topics);
+            }
+        }
+        true
+    }
+
+    /// A topic of the open chat was read, pinned or muted.
+    pub fn update_open_chat_topic(&self, update: &UpdateForumTopic) -> bool {
+        if update.chat_id != self.open_chat_id().as_i64() {
+            return false;
+        }
+        let mut topics = self.open_chat_topics.lock().unwrap();
+        let Some(entry) = topics
+            .iter_mut()
+            .find(|t| t.topic_id == update.forum_topic_id)
+        else {
+            return false;
+        };
+        entry.apply(update);
+        // The update has no unread count, but it is zero once the last message is read
+        let last_id = entry.last_message.as_ref().map_or(0, MessageEntry::id);
+        if update.last_read_inbox_message_id >= last_id {
+            entry.unread_count = 0;
+        }
+        sort_topics(&mut topics);
+        true
+    }
+
     /// Build the main chat list for the UI. Lock `chats` before `chats_index`: the TDLib update
     /// task takes `chats` then `chats_index` when applying position updates; the previous
     /// opposite order here could deadlock after a large catch-up when the UI rebuilt the list
@@ -427,6 +582,9 @@ impl Default for Store {
             open_chat_messages: Mutex::default(),
             open_chat_pinned: Mutex::default(),
             open_chat_user: Mutex::default(),
+            open_chat_is_forum: AtomicBool::new(false),
+            open_chat_topics: Mutex::default(),
+            open_topic_id: AtomicI32::new(0),
             last_acknowledged_message_id: AtomicI64::new(0),
             from_message_id: AtomicI64::new(0),
             history_loading: AtomicBool::new(false),
@@ -435,4 +593,14 @@ impl Default for Store {
             reply_message_text: Mutex::default(),
         }
     }
+}
+
+/// Pinned topics first, then the highest order, like TDLib's topic list.
+fn sort_topics(topics: &mut [TopicEntry]) {
+    topics.sort_by_key(|topic| {
+        (
+            std::cmp::Reverse(topic.is_pinned),
+            std::cmp::Reverse(topic.order),
+        )
+    });
 }

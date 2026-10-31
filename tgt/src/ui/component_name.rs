@@ -8,6 +8,8 @@ pub enum ComponentName {
     CoreWindow,
     /// The chat list.
     ChatList,
+    /// The topics of the open forum chat, right of the chat list.
+    TopicList,
     /// The chat.
     Chat,
     /// The prompt.
@@ -36,9 +38,10 @@ pub enum ComponentName {
 
 impl ComponentName {
     /// Every component, in a fixed order.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::CoreWindow,
         Self::ChatList,
+        Self::TopicList,
         Self::Chat,
         Self::Prompt,
         Self::ReplyMessage,
@@ -76,6 +79,7 @@ impl Display for ComponentName {
         match self {
             ComponentName::CoreWindow => write!(f, "Core Window"),
             ComponentName::ChatList => write!(f, "Chat List"),
+            ComponentName::TopicList => write!(f, "Topic List"),
             ComponentName::Chat => write!(f, "Chat"),
             ComponentName::Prompt => write!(f, "Prompt"),
             ComponentName::TitleBar => write!(f, "Title Bar"),
