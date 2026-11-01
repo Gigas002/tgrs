@@ -63,6 +63,7 @@ const SECTIONS: &[(ComponentName, &str)] = &[
     (ComponentName::StickerPicker, "sticker_picker"),
     (ComponentName::ChatActions, "chat_actions"),
     (ComponentName::Profile, "profile"),
+    (ComponentName::FindChat, "find_chat"),
     (ComponentName::LeaderMenu, "leader_menu"),
 ];
 
@@ -82,6 +83,7 @@ fn section(file: &KeymapFile, component: ComponentName) -> Option<&KeymapMode> {
         ComponentName::StickerPicker => file.sticker_picker.as_ref(),
         ComponentName::ChatActions => file.chat_actions.as_ref(),
         ComponentName::Profile => file.profile.as_ref(),
+        ComponentName::FindChat => file.find_chat.as_ref(),
         ComponentName::LeaderMenu => file.leader_menu.as_ref(),
         _ => file.core_window.as_ref(),
     }
@@ -114,7 +116,7 @@ impl Keymap {
             let mut map = core_window.clone();
             if matches!(
                 component,
-                ComponentName::Prompt | ComponentName::SearchOverlay
+                ComponentName::Prompt | ComponentName::SearchOverlay | ComponentName::FindChat
             ) {
                 // These take printable keys as text, so inherited plain keys
                 // (`q` to quit, Space for the leader menu) must not swallow

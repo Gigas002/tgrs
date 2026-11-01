@@ -9,6 +9,7 @@ pub mod profile;
 pub mod sticker;
 pub mod td_enums;
 pub mod topic;
+pub mod username;
 
 #[cfg(test)]
 mod tests;
@@ -25,3 +26,4 @@ pub use profile::{Profile, ProfileSource};
 pub use sticker::{StickerEntry, StickerSetEntry};
 pub use td_enums::{TdChatList, TdMessageReplyTo, TdMessageReplyToMessage, TdMessageSender};
 pub use topic::TopicEntry;
+pub use username::parse_username;

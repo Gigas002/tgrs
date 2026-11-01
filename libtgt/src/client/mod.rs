@@ -463,6 +463,18 @@ impl Client {
             .inspect_err(|e| tracing::error!("Failed to delete chat {chat_id}: {e:?}"))
     }
 
+    /// The chat of a public username (without `@`): a person's, bot's,
+    /// group's or channel's. It's added to the store if TDLib hadn't sent it.
+    pub async fn search_public_chat(&self, username: &str) -> Result<i64, TdError> {
+        let enums::Chat::Chat(chat) =
+            functions::search_public_chat(username.to_owned(), self.client_id)
+                .await
+                .inspect_err(|e| tracing::warn!("No public chat @{username}: {e:?}"))?;
+        let chat_id = chat.id;
+        self.store.chats().entry(chat_id).or_insert(chat);
+        Ok(chat_id)
+    }
+
     /// Loads the full info a chat's profile shows (bio, description) into the
     /// store, with the user if it isn't known yet.
     pub async fn load_profile(&self, chat_id: i64) -> Result<(), TdError> {

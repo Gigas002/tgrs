@@ -12,11 +12,12 @@ use crate::{
     ui::{
         archive_list_window::ArchiveListWindow,
         chat_actions::{ChatActions, chat_command_action},
-        chat_list_window::ChatListWindow,
+        chat_list_window::{ChatListWindow, open_chat},
         chat_window::ChatWindow,
         command_guide::CommandGuide,
         component_traits::{Component, HandleFocus},
         file_upload_explorer::FileUploadExplorer,
+        find_chat::FindChat,
         leader_menu::LeaderMenu,
         message_actions::MessageActions,
         picker::Picker,
@@ -29,6 +30,7 @@ use crate::{
     },
 };
 use crossterm::event::{MouseButton, MouseEventKind};
+use libtgt::model::ChatListEntry;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use std::{collections::HashMap, io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
@@ -65,6 +67,8 @@ pub struct CoreWindow {
     focus_before_chat_actions: Option<ComponentName>,
     /// The pane focused when the profile opened, focused again after.
     focus_before_profile: Option<ComponentName>,
+    /// The pane focused when the username popup opened, focused again after.
+    focus_before_find_chat: Option<ComponentName>,
     /// The size of the message reply component.
     size_message_reply: u16,
     /// The size of the chat list component.
@@ -172,6 +176,12 @@ impl CoreWindow {
                     .new_boxed(),
             ),
             (
+                ComponentName::FindChat,
+                FindChat::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::FindChat.to_string())
+                    .new_boxed(),
+            ),
+            (
                 ComponentName::Profile,
                 ProfilePopup::new(Arc::clone(&app_context))
                     .with_name(ComponentName::Profile.to_string())
@@ -227,6 +237,7 @@ impl CoreWindow {
             focus_before_stickers: None,
             focus_before_chat_actions: None,
             focus_before_profile: None,
+            focus_before_find_chat: None,
             size_message_reply,
             small_area,
             component_focused,
@@ -471,6 +482,7 @@ impl CoreWindow {
             ComponentName::StickerPicker => Action::HideStickerPicker,
             ComponentName::ChatActions => Action::HideChatActions,
             ComponentName::Profile => Action::HideProfile,
+            ComponentName::FindChat => Action::HideFindChat,
             ComponentName::LeaderMenu => Action::HideLeaderMenu,
             _ => return None,
         })
@@ -793,6 +805,32 @@ impl Component for CoreWindow {
                     (_, Action::ShowProfile) => Action::ShowProfileFor(chat_id),
                     _ => Action::ShowChatActionsFor(chat_id, None),
                 });
+            }
+            Action::ShowFindChat => {
+                self.focus_before_find_chat = self.component_focused.filter(|c| !c.is_popup());
+                self.show_popup(ComponentName::FindChat, action);
+            }
+            Action::HideFindChat => {
+                let refocus = self.focus_before_find_chat.take();
+                self.close_popup(ComponentName::FindChat, refocus);
+            }
+            Action::FindChatFailed(_) => {
+                if let Some(component) = self.components.get_mut(&ComponentName::FindChat) {
+                    component.update(action);
+                }
+            }
+            // Opening the chat moves the focus to it
+            Action::OpenChatById(chat_id) => {
+                self.focus_before_find_chat = None;
+                self.close_popup(ComponentName::FindChat, None);
+                let store = self.app_context.store();
+                let entry = ChatListEntry {
+                    chat_id,
+                    chat_name: store.name_from_chats(chat_id).unwrap_or_default(),
+                    user: store.chat_user(chat_id),
+                    ..ChatListEntry::default()
+                };
+                open_chat(&self.app_context, &entry);
             }
             Action::ShowMyProfile => {
                 let me = self.app_context.store().me();

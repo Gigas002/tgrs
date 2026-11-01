@@ -621,6 +621,16 @@ impl Store {
         })
     }
 
+    /// The other party of a private or secret chat, if known.
+    pub fn chat_user(&self, chat_id: i64) -> Option<User> {
+        let user_id = match self.chats().get(&chat_id).map(|chat| &chat.r#type) {
+            Some(ChatType::Private(p)) => p.user_id,
+            Some(ChatType::Secret(s)) => s.user_id,
+            _ => return None,
+        };
+        self.users().get(&user_id).cloned()
+    }
+
     /// Whose full info the profile of `chat_id` shows; your own for your
     /// chat ID even before that chat is loaded. None for an unknown chat.
     pub fn profile_source(&self, chat_id: i64) -> Option<ProfileSource> {

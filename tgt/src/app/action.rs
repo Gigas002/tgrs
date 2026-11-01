@@ -394,6 +394,19 @@ pub enum Action {
     /// Run a command on the selected chat in a chat list, or the open chat.
     SelectedChat(ChatCommand),
 
+    /// Ask for a username and open its chat.
+    ShowFindChat,
+    /// Close the popup asking for a username.
+    HideFindChat,
+    /// Look up the username typed in the popup.
+    FindChatConfirm,
+    /// Look up the chat of this username (without `@`).
+    FindChat(String),
+    /// The username wasn't found; why, to show in the popup.
+    FindChatFailed(String),
+    /// Open this chat, which may not be in the chat list.
+    OpenChatById(i64),
+
     /// Show the profile of the selected chat in a chat list, or the open chat.
     ShowProfile,
     /// Show your own profile.
@@ -619,6 +632,9 @@ impl FromStr for Action {
             "chat_actions_next" => Ok(Action::ChatActionsNext),
             "chat_actions_previous" => Ok(Action::ChatActionsPrevious),
             "chat_actions_confirm" => Ok(Action::ChatActionsConfirm),
+            "show_find_chat" => Ok(Action::ShowFindChat),
+            "hide_find_chat" => Ok(Action::HideFindChat),
+            "find_chat_confirm" => Ok(Action::FindChatConfirm),
             "show_profile" => Ok(Action::ShowProfile),
             "show_my_profile" => Ok(Action::ShowMyProfile),
             "hide_profile" => Ok(Action::HideProfile),

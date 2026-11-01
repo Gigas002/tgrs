@@ -81,6 +81,8 @@ keymap = [
   { keys = ["D"], command = "leave_chat", description = "Leave or delete the chat (press twice)"},
   # The profile of the selected chat: a person's bio and usernames, a group's description
   { keys = ["i"], command = "show_profile", description = "Show the chat's profile"},
+  # Open a chat by its public username, e.g. @durov or a t.me link
+  { keys = ["n"], command = "show_find_chat", description = "Open a chat by username"},
   # Open pinned messages for the current chat (no-op if none pinned).
   { keys = ["shift+back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
   { keys = ["back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
@@ -104,6 +106,8 @@ keymap = [
   { keys = ["D"], command = "leave_chat", description = "Leave or delete the chat (press twice)"},
   # The profile of the selected chat: a person's bio and usernames, a group's description
   { keys = ["i"], command = "show_profile", description = "Show the chat's profile"},
+  # Open a chat by its public username, e.g. @durov or a t.me link
+  { keys = ["n"], command = "show_find_chat", description = "Open a chat by username"},
   { keys = ["shift+back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
   { keys = ["back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
 ]
@@ -223,6 +227,14 @@ keymap = [
   { keys = ["j"], command = "chat_actions_next", description = "Next action"},
 ]
 
+# The find_chat key bindings are only usable in the popup that opens a chat by
+# its username (n in the chat list, space n elsewhere); other keys type.
+[find_chat]
+keymap = [
+  { keys = ["esc"], command = "hide_find_chat", description = "Close without opening a chat"},
+  { keys = ["enter"], command = "find_chat_confirm", description = "Open the chat of the username"},
+]
+
 # The profile key bindings are only usable while a profile is shown: i in the
 # chat list and the archive (the selected chat), space i (the open chat) or
 # space m (your own).
@@ -265,6 +277,7 @@ keymap = [
   { keys = ["c"], command = "show_chat_actions", description = "Actions of the open chat"},
   { keys = ["i"], command = "show_profile", description = "Profile of the open chat"},
   { keys = ["m"], command = "show_my_profile", description = "Your profile"},
+  { keys = ["n"], command = "show_find_chat", description = "Open a chat by username"},
   { keys = ["?"], command = "show_command_guide", description = "Help: every key"},
 ]
 

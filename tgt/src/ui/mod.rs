@@ -16,6 +16,7 @@ pub mod component_name;
 pub mod component_traits;
 pub mod core_window;
 pub mod file_upload_explorer;
+pub mod find_chat;
 pub mod leader_menu;
 pub mod message;
 pub mod message_actions;

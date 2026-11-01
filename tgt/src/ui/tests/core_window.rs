@@ -795,3 +795,26 @@ fn the_profile_shows_the_open_chat_or_yours_and_gives_the_focus_back() {
     assert_eq!(window.component_focused, Some(ComponentName::Chat));
     assert!(!window.is_popup_visible(ComponentName::Profile));
 }
+
+#[test]
+fn find_chat_gives_the_focus_back_or_opens_the_chat() {
+    let mut window = create_test_core_window();
+    window.focus_only(Some(ComponentName::Chat));
+    window.update(Action::ShowFindChat);
+    assert_eq!(window.component_focused, Some(ComponentName::FindChat));
+    window.update(Action::HideFindChat);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+    assert!(!window.is_popup_visible(ComponentName::FindChat));
+
+    // Esc closes it like the other popups
+    window.update(Action::ShowFindChat);
+    window.update(Action::UnfocusComponent);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+
+    window.update(Action::ShowFindChat);
+    sent_actions(&window);
+    window.update(Action::OpenChatById(42));
+    assert!(!window.is_popup_visible(ComponentName::FindChat));
+    assert_eq!(window.app_context.store().open_chat_id().as_i64(), 42);
+    assert!(sent_actions(&window).contains(&Action::GetChatHistory));
+}

@@ -783,3 +783,50 @@ mod profile {
         assert_eq!(member_count_text(12), "12");
     }
 }
+
+mod username {
+    use crate::model::parse_username;
+
+    #[test]
+    fn names_handles_and_links_give_the_username() {
+        for input in [
+            "durov",
+            "@durov",
+            "  @durov ",
+            "t.me/durov",
+            "https://t.me/durov",
+            "http://telegram.me/durov",
+            "https://t.me/durov/42",
+            "t.me/durov?start=x",
+        ] {
+            assert_eq!(parse_username(input).as_deref(), Some("durov"), "{input}");
+        }
+        assert_eq!(
+            parse_username("Rust_Lang_2").as_deref(),
+            Some("Rust_Lang_2")
+        );
+    }
+
+    #[test]
+    fn what_cannot_be_a_username_is_refused() {
+        for input in [
+            "",
+            "@",
+            "abc",
+            "1durov",
+            "_durov",
+            "du rov",
+            "dürov",
+            "durov!",
+            "t.me/",
+            &"a".repeat(33),
+        ] {
+            assert_eq!(parse_username(input), None, "{input:?}");
+        }
+        assert!(
+            parse_username("abcd").is_some(),
+            "collectible usernames have 4"
+        );
+        assert!(parse_username(&"a".repeat(32)).is_some());
+    }
+}

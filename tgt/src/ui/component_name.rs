@@ -40,13 +40,15 @@ pub enum ComponentName {
     ChatActions,
     /// The profile of a chat.
     Profile,
+    /// Asks for a username to open its chat.
+    FindChat,
     /// The leader menu (Space), like concord's.
     LeaderMenu,
 }
 
 impl ComponentName {
     /// Every component, in a fixed order.
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 20] = [
         Self::CoreWindow,
         Self::ChatList,
         Self::ArchiveList,
@@ -65,11 +67,12 @@ impl ComponentName {
         Self::StickerPicker,
         Self::ChatActions,
         Self::Profile,
+        Self::FindChat,
         Self::LeaderMenu,
     ];
 
     /// The popups (modal overlays); only one is shown at a time.
-    pub const POPUPS: [Self; 10] = [
+    pub const POPUPS: [Self; 11] = [
         Self::CommandGuide,
         Self::SearchOverlay,
         Self::MessageActions,
@@ -79,6 +82,7 @@ impl ComponentName {
         Self::StickerPicker,
         Self::ChatActions,
         Self::Profile,
+        Self::FindChat,
         Self::LeaderMenu,
     ];
 
@@ -110,6 +114,7 @@ impl Display for ComponentName {
             ComponentName::StickerPicker => write!(f, "Sticker Picker"),
             ComponentName::ChatActions => write!(f, "Chat Actions"),
             ComponentName::Profile => write!(f, "Profile"),
+            ComponentName::FindChat => write!(f, "Find Chat"),
             ComponentName::LeaderMenu => write!(f, "Leader Menu"),
         }
     }

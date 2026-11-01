@@ -43,6 +43,7 @@ pub struct KeymapFile {
     pub sticker_picker: Option<KeymapMode>,
     pub chat_actions: Option<KeymapMode>,
     pub profile: Option<KeymapMode>,
+    pub find_chat: Option<KeymapMode>,
     pub leader_menu: Option<KeymapMode>,
 }
 

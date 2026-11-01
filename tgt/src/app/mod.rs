@@ -38,7 +38,7 @@ use crate::{
     notifier,
     settings::{ActionBinding, Command, Settings, is_plain_char},
     ui::component_name::ComponentName,
-    ui::{Tui, chat_actions, terminal::TuiBackend},
+    ui::{Tui, chat_actions, find_chat, terminal::TuiBackend},
 };
 
 /// Messages per history request.
@@ -441,6 +441,11 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::ChatActionsNext
             | Action::ChatActionsPrevious
             | Action::ChatActionsConfirm
+            | Action::ShowFindChat
+            | Action::HideFindChat
+            | Action::FindChatConfirm
+            | Action::FindChatFailed(_)
+            | Action::OpenChatById(_)
             | Action::ShowProfileFor(_)
             | Action::ProfileLoaded(_)
             | Action::HideProfile
@@ -656,6 +661,15 @@ async fn handle_app_actions(
                     )
                     .await;
                 app_context.action_tx().send(Action::HideChatWindowReply)?;
+            }
+            Action::FindChat(username) => {
+                let found = match client.search_public_chat(username).await {
+                    Ok(chat_id) => Action::OpenChatById(chat_id),
+                    Err(e) => {
+                        Action::FindChatFailed(find_chat::failure_message(username, &e.message))
+                    }
+                };
+                app_context.action_tx().send(found)?;
             }
             Action::ShowProfileFor(chat_id) => match client.load_profile(*chat_id).await {
                 Ok(()) => app_context
