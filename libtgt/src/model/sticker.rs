@@ -15,13 +15,22 @@ pub struct StickerEntry {
     pub emoji: String,
     /// A still image to show for it: its thumbnail, or a WEBP sticker itself.
     pub preview: Option<MediaFile>,
+    /// The WEBP sticker itself, used when its thumbnail cannot be decoded.
+    pub preview_fallback: Option<MediaFile>,
 }
 
 impl From<&Sticker> for StickerEntry {
     fn from(sticker: &Sticker) -> Self {
-        let preview = still_thumbnail(sticker.thumbnail.as_ref()).or_else(|| {
-            matches!(sticker.format, StickerFormat::Webp).then(|| MediaFile::from(&sticker.sticker))
-        });
+        let thumbnail = still_thumbnail(sticker.thumbnail.as_ref());
+        let sticker_file = matches!(sticker.format, StickerFormat::Webp)
+            .then(|| MediaFile::from(&sticker.sticker));
+        let preview = thumbnail.clone().or_else(|| sticker_file.clone());
+        let preview_fallback = match (&thumbnail, &sticker_file) {
+            (Some(thumbnail), Some(sticker_file)) if thumbnail.id != sticker_file.id => {
+                Some(sticker_file.clone())
+            }
+            _ => None,
+        };
         Self {
             id: sticker.id,
             file_id: sticker.sticker.id,
@@ -29,6 +38,7 @@ impl From<&Sticker> for StickerEntry {
             height: sticker.height,
             emoji: sticker.emoji.clone(),
             preview,
+            preview_fallback,
         }
     }
 }

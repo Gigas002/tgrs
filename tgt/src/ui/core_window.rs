@@ -563,8 +563,16 @@ impl Component for CoreWindow {
         let Some(ev) = event else {
             return Ok(None);
         };
-        // Forward mouse events to the focused component (scroll wheel, click, etc.)
+        // Forward mouse events to the active popup before checking the panes below it.
         if let Event::Mouse(mouse) = ev {
+            // Popups own mouse clicks while visible. Let them handle clicks inside
+            // their bounds and dismiss themselves for clicks outside; otherwise
+            // the normal pane focus logic would close them on every click.
+            if let Some(popup) = self.active_popup
+                && let Some(component) = self.components.get_mut(&popup)
+            {
+                return component.handle_mouse_events(mouse).map_err(AppError::from);
+            }
             // Left click: focus the section under the cursor (chat list, chat window, prompt)
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
                 let col = mouse.column;

@@ -232,10 +232,10 @@ fn handle_notification(
     let action_tx = app_context.action_tx();
     match notification {
         Notification::ChatListChanged => action_tx.send(Action::ChatHistoryAppended)?,
-        Notification::OpenChatMessageAdded(message_id) => {
-            app_context
-                .store()
-                .set_jump_target_message_id_i64(message_id);
+        Notification::OpenChatMessageAdded(_) => {
+            // ChatWindow follows new messages when the reader is already at the
+            // latest message. Setting a jump target here would pull anyone
+            // reading older history away from their current position.
             action_tx.send(Action::ChatHistoryAppended)?;
             action_tx.send(Action::ViewAllMessages)?;
         }

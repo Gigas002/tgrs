@@ -176,6 +176,11 @@ impl ChatPreviews {
         }
     }
 
+    /// Whether loading or decoding this file failed.
+    pub fn is_failed(&self, file_id: i32) -> bool {
+        matches!(self.entries.get(&file_id), Some(Entry::Failed))
+    }
+
     /// Draws the preview of `file_id` in `area`, or a placeholder.
     pub fn draw(
         &mut self,

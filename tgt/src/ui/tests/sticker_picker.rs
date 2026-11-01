@@ -152,3 +152,87 @@ fn draws_the_sets_and_the_stickers_emoji() {
     // Six stickers fit in a row
     assert_eq!(picker.columns, 6);
 }
+
+#[cfg(feature = "media-preview")]
+#[test]
+fn sticker_images_are_requested_and_drawn_in_the_picker() {
+    use crate::app::action::{PreviewDecodedPayload, PreviewRequest};
+    use libtgt::model::MediaFile;
+    use ratatui::{Terminal, backend::TestBackend, style::Color};
+
+    let preview = MediaFile {
+        id: 55,
+        ..MediaFile::default()
+    };
+    let entry = StickerEntry {
+        preview: Some(preview),
+        preview_fallback: Some(MediaFile {
+            id: 56,
+            ..MediaFile::default()
+        }),
+        emoji: "🐱".to_owned(),
+        ..StickerEntry::default()
+    };
+    let (mut picker, mut rx) = create_picker();
+    picker.update(Action::StickerSetsLoaded(vec![StickerSetEntry::recent(
+        vec![entry],
+    )]));
+
+    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+    terminal
+        .draw(|frame| picker.draw(frame, frame.area()).unwrap())
+        .unwrap();
+    assert_eq!(
+        sent(&mut rx),
+        [Action::LoadPreview(PreviewRequest {
+            message_id: 0,
+            file_id: 55,
+            path: None,
+        })]
+    );
+
+    picker.update(Action::PreviewDecoded(PreviewDecodedPayload {
+        request: PreviewRequest {
+            message_id: 0,
+            file_id: 55,
+            path: None,
+        },
+        result: Err("thumbnail unavailable".to_owned()),
+    }));
+    terminal
+        .draw(|frame| picker.draw(frame, frame.area()).unwrap())
+        .unwrap();
+    assert_eq!(
+        sent(&mut rx),
+        [Action::LoadPreview(PreviewRequest {
+            message_id: 0,
+            file_id: 56,
+            path: None,
+        })]
+    );
+
+    picker.update(Action::PreviewDecoded(PreviewDecodedPayload {
+        request: PreviewRequest {
+            message_id: 0,
+            file_id: 56,
+            path: None,
+        },
+        result: Ok(image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+            32,
+            32,
+            image::Rgb([10, 200, 10]),
+        ))),
+    }));
+    terminal
+        .draw(|frame| picker.draw(frame, frame.area()).unwrap())
+        .unwrap();
+    assert!(
+        terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .any(|cell| cell.fg == Color::Rgb(10, 200, 10) || cell.bg == Color::Rgb(10, 200, 10)),
+        "the decoded sticker image is drawn"
+    );
+}

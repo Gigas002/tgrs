@@ -668,6 +668,12 @@ mod sticker {
     fn the_preview_is_a_still_thumbnail_or_the_webp_itself() {
         let webp = sticker(StickerFormat::Webp, Some(ThumbnailFormat::Webp));
         assert_eq!(preview_id(&webp), Some(2));
+        assert_eq!(
+            StickerEntry::from(&webp)
+                .preview_fallback
+                .map(|file| file.id),
+            Some(1)
+        );
         assert_eq!(preview_id(&sticker(StickerFormat::Webp, None)), Some(1));
         // Animated: only a still thumbnail can be shown
         assert_eq!(preview_id(&sticker(StickerFormat::Tgs, None)), None);

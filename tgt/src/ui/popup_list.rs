@@ -76,7 +76,7 @@ pub fn draw(
     rows: &[PopupRow],
     selected: usize,
     min_width: u16,
-) {
+) -> (Rect, usize) {
     let all_lines = lines(theme, rows, selected);
     let content_width = all_lines.iter().map(Line::width).max().unwrap_or(0) as u16;
     let width = (content_width + 4)
@@ -114,4 +114,5 @@ pub fn draw(
         inner.height,
     );
     frame.render_widget(Paragraph::new(shown).style(Style::default()), content);
+    (popup, offset)
 }

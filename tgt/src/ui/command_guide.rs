@@ -242,6 +242,15 @@ impl CommandGuide {
         lines.push(Line::from(
             "  Chat list: first click focuses list, second click opens selected chat.",
         ));
+        lines.push(Line::from(
+            "  Menus: click a row to select it; click the selected row again to activate.",
+        ));
+        lines.push(Line::from(
+            "  Stickers: click a sticker to select it and click again to send; click a set tab to switch sets.",
+        ));
+        lines.push(Line::from(
+            "  Sticker sets: Tab / Shift+Tab switches sets; scroll moves the sticker selection.",
+        ));
         lines.push(Line::from(""));
 
         // Configuration section

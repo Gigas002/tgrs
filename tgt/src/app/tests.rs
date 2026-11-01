@@ -89,7 +89,7 @@ fn notifications_map_to_actions() {
     handle_notification(&ctx, Notification::OpenChatHistoryInvalidated).unwrap();
     handle_notification(&ctx, Notification::ChatListChanged).unwrap();
 
-    assert_eq!(ctx.store().jump_target_message_id_i64(), 42);
+    assert_eq!(ctx.store().jump_target_message_id_i64(), -1);
     let mut rx = ctx.action_rx();
     let actions: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
     assert_eq!(

@@ -4,6 +4,7 @@
 
 use std::{collections::HashSet, io, sync::Arc};
 
+use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use libtgt::model::{StickerEntry, StickerSetEntry};
 use ratatui::{
     Frame,
@@ -48,6 +49,12 @@ pub struct StickerPicker {
     scroll_row: usize,
     /// Stickers per grid row at the last draw.
     columns: usize,
+    /// Geometry from the most recent draw, used to map clicks to tabs/cells.
+    last_popup: Option<Rect>,
+    last_tabs: Option<Rect>,
+    last_grid: Option<Rect>,
+    last_grid_left: u16,
+    last_tab_ranges: Vec<(u16, u16, usize)>,
     /// Sets whose stickers were asked for since the picker opened.
     requested: HashSet<i64>,
     #[cfg(feature = "media-preview")]
@@ -66,6 +73,11 @@ impl StickerPicker {
             selected: 0,
             scroll_row: 0,
             columns: 1,
+            last_popup: None,
+            last_tabs: None,
+            last_grid: None,
+            last_grid_left: 0,
+            last_tab_ranges: Vec::new(),
             requested: HashSet::new(),
             #[cfg(feature = "media-preview")]
             previews: crate::ui::preview::ChatPreviews::with_capacity(PREVIEW_CACHE_SIZE),
@@ -151,6 +163,16 @@ impl StickerPicker {
         }
         let len = len as isize;
         self.set_index = (self.set_index as isize + step).rem_euclid(len) as usize;
+        self.selected = 0;
+        self.scroll_row = 0;
+        self.load_current_set();
+    }
+
+    fn select_set(&mut self, index: usize) {
+        if self.set_index == index || index >= self.sets.as_ref().map_or(0, Vec::len) {
+            return;
+        }
+        self.set_index = index;
         self.selected = 0;
         self.scroll_row = 0;
         self.load_current_set();
@@ -253,14 +275,28 @@ impl StickerPicker {
         let inner = cell.inner(Margin::new(1, 1));
         #[cfg(feature = "media-preview")]
         if let Some(file) = sticker.preview.as_ref() {
-            if let Some(action) = self.previews.request(0, file) {
-                self.send(action);
-            }
-            if self
-                .previews
-                .draw_loaded(frame, file.id, inner, Alignment::Center)
+            if self.previews.is_failed(file.id)
+                && let Some(fallback) = sticker.preview_fallback.as_ref()
             {
-                return;
+                if let Some(action) = self.previews.request(0, fallback) {
+                    self.send(action);
+                }
+                if self
+                    .previews
+                    .draw_loaded(frame, fallback.id, inner, Alignment::Center)
+                {
+                    return;
+                }
+            } else {
+                if let Some(action) = self.previews.request(0, file) {
+                    self.send(action);
+                }
+                if self
+                    .previews
+                    .draw_loaded(frame, file.id, inner, Alignment::Center)
+                {
+                    return;
+                }
             }
         }
         // No image (yet): the sticker's emoji
@@ -291,6 +327,74 @@ impl Component for StickerPicker {
     fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> io::Result<()> {
         self.action_tx = Some(tx);
         Ok(())
+    }
+
+    fn handle_mouse_events(&mut self, mouse: MouseEvent) -> io::Result<Option<Action>> {
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                self.move_selection(-(self.columns as isize));
+                Ok(None)
+            }
+            MouseEventKind::ScrollDown => {
+                self.move_selection(self.columns as isize);
+                Ok(None)
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                let Some(popup) = self.last_popup else {
+                    return Ok(None);
+                };
+                let inside = mouse.column >= popup.x
+                    && mouse.column < popup.right()
+                    && mouse.row >= popup.y
+                    && mouse.row < popup.bottom();
+                if !inside {
+                    return Ok(Some(Action::HideStickerPicker));
+                }
+                if self.last_tabs.is_some_and(|tabs| {
+                    mouse.row == tabs.y
+                        && mouse.column >= tabs.x
+                        && mouse.column < tabs.right()
+                }) {
+                    if let Some((_, _, index)) = self
+                        .last_tab_ranges
+                        .iter()
+                        .find(|(start, end, _)| mouse.column >= *start && mouse.column < *end)
+                    {
+                        self.select_set(*index);
+                    }
+                    return Ok(None);
+                }
+                let Some(grid) = self.last_grid else {
+                    return Ok(None);
+                };
+                if mouse.column < self.last_grid_left
+                    || mouse.column >= grid.right()
+                    || mouse.row < grid.y
+                    || mouse.row >= grid.bottom()
+                {
+                    return Ok(None);
+                }
+                let col =
+                    usize::from(mouse.column - self.last_grid_left) / usize::from(CELL_WIDTH);
+                let row = usize::from(mouse.row - grid.y) / usize::from(CELL_HEIGHT);
+                if col >= self.columns
+                    || row >= usize::from(grid.height) / usize::from(CELL_HEIGHT)
+                {
+                    return Ok(None);
+                }
+                let index = (self.scroll_row + row) * self.columns + col;
+                if index >= self.stickers().len() {
+                    return Ok(None);
+                }
+                if self.selected == index {
+                    self.pick();
+                } else {
+                    self.selected = index;
+                }
+                Ok(None)
+            }
+            _ => Ok(None),
+        }
     }
 
     fn update(&mut self, action: Action) {
@@ -329,6 +433,7 @@ impl Component for StickerPicker {
             width,
             height,
         );
+        self.last_popup = Some(popup);
         frame.render_widget(Clear, popup);
         let block = Block::new()
             .borders(Borders::ALL)
@@ -355,6 +460,33 @@ impl Component for StickerPicker {
             inner.width,
             inner.height.saturating_sub(3),
         );
+        self.last_tabs = Some(tabs);
+        self.last_grid = Some(grid);
+        self.last_tab_ranges.clear();
+        if let Some(sets) = self.sets.as_ref() {
+            let separator = " · ";
+            let titles: Vec<String> = sets.iter().map(|set| format!(" {} ", set.title)).collect();
+            let mut first = 0;
+            while first < self.set_index {
+                let used: usize = titles[first..=self.set_index]
+                    .iter()
+                    .map(|title| title.width() + separator.width())
+                    .sum();
+                if used <= usize::from(inner.width) {
+                    break;
+                }
+                first += 1;
+            }
+            let mut x = tabs.x + if first > 0 { 2 } else { 0 };
+            for (index, title) in titles.iter().enumerate().skip(first) {
+                if index > first {
+                    x = x.saturating_add(separator.width() as u16);
+                }
+                let end = x.saturating_add(title.width() as u16).min(tabs.right());
+                self.last_tab_ranges.push((x, end, index));
+                x = end;
+            }
+        }
         frame.render_widget(Paragraph::new(self.tabs(usize::from(inner.width))), tabs);
 
         let placeholder = match self.current_set() {
@@ -379,6 +511,7 @@ impl Component for StickerPicker {
         self.scroll_to_selection(rows);
         // Center the grid in the popup
         let left = grid.x + (grid.width - (self.columns as u16 * CELL_WIDTH).min(grid.width)) / 2;
+        self.last_grid_left = left;
         let len = self.stickers().len();
         for row in 0..rows {
             for column in 0..self.columns {

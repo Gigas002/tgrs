@@ -9,6 +9,7 @@ use crate::{
     ui::popup_list::{self, PopupRow},
 };
 use libtgt::model::{ChatKind, ChatState};
+use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::{Frame, layout::Rect, text::Span};
 use std::{io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
@@ -83,6 +84,8 @@ pub struct ChatActions {
     selected: usize,
     /// The command picked once, waiting to be picked again.
     armed: Option<ChatCommand>,
+    /// Popup bounds and first visible row from the most recent draw.
+    last_popup: Option<(Rect, usize)>,
 }
 
 impl ChatActions {
@@ -96,6 +99,7 @@ impl ChatActions {
             items: Vec::new(),
             selected: 0,
             armed: None,
+            last_popup: None,
         }
     }
 
@@ -244,6 +248,45 @@ impl Component for ChatActions {
         }
     }
 
+    fn handle_mouse_events(&mut self, mouse: MouseEvent) -> io::Result<Option<Action>> {
+        let Some((popup, offset)) = self.last_popup else {
+            return Ok(None);
+        };
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                self.move_selection(false);
+                Ok(None)
+            }
+            MouseEventKind::ScrollDown => {
+                self.move_selection(true);
+                Ok(None)
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                let inside = mouse.column >= popup.x
+                    && mouse.column < popup.right()
+                    && mouse.row >= popup.y
+                    && mouse.row < popup.bottom();
+                if !inside {
+                    return Ok(Some(Action::HideChatActions));
+                }
+                let row_y = mouse.row.saturating_sub(popup.y + 1) as usize;
+                if mouse.row > popup.y && mouse.row + 1 < popup.bottom() {
+                    let index = offset + row_y;
+                    if index < self.items.len() {
+                        if self.selected == index {
+                            self.activate(index);
+                        } else {
+                            self.selected = index;
+                            self.armed = None;
+                        }
+                    }
+                }
+                Ok(None)
+            }
+            _ => Ok(None),
+        }
+    }
+
     fn draw(&mut self, frame: &mut Frame<'_>, area: Rect) -> io::Result<()> {
         if self.chat.is_none() || self.items.is_empty() {
             return Ok(());
@@ -277,7 +320,9 @@ impl Component for ChatActions {
                 }
             })
             .collect();
-        popup_list::draw(frame, area, theme, &self.title(), &rows, self.selected, 28);
+        self.last_popup = Some(popup_list::draw(
+            frame, area, theme, &self.title(), &rows, self.selected, 28,
+        ));
         Ok(())
     }
 }
