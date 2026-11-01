@@ -1,0 +1,170 @@
+# Using tgt
+
+How to run `tgt`, move around, read and write messages, and configure it. For installing and building, see the [README](../README.md).
+
+## Running
+
+| Command      | Description                                             |
+| ------------ | ------------------------------------------------------- |
+| `tgt`        | Open the TUI (logs in on the terminal first if needed). |
+| `tgt logout` | Log out of Telegram and remove the database key.        |
+
+Global options: `--config-dir`, `--log-dir`, `--log-level`, `-v`/`-q`.
+
+Chats are only read and messages only sent from the TUI: there is no command-line or scripting interface to the account.
+
+## Navigation
+
+Like [concord](https://github.com/chojs23/concord): `left`/`right` move between the chat list, the chat and the prompt, `up`/`down` select inside a pane, and `i` in the chat starts writing (`esc` goes back to the chat). A pane always has the focus, the chat list when `tgt` starts; `esc` closes a popup or leaves the prompt.
+
+| Key                         | Action                                           |
+| --------------------------- | ------------------------------------------------ |
+| `alt+1` / `alt+2` / `alt+3` | Focus the chat list, the chat, the prompt.       |
+| `alt+right` / `alt+left`    | Make the focused pane wider / narrower.          |
+| `alt+up` / `alt+down`       | Make the focused pane taller / shorter.          |
+| `space`                     | Open the [leader menu](#leader-menu).            |
+| `alt+f1`                    | List every key.                                  |
+
+### Leader menu
+
+`space` opens the leader menu, which lists what comes next. Its entries are the `[leader_menu]` section of `keymap.toml`.
+
+| Key     | Action                                       |
+| ------- | -------------------------------------------- |
+| `1`     | Hide or show the chat list.                  |
+| `2`     | Hide or show the topic list.                 |
+| `3`     | Hide or show the archive.                    |
+| `a`     | Actions of the selected message.             |
+| `space` | Search chats.                                |
+| `/`     | Search messages.                             |
+| `p`     | Pinned messages.                             |
+| `u`     | Upload a file.                               |
+| `s`     | Send a sticker.                              |
+| `c`     | Actions of the open chat.                    |
+| `i`     | Profile of the open chat.                    |
+| `m`     | Your own profile.                            |
+| `n`     | Open a chat by username.                     |
+| `b`     | [Blocked users](#blocking-and-reporting).    |
+| `?`     | List every key.                              |
+
+## Chats
+
+### Topics
+
+Groups with topics (forums) open into a topic list, a pane right of the chat list: `enter` on a topic shows its messages in the chat, and messages you send go to that topic. The topic list resizes like the other panes, `alt+t` focuses it and `alt+m` hides or shows it.
+
+### Archive
+
+Archived chats are behind the `📦 Archived chats` row at the top of the chat list, which names them and counts the unread ones: `enter` on it opens the archive, a pane right of the chat list, and `enter` there opens an archived chat. Opening a chat from the chat list closes the archive again; `alt+a` focuses it and `alt+b` hides or shows it.
+
+### Chat actions
+
+In the chat list and the archive, these keys act on the selected chat (leader `c` opens the actions of the open chat):
+
+| Key | Action                                                                                         |
+| --- | ---------------------------------------------------------------------------------------------- |
+| `a` | List the chat's actions with their keys.                                                       |
+| `m` | Mute or unmute.                                                                                |
+| `A` | Archive or unarchive.                                                                          |
+| `P` | Pin or unpin.                                                                                  |
+| `u` | Mark as read or unread.                                                                        |
+| `B` | Block or unblock the person or bot of a private chat.                                          |
+| `!` | [Report](#blocking-and-reporting) the chat.                                                    |
+| `D` | Leave a group or channel, or delete any other chat; press `D` again or `enter` to confirm.     |
+| `i` | Show the chat's [profile](#profiles).                                                          |
+| `n` | [Open a chat by username](#opening-a-chat-by-username).                                        |
+
+### Profiles
+
+`i` in the chat list or the archive shows the selected chat's profile, leader `i` the open chat's and leader `m` your own. It is read only:
+
+- a person or bot: name, usernames, phone number, bio, birthday, last seen and ID;
+- a group or channel: usernames, description and member count.
+
+The bio or description is loaded from Telegram when the profile opens. `j`/`k` scroll a long profile; `esc`, `q` or `i` close it.
+
+### Blocking and reporting
+
+`B` in the chat list or the archive blocks the person or bot of the selected private chat, or unblocks them; leader `b` lists everyone you've blocked, and `u` or `enter` there unblocks the highlighted one.
+
+`!` reports the selected chat, or in the chat the selected message, to Telegram's moderators. Telegram asks for a reason, sometimes narrowing it down over a few lists (`1`-`9` pick directly, `j`/`k` or the arrows move, `enter` picks), and then maybe for details, which you type and send with `enter`. `esc` stops at any point without reporting. Some chats can only be reported along with their messages: report one of the messages instead.
+
+### Opening a chat by username
+
+`n` in the chat list or the archive (leader `n` elsewhere) asks for a public username. Type `@name` or `name`, or paste a `t.me/name` link, and `enter` opens the person's, bot's, group's or channel's chat, even if it isn't in your chat list yet. An unknown or invalid username is reported in the popup; `esc` closes it.
+
+## Messages
+
+In the prompt, `enter` sends; `alt+enter` or `ctrl+j` start a new line (also `shift+enter` in terminals with the kitty keyboard protocol, e.g. kitty, foot, WezTerm, Ghostty).
+
+`alt+s` opens the sticker picker: your recent stickers and installed sets as tabs (`tab`/`shift+tab`) over a grid of stickers (arrows or `h`/`j`/`k`/`l`), drawn as images with the `media-preview` feature and as their emoji otherwise. `enter` sends the selected one, as a reply when you're replying.
+
+### Message actions
+
+Select a message in the chat (`up`/`down`) and press a key, or `enter` for the actions menu, which lists every action with its key and dims the ones that don't apply. The keys follow [concord](https://github.com/chojs23/concord)'s:
+
+| Key | Action                                                                                             |
+| --- | -------------------------------------------------------------------------------------------------- |
+| `y` | Copy the text.                                                                                     |
+| `r` | React: pick an emoji the chat allows; picking one of yours removes it. `1`-`9`, `0` pick directly. |
+| `R` | Reply.                                                                                             |
+| `e` | Edit your message.                                                                                 |
+| `d` | Delete your message for everyone (`D`: only for you).                                              |
+| `o` | Open a link of the message in the browser, picked from a list when there are several.              |
+| `x` | Open the media (photo, video, GIF, audio, voice message, sticker or file) via `xdg-open`.          |
+| `s` | Download the media or file (archives, documents, ...) to `app.download_dir`.                       |
+| `g` | Go to the message it replies to.                                                                   |
+| `P` | Pin or unpin the message for everyone.                                                             |
+| `L` | Copy the message's link (supergroups and channels).                                                |
+| `!` | Report the message to Telegram's moderators (not your own).                                        |
+
+Reactions are shown under their messages, yours highlighted, and pinned messages get a 📌.
+
+### Media and files
+
+`tgt` doesn't play media itself. With `media-preview`, images (and the thumbnails of videos, GIFs and files) are previewed under their messages. Files are fetched from Telegram first when needed; progress and errors are shown in the status bar.
+
+- Downloads never overwrite: `file.zip` becomes `file (1).zip`.
+- Programs and scripts (`.sh`, `.desktop`, `.AppImage`, `.jar`, ...) are never opened, only downloaded.
+- Only web, e-mail, phone and `tg:` links are opened; others, like `file:` links, are refused.
+
+## Configuration
+
+`tgt` works without any config file: defaults are bundled in the binary. Files are looked up in XDG directories:
+
+| What                                       | Location                                                                       |
+| ------------------------------------------ | ------------------------------------------------------------------------------ |
+| `config.toml`, `keymap.toml`, `theme.toml` | `$XDG_CONFIG_HOME/tgt` (`~/.config/tgt`), or `--config-dir` / `TGT_CONFIG_DIR` |
+| TDLib database                             | `$XDG_DATA_HOME/tgt/tdlib` (`~/.local/share/tgt/tdlib`)                        |
+| Logs, TDLib log                            | `$XDG_STATE_HOME/tgt` (`~/.local/state/tgt`)                                   |
+| TDLib database key                         | the system keychain, service `tgt` (see `[credentials]`)                       |
+| Downloads                                  | `app.download_dir`, default `$XDG_DOWNLOAD_DIR` or `~/Downloads`               |
+
+Settings are resolved as `CLI > environment > config.toml > defaults`. They are only changed by editing the files: `tgt` never writes to them and has no settings UI. `API_ID` and `API_HASH` override the Telegram credentials.
+
+To customize, copy the files you want to change from [`examples/`](../examples/) into the config directory; missing files keep their defaults.
+
+### Keybindings
+
+User keybindings in `keymap.toml` are merged over the defaults: binding a command replaces its default keys, and every other default stays. Each section applies to one part of the UI (`[chat_list]`, `[chat]`, `[prompt]`, `[leader_menu]`, ...); [`examples/keymap.toml`](../examples/keymap.toml) lists every default binding and command.
+
+### Theme
+
+`tgt` follows your terminal's colors: text uses the terminal's default foreground and background, accents use its ANSI palette, and secondary text is dimmed rather than given a fixed color. To change a color, add a `theme.toml` with Highlight Groups, like Vim's:
+
+```toml
+[highlight.FocusBorder]
+foreground = "light_magenta"
+
+[highlight.SelectedRow]
+background = "#303030"
+
+[ui.border]
+default = "rounded"
+```
+
+A group inherits the fields it doesn't set from the group it links to, so changing `Muted` changes timestamps, hints and previews together. [`examples/theme.toml`](../examples/theme.toml) lists every group with its default. Invalid entries are skipped with a warning.
+
+## Resetting and uninstalling
+
+To reset or uninstall, remove the directories listed under [Configuration](#configuration) yourself, and the database key with `secret-tool clear service tgt`.
