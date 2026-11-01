@@ -206,12 +206,13 @@ impl CoreWindow {
         let size_message_reply = 3;
         let size_chat_list = DEFAULT_SIDE_PANE_SIZE;
         let small_area = false;
-        let component_focused = None;
+        // Some pane always has the focus; the chat list to start with
+        let component_focused = Some(ComponentName::ChatList);
         let focused = true;
         let show_reply_message = false;
         let last_focusable_areas = HashMap::new();
 
-        CoreWindow {
+        let mut window = CoreWindow {
             app_context,
             name,
             action_tx,
@@ -233,7 +234,9 @@ impl CoreWindow {
             show_reply_message,
             active_popup: None,
             last_focusable_areas,
-        }
+        };
+        window.focus_only(component_focused);
+        window
     }
     /// Set the name of the `CoreWindow`.
     ///
@@ -477,8 +480,20 @@ impl CoreWindow {
         self.active_popup == Some(popup)
     }
 
-    /// Focuses `name` (or nothing) and unfocuses every other component.
+    /// The pane focused when no other one is: the chat list, or the chat
+    /// while the chat list is hidden.
+    fn default_pane(&self) -> ComponentName {
+        if self.size_chat_list > 0 {
+            ComponentName::ChatList
+        } else {
+            ComponentName::Chat
+        }
+    }
+
+    /// Focuses `name` and unfocuses every other component. Some pane always
+    /// has the focus: `None` focuses the [default pane](Self::default_pane).
     fn focus_only(&mut self, name: Option<ComponentName>) {
+        let name = Some(name.unwrap_or_else(|| self.default_pane()));
         self.component_focused = name;
         self.app_context.set_focused_component(name);
         for (component_name, component) in self.components.iter_mut() {
@@ -653,14 +668,22 @@ impl Component for CoreWindow {
 
                 self.focus_only(Some(component_name));
             }
+            // Esc closes a popup or leaves the prompt; a pane keeps the focus
             Action::UnfocusComponent => {
                 self.show_reply_message = false;
                 if let Some(popup) = self.active_popup {
-                    self.hide_popup(popup);
+                    // Its own hide action gives the focus back where it was
+                    match Self::hide_action(popup) {
+                        Some(hide) => self.update(hide),
+                        None => self.hide_popup(popup),
+                    }
                 }
-                // Leaving the prompt goes back to the messages, like concord
-                let back_to_chat = self.component_focused == Some(ComponentName::Prompt);
-                self.focus_only(back_to_chat.then_some(ComponentName::Chat));
+                match self.component_focused {
+                    // Leaving the prompt goes back to the messages, like concord
+                    Some(ComponentName::Prompt) => self.focus_only(Some(ComponentName::Chat)),
+                    Some(focused) if !focused.is_popup() => {}
+                    _ => self.focus_only(None),
+                }
             }
             Action::FocusNextPane => self.focus_pane(1),
             Action::FocusPreviousPane => self.focus_pane(-1),

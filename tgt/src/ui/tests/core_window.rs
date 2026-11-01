@@ -360,7 +360,57 @@ fn unfocus_hides_the_popup() {
     window.update(Action::ShowMessageActionsFor(1));
     window.update(Action::UnfocusComponent);
     assert_eq!(window.active_popup, None);
-    assert_eq!(window.component_focused, None);
+    // Message actions give the focus back to the chat
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+}
+
+#[test]
+fn a_pane_is_focused_from_the_start() {
+    let window = create_test_core_window();
+    assert_eq!(window.component_focused, Some(ComponentName::ChatList));
+    assert_eq!(
+        window.app_context.focused_component(),
+        Some(ComponentName::ChatList)
+    );
+}
+
+#[test]
+fn esc_never_leaves_nothing_focused() {
+    let mut window = create_test_core_window();
+    for pane in [
+        ComponentName::ChatList,
+        ComponentName::Chat,
+        ComponentName::TopicList,
+        ComponentName::ArchiveList,
+    ] {
+        window.focus_only(Some(pane));
+        window.update(Action::UnfocusComponent);
+        assert_eq!(window.component_focused, Some(pane), "esc in {pane}");
+    }
+
+    // Leaving the prompt goes back to the messages
+    window.focus_only(Some(ComponentName::Prompt));
+    window.update(Action::UnfocusComponent);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+
+    // A popup goes away and a pane gets the focus
+    window.update(Action::ShowCommandGuide);
+    window.update(Action::UnfocusComponent);
+    assert_eq!(window.active_popup, None);
+    assert!(
+        window
+            .component_focused
+            .is_some_and(|focused| !focused.is_popup())
+    );
+}
+
+#[test]
+fn with_the_chat_list_hidden_the_chat_is_the_fallback() {
+    let mut window = create_test_core_window();
+    window.update(Action::ToggleChatList);
+    window.update(Action::ShowCommandGuide);
+    window.update(Action::HideCommandGuide);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
 }
 
 #[test]
@@ -370,7 +420,7 @@ fn command_guide_toggles() {
     assert!(window.is_popup_visible(ComponentName::CommandGuide));
     window.update(Action::ShowCommandGuide);
     assert_eq!(window.active_popup, None);
-    assert_eq!(window.component_focused, None);
+    assert_eq!(window.component_focused, Some(ComponentName::ChatList));
 }
 
 mod panes {

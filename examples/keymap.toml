@@ -17,8 +17,8 @@ keymap = [
   { keys = ["alt+2"], command = "focus_chat", description = "Focus the chat"},
   # Focus the prompt
   { keys = ["alt+3"], command = "focus_prompt", description = "Focus the prompt"},
-  # Leave the prompt for the chat; elsewhere unfocus the current component
-  { keys = ["esc"], command = "unfocus_component", description = "Unfocus the current component"},
+  # Close a popup or leave the prompt for the chat; a pane always keeps the focus
+  { keys = ["esc"], command = "unfocus_component", description = "Close the popup or leave the prompt"},
   # Resize the focused pane, like concord: wider, narrower, taller, shorter
   { keys = ["alt+right"], command = "resize_pane_wider", description = "Make the focused pane wider"},
   { keys = ["alt+left"], command = "resize_pane_narrower", description = "Make the focused pane narrower"},

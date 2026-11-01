@@ -37,6 +37,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - The title bar is concord's one-line header (` tgt - v1.0.0  Connected as Name `) and the status bar one line of key hints or the latest status message; the pressed key and terminal size are no longer shown.
 - Function keys are shown as `F1` instead of `F(1)`.
 - Chats in the chat list are separated by a blank line.
+- A pane always has the focus: the chat list when `tgt` starts (the chat while the chat list is hidden). `esc` closes a popup or leaves the prompt, but no longer leaves nothing focused.
 - Muting or unmuting a chat elsewhere dims or undims it in the chat list right away.
 - The chat list, the topic list and the archive are padded on top and on the right as much as on the left and the bottom; the chat is padded on top like under its newest message.
 - Navigation like concord: `left`/`right` move focus between the chat list, chat and prompt (`right` in the chat list no longer opens the chat, `enter` does; `left` in the chat no longer unselects), `i` in the chat focuses the prompt and `esc` there returns to the chat. `alt+arrows` resize the focused pane instead of moving focus (`resize_pane_wider`, `resize_pane_narrower`, `resize_pane_taller`, `resize_pane_shorter`, `focus_next_pane`, `focus_previous_pane` commands); the chat list can be up to half the width.
