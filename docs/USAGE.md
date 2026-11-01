@@ -152,6 +152,8 @@ To send a file, write its caption in the prompt (or leave it empty), then press 
 
 You can also drop files on the terminal window: most terminals paste the paths of dropped files, and a paste that is only paths of existing files (quoted, with escaped spaces or as `file://` URIs) attaches them to the prompt instead of typing them. `alt+v` attaches the image on the clipboard, e.g. a screenshot, saved as a PNG (this needs the `media-preview` feature). The prompt's title lists what's attached: `enter` sends the files, the first with the prompt's text as its caption, grouped as albums of up to 10 (split evenly, so 11 files are albums of 6 and 5), and `esc` turns them back into the pasted text, for when you meant to paste a path. Files aren't attached while editing a message, and switching chats drops them. Dropping needs `app.paste_support`, which is on by default.
 
+`alt+q` sends the next message without sound: it arrives silently for the people in the chat, like Telegram's "Send without sound". The prompt's title shows `🔕 without sound` until you send it (text, files, an album or a sticker), then the following message has sound again; `alt+q` once more turns it off before sending.
+
 `tgt` doesn't play media itself. With `media-preview`, images (and the thumbnails of videos, GIFs and files) are previewed under their messages. Files are fetched from Telegram first when needed; progress and errors are shown in the status bar.
 
 - Downloads are listed by leader `t`, see [Downloads](#downloads).

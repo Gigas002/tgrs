@@ -1180,6 +1180,10 @@ impl Component for PromptWindow {
                     _ => self.input.paste(text),
                 }
             }
+            Action::PromptToggleSilent => {
+                let store = self.app_context.store();
+                store.set_send_silently(!store.sends_silently());
+            }
             Action::PromptPasteImage if self.can_attach() => {
                 match attachment::save_clipboard_image() {
                     Ok(path) => self.attachments.push(path),
@@ -1309,6 +1313,15 @@ impl Component for PromptWindow {
                 "📎 {} · enter sends, esc makes it text · {title}",
                 attachment::names(&self.attachments)
             )
+        };
+
+        // Edits and searches aren't sent
+        let title = if self.app_context.store().sends_silently()
+            && matches!(self.input.mode, Mode::Normal | Mode::Reply(_))
+        {
+            format!("🔕 without sound · {title}")
+        } else {
+            title
         };
 
         let counter_style = if character_count > MESSAGE_MAX_CHARS {

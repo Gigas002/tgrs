@@ -762,6 +762,8 @@ pub enum Action {
     UploadFile(String),
     /// Attach the image on the clipboard to the prompt.
     PromptPasteImage,
+    /// Send the next message without sound, or with it again.
+    PromptToggleSilent,
     /// Send this file with this caption (none if empty), maybe as a reply.
     SendFile(String, String, Option<TdMessageReplyToMessage>),
     /// Send these files as albums, the first with this caption, maybe as a reply.
@@ -945,6 +947,7 @@ impl FromStr for Action {
             "prompt_send_message" => Ok(Action::PromptSendMessage),
             "prompt_copy" => Ok(Action::PromptCopy),
             "prompt_paste_image" => Ok(Action::PromptPasteImage),
+            "prompt_toggle_silent" => Ok(Action::PromptToggleSilent),
             "close_search_overlay" => Ok(Action::CloseSearchOverlay),
             "show_search_overlay" => Ok(Action::ShowSearchOverlay),
             "search_overlay_submit" => Ok(Action::SearchOverlaySubmit),

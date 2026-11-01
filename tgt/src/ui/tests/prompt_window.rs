@@ -664,3 +664,33 @@ fn typing_is_told_for_new_messages_but_not_edits() {
     let sent: Vec<Action> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
     assert!(!sent.contains(&Action::Typing), "{sent:?}");
 }
+
+fn prompt_title(window: &mut PromptWindow) -> String {
+    let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 4)).unwrap();
+    terminal
+        .draw(|frame| window.draw(frame, frame.area()).unwrap())
+        .unwrap();
+    terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect()
+}
+
+#[test]
+fn the_next_message_can_go_without_sound() {
+    let mut window = create_test_prompt_window();
+    let (tx, _rx) = unbounded_channel();
+    window.register_action_handler(tx).unwrap();
+    window.update(Action::PromptToggleSilent);
+    assert!(window.app_context.store().sends_silently());
+    assert!(prompt_title(&mut window).contains("without sound"));
+    // Not said while editing, which isn't sent anew
+    window.update(Action::EditMessage(2, "text".to_string()));
+    assert!(!prompt_title(&mut window).contains("without sound"));
+    // Pressed again, it has sound
+    window.update(Action::PromptToggleSilent);
+    assert!(!window.app_context.store().sends_silently());
+}

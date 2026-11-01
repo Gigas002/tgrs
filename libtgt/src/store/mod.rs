@@ -40,6 +40,8 @@ pub struct Store {
     transfers: Mutex<HashMap<i32, Transfer>>,
     /// Counts started downloads, to list newer first.
     transfers_started: AtomicU64,
+    /// The next message goes without sound.
+    send_silently: AtomicBool,
     /// What others are doing in each chat, latest first.
     activities: Mutex<HashMap<i64, Vec<ChatActivity>>>,
     users: Mutex<HashMap<i64, User>>,
@@ -258,6 +260,22 @@ impl Store {
     pub fn set_reply_message(&self, message_id: MessageId, text: String) {
         self.reply_message_id.store(message_id, Ordering::Relaxed);
         *self.reply_message_text.lock().unwrap() = text;
+    }
+
+    /// Whether the next message goes without sound.
+    pub fn sends_silently(&self) -> bool {
+        self.send_silently.load(Ordering::Relaxed)
+    }
+
+    /// Makes the next message go without sound, or not.
+    pub fn set_send_silently(&self, silent: bool) {
+        self.send_silently.store(silent, Ordering::Relaxed);
+    }
+
+    /// Whether the message being sent goes without sound; the next one has
+    /// sound again.
+    pub fn take_send_silently(&self) -> bool {
+        self.send_silently.swap(false, Ordering::Relaxed)
     }
 
     pub fn clear_reply_message(&self) {
@@ -1008,6 +1026,7 @@ impl Default for Store {
         Self {
             transfers: Mutex::default(),
             transfers_started: AtomicU64::new(0),
+            send_silently: AtomicBool::new(false),
             activities: Mutex::default(),
             users: Mutex::default(),
             basic_groups: Mutex::default(),

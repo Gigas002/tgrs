@@ -916,3 +916,18 @@ mod activity {
         );
     }
 }
+
+mod send_silently {
+    use crate::store::Store;
+
+    #[test]
+    fn silence_lasts_for_one_message() {
+        let store = Store::default();
+        assert!(!store.take_send_silently());
+        store.set_send_silently(true);
+        assert!(store.sends_silently());
+        assert!(store.take_send_silently());
+        assert!(!store.sends_silently());
+        assert!(!store.take_send_silently());
+    }
+}

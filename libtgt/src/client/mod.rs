@@ -1126,11 +1126,12 @@ impl Client {
     ) -> Result<tdlib_rs::types::Message, TdError> {
         self.store.clear_reply_message();
         let reply_to = reply_to.map(|r| InputMessageReplyTo::Message((&r).into()));
+        let options = self.send_options();
         match functions::send_message(
             chat_id,
             topic,
             reply_to,
-            None,
+            options,
             text_content(message),
             self.client_id,
         )
@@ -1142,6 +1143,17 @@ impl Client {
                 Err(e)
             }
         }
+    }
+
+    /// The options of a message being sent: without sound when asked for
+    /// (once).
+    fn send_options(&self) -> Option<tdlib_rs::types::MessageSendOptions> {
+        self.store
+            .take_send_silently()
+            .then(|| tdlib_rs::types::MessageSendOptions {
+                disable_notification: true,
+                ..Default::default()
+            })
     }
 
     /// Sends a local file as a document with `caption` (none if empty), to
@@ -1158,7 +1170,9 @@ impl Client {
         self.store.clear_reply_message();
         let reply_to = reply_to.map(|r| InputMessageReplyTo::Message((&r).into()));
         let content = document_content(file_path, &caption);
-        match functions::send_message(chat_id, topic, reply_to, None, content, self.client_id).await
+        let options = self.send_options();
+        match functions::send_message(chat_id, topic, reply_to, options, content, self.client_id)
+            .await
         {
             Ok(enums::Message::Message(message)) => Ok(message),
             Err(e) => {
@@ -1184,10 +1198,15 @@ impl Client {
         let mut caption = Some(caption);
         let mut reply_to = reply_to;
         let mut first_error = None;
+        // Every album of the files goes without sound, or none
+        let silent = self.store.take_send_silently();
         for group in album_groups(&file_paths) {
             let caption = caption.take().unwrap_or_default();
             let reply = reply_to.take();
+            self.store.set_send_silently(silent);
+            let options = self.send_options();
             let sent = if let [path] = group {
+                self.store.set_send_silently(silent);
                 self.send_document(path.clone(), caption, chat_id, topic.clone(), reply)
                     .await
                     .map(|_| ())
@@ -1205,7 +1224,7 @@ impl Client {
                     chat_id,
                     topic.clone(),
                     reply,
-                    None,
+                    options.clone(),
                     contents,
                     self.client_id,
                 )
@@ -1242,7 +1261,9 @@ impl Client {
             },
             emoji: sticker.emoji.clone(),
         });
-        match functions::send_message(chat_id, topic, reply_to, None, content, self.client_id).await
+        let options = self.send_options();
+        match functions::send_message(chat_id, topic, reply_to, options, content, self.client_id)
+            .await
         {
             Ok(enums::Message::Message(message)) => Ok(message),
             Err(e) => {

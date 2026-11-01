@@ -588,6 +588,7 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::ProfileScrollDown
             | Action::ProfileScrollUp
             | Action::PromptPasteImage
+            | Action::PromptToggleSilent
             | Action::ShowEditProfile
             | Action::HideEditProfile
             | Action::EditProfileNextField
