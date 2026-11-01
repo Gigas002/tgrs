@@ -734,6 +734,20 @@ impl Store {
         Some(profile)
     }
 
+    /// The pinned chats of the main chat list, or of the archive, top first.
+    pub fn pinned_chat_ids(&self, archived: bool) -> Vec<i64> {
+        let index = if archived {
+            self.archive_index()
+        } else {
+            self.chats_index()
+        };
+        index
+            .iter()
+            .filter(|chat| chat.position.is_pinned)
+            .map(|chat| chat.chat_id)
+            .collect()
+    }
+
     /// Whether a chat is in the Archive chat list.
     pub fn is_archived(&self, chat_id: i64) -> bool {
         self.archive_index()

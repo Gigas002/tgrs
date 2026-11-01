@@ -886,3 +886,23 @@ mod moderation {
         assert_eq!(TdMessageSender::from(&chat), TdMessageSender::Chat(-9));
     }
 }
+
+mod pinned_order {
+    use crate::model::{PinMoveError, move_pinned};
+
+    #[test]
+    fn a_pinned_chat_swaps_with_its_neighbour() {
+        assert_eq!(move_pinned(&[1, 2, 3], 2, true), Ok(vec![2, 1, 3]));
+        assert_eq!(move_pinned(&[1, 2, 3], 2, false), Ok(vec![1, 3, 2]));
+        assert_eq!(move_pinned(&[1, 2], 2, true), Ok(vec![2, 1]));
+    }
+
+    #[test]
+    fn ends_and_unpinned_chats_stay_put() {
+        assert_eq!(move_pinned(&[1, 2, 3], 1, true), Err(PinMoveError::AtEdge));
+        assert_eq!(move_pinned(&[1, 2, 3], 3, false), Err(PinMoveError::AtEdge));
+        assert_eq!(move_pinned(&[1], 1, false), Err(PinMoveError::AtEdge));
+        assert_eq!(move_pinned(&[1, 2], 9, true), Err(PinMoveError::NotPinned));
+        assert_eq!(move_pinned(&[], 9, false), Err(PinMoveError::NotPinned));
+    }
+}

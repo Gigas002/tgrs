@@ -103,3 +103,30 @@ impl ChatState {
         matches!(self.kind, ChatKind::Group | ChatKind::Channel)
     }
 }
+
+/// Why a chat can't move among the pinned chats.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PinMoveError {
+    /// The chat isn't pinned; only pinned chats have an order to change.
+    NotPinned,
+    /// The chat is already the first (moving up) or the last (moving down).
+    AtEdge,
+}
+
+/// The pinned chats, `pinned` top first, after moving `chat_id` one place up
+/// or down.
+pub fn move_pinned(pinned: &[i64], chat_id: i64, up: bool) -> Result<Vec<i64>, PinMoveError> {
+    let index = pinned
+        .iter()
+        .position(|id| *id == chat_id)
+        .ok_or(PinMoveError::NotPinned)?;
+    let other = if up {
+        index.checked_sub(1)
+    } else {
+        Some(index + 1).filter(|other| *other < pinned.len())
+    }
+    .ok_or(PinMoveError::AtEdge)?;
+    let mut moved = pinned.to_vec();
+    moved.swap(index, other);
+    Ok(moved)
+}

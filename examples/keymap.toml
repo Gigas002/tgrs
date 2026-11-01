@@ -80,6 +80,11 @@ keymap = [
   { keys = ["u"], command = "toggle_chat_read", description = "Mark the chat as read or unread"},
   { keys = ["D"], command = "leave_chat", description = "Leave or delete the chat (press twice)"},
   { keys = ["B"], command = "toggle_chat_block", description = "Block or unblock the person"},
+  # Move the selected pinned chat up or down among the pinned chats
+  { keys = ["K"], command = "move_chat_up", description = "Move the pinned chat up"},
+  { keys = ["shift+up"], command = "move_chat_up", description = "Move the pinned chat up"},
+  { keys = ["J"], command = "move_chat_down", description = "Move the pinned chat down"},
+  { keys = ["shift+down"], command = "move_chat_down", description = "Move the pinned chat down"},
   { keys = ["!"], command = "report_chat", description = "Report the chat"},
   # The profile of the selected chat: a person's bio and usernames, a group's description
   { keys = ["i"], command = "show_profile", description = "Show the chat's profile"},
@@ -107,6 +112,11 @@ keymap = [
   { keys = ["u"], command = "toggle_chat_read", description = "Mark the chat as read or unread"},
   { keys = ["D"], command = "leave_chat", description = "Leave or delete the chat (press twice)"},
   { keys = ["B"], command = "toggle_chat_block", description = "Block or unblock the person"},
+  # Move the selected pinned chat up or down among the pinned chats
+  { keys = ["K"], command = "move_chat_up", description = "Move the pinned chat up"},
+  { keys = ["shift+up"], command = "move_chat_up", description = "Move the pinned chat up"},
+  { keys = ["J"], command = "move_chat_down", description = "Move the pinned chat down"},
+  { keys = ["shift+down"], command = "move_chat_down", description = "Move the pinned chat down"},
   { keys = ["!"], command = "report_chat", description = "Report the chat"},
   # The profile of the selected chat: a person's bio and usernames, a group's description
   { keys = ["i"], command = "show_profile", description = "Show the chat's profile"},

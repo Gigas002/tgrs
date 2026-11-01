@@ -16,7 +16,7 @@ pub mod username;
 mod tests;
 
 pub use alert::MessageAlert;
-pub use chat::{ChatKind, ChatListEntry, ChatState};
+pub use chat::{ChatKind, ChatListEntry, ChatState, PinMoveError, move_pinned};
 pub use ids::{ChatId, MessageId};
 pub use message::{
     Media, MediaFile, MediaKind, MessageContentType, MessageEntry, Reaction, TextLine, TextSpan,

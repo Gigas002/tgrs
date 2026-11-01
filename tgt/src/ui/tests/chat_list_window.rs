@@ -443,3 +443,57 @@ fn a_chat_marked_as_unread_has_an_empty_badge() {
         app_context.theme().style(HighlightGroup::NotificationBadge)
     );
 }
+
+/// Puts the chats in the main chat list, the first on top; `pinned` of them
+/// are pinned.
+fn pin_chats(app_context: &AppContext, chat_ids: &[i64], pinned: usize) {
+    use libtgt::model::OrderedChat;
+    use libtgt::tdlib_rs::{enums::ChatList, types::ChatPosition};
+    let mut index = app_context.store().chats_index();
+    for (row, chat_id) in chat_ids.iter().enumerate() {
+        index.insert(OrderedChat {
+            chat_id: *chat_id,
+            position: ChatPosition {
+                list: ChatList::Main,
+                order: 100 - row as i64,
+                is_pinned: row < pinned,
+                source: None,
+            },
+        });
+    }
+}
+
+#[test]
+fn a_pinned_chat_moves_with_the_selection() {
+    let mut window = create_test_chat_list_window();
+    pin_chats(&window.app_context, &[1, 2, 3, 4], 3);
+    window.update(Action::ChatListRestoreSort);
+    let sent = |window: &ChatListWindow| -> Vec<Action> {
+        let mut rx = window.app_context.action_rx();
+        std::iter::from_fn(|| rx.try_recv().ok()).collect()
+    };
+
+    window.chat_list_state.select(Some(1));
+    window.update(Action::MovePinnedChat(false));
+    assert_eq!(
+        sent(&window),
+        [Action::SetPinnedChats(false, vec![1, 3, 2])]
+    );
+    assert_eq!(window.chat_list_state.selected(), Some(2), "follows chat 2");
+
+    window.chat_list_state.select(Some(0));
+    window.update(Action::MovePinnedChat(true));
+    assert!(matches!(sent(&window)[..], [Action::StatusMessage(_)]));
+    assert_eq!(window.chat_list_state.selected(), Some(0));
+
+    // Chat 4 isn't pinned
+    window.chat_list_state.select(Some(3));
+    window.update(Action::MovePinnedChat(true));
+    assert_eq!(
+        sent(&window),
+        [Action::StatusMessage(
+            "Only pinned chats can be moved: pin it first.".into()
+        )]
+    );
+    assert_eq!(window.chat_list_state.selected(), Some(3));
+}

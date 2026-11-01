@@ -1,7 +1,7 @@
 use crate::app::action::Action;
 use crate::app::context::AppContext;
 use crate::settings::{HighlightGroup, Theme};
-use crate::ui::chat_actions::chat_command_action;
+use crate::ui::chat_actions::{chat_command_action, move_pinned_action};
 use crate::ui::component_name::ComponentName;
 use crate::ui::component_name::ComponentName::Prompt;
 use crate::ui::component_traits::{Component, HandleFocus};
@@ -424,6 +424,26 @@ impl ChatListWindow {
         });
     }
 
+    /// Moves the selected chat up or down among the pinned chats; the
+    /// selection goes along.
+    fn move_selected_pinned(&mut self, up: bool) {
+        let Some(index) = self.chat_list_state.selected() else {
+            return;
+        };
+        let chat_id = match self.visible_chats.get(index) {
+            Some(chat) if chat.kind != ChatKind::Archive => chat.chat_id,
+            _ => return,
+        };
+        let action = move_pinned_action(self.app_context.store(), chat_id, up);
+        // A search orders the chats its own way
+        let searching = self.sort_string.as_ref().is_some_and(|s| !s.is_empty());
+        if matches!(action, Action::SetPinnedChats(..)) && !searching {
+            let moved = if up { index - 1 } else { index + 1 };
+            self.chat_list_state.select(Some(moved));
+        }
+        let _ = self.app_context.action_tx().send(action);
+    }
+
     /// Sets the string used to order the entries of the chat list.
     fn sort(&mut self, s: String) {
         self.sort_string = Some(s);
@@ -655,6 +675,7 @@ impl Component for ChatListWindow {
                 self.rebuild_visible_chats();
             }
             Action::ChatListSearch => self.start_search(),
+            Action::MovePinnedChat(up) => self.move_selected_pinned(up),
             Action::ShowChatActions | Action::SelectedChat(_) | Action::ShowProfile => {
                 self.act_on_selected(&action)
             }

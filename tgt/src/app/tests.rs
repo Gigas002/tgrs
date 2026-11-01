@@ -300,3 +300,29 @@ fn shifted_symbols_like_bang_match_their_bindings() {
         Some(Action::SelectedMessage(MessageCommand::Report))
     );
 }
+
+#[test]
+fn shift_k_and_shift_up_move_pinned_chats() {
+    use crate::app::event::{Event, normalize_key};
+    use crate::ui::component_name::ComponentName;
+    use crossterm::event::{KeyCode, KeyModifiers};
+    let keymap = test_app_context().keymap_config().clone();
+    let bound = |component, code, modifiers| {
+        let (code, modifiers) = normalize_key(code, modifiers);
+        match keymap
+            .get_map_of(Some(component))
+            .get(&Event::Key(code, modifiers))
+        {
+            Some(ActionBinding::Single { action, .. }) => Some(action.clone()),
+            _ => None,
+        }
+    };
+    for list in [ComponentName::ChatList, ComponentName::ArchiveList] {
+        let up = Some(Action::MovePinnedChat(true));
+        let down = Some(Action::MovePinnedChat(false));
+        assert_eq!(bound(list, KeyCode::Char('K'), KeyModifiers::SHIFT), up);
+        assert_eq!(bound(list, KeyCode::Up, KeyModifiers::SHIFT), up);
+        assert_eq!(bound(list, KeyCode::Char('J'), KeyModifiers::SHIFT), down);
+        assert_eq!(bound(list, KeyCode::Down, KeyModifiers::SHIFT), down);
+    }
+}

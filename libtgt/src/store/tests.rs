@@ -399,6 +399,33 @@ mod archive {
     }
 
     #[test]
+    fn pinned_chats_are_listed_top_first_per_chat_list() {
+        let store = Store::default();
+        let put = |chat_id: i64, list: ChatList, order: i64, is_pinned: bool| {
+            let ordered = OrderedChat {
+                chat_id,
+                position: ChatPosition {
+                    list: list.clone(),
+                    order,
+                    is_pinned,
+                    source: None,
+                },
+            };
+            match list {
+                ChatList::Archive => store.archive_index().insert(ordered),
+                _ => store.chats_index().insert(ordered),
+            };
+        };
+        put(1, ChatList::Main, 50, true);
+        put(2, ChatList::Main, 90, true);
+        put(3, ChatList::Main, 99, false);
+        put(4, ChatList::Archive, 10, true);
+        put(5, ChatList::Archive, 20, false);
+        assert_eq!(store.pinned_chat_ids(false), [2, 1]);
+        assert_eq!(store.pinned_chat_ids(true), [4]);
+    }
+
+    #[test]
     fn chat_state_tells_what_chat_actions_toggle() {
         let store = Store::default();
         assert!(store.chat_state(2).is_none());

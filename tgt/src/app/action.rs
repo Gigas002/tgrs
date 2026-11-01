@@ -480,6 +480,11 @@ pub enum Action {
     ProfileScrollUp,
     /// Run a command on a chat.
     RunChatCommand(ChatCommand, i64),
+    /// Move the selected pinned chat up (true) or down among the pinned chats.
+    MovePinnedChat(bool),
+    /// Set the order of the pinned chats of the main chat list, or of the
+    /// archive (true), top first.
+    SetPinnedChats(bool, Vec<i64>),
     /// Run the action highlighted in the message actions menu.
     MessageActionsConfirm,
     /// Highlight the previous action in the message actions menu.
@@ -689,6 +694,8 @@ impl FromStr for Action {
             "chat_actions_next" => Ok(Action::ChatActionsNext),
             "chat_actions_previous" => Ok(Action::ChatActionsPrevious),
             "chat_actions_confirm" => Ok(Action::ChatActionsConfirm),
+            "move_chat_up" => Ok(Action::MovePinnedChat(true)),
+            "move_chat_down" => Ok(Action::MovePinnedChat(false)),
             "toggle_chat_block" => Ok(Action::SelectedChat(ChatCommand::ToggleBlock)),
             "report_chat" => Ok(Action::SelectedChat(ChatCommand::Report)),
             "report_message" => Ok(Action::SelectedMessage(MessageCommand::Report)),

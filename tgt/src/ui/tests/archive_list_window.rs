@@ -117,3 +117,29 @@ fn rows_are_padded_like_their_left_and_bottom() {
     );
     assert_eq!(selected_id(&window), Some(20));
 }
+
+#[test]
+fn a_pinned_archived_chat_moves_in_the_archive() {
+    let app_context = create_test_app_context();
+    {
+        let mut index = app_context.store().archive_index();
+        for (chat_id, order) in [(10, 3), (20, 2)] {
+            index.insert(OrderedChat {
+                chat_id,
+                position: ChatPosition {
+                    list: ChatList::Archive,
+                    order,
+                    is_pinned: true,
+                    source: None,
+                },
+            });
+        }
+    }
+    let mut window = ArchiveListWindow::new(app_context);
+    window.update(Action::ArchiveListNext);
+    assert_eq!(selected_id(&window), Some(20));
+    window.update(Action::MovePinnedChat(true));
+    assert!(
+        sent_actions(&window.app_context).contains(&Action::SetPinnedChats(true, vec![20, 10]))
+    );
+}

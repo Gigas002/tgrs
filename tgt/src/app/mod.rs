@@ -442,6 +442,7 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::ChatActionsPrevious
             | Action::ChatActionsConfirm
             | Action::ShowFindChat
+            | Action::MovePinnedChat(_)
             | Action::ShowReport(..)
             | Action::HideReport
             | Action::ReportNext
@@ -740,6 +741,11 @@ async fn handle_app_actions(
                     .send(Action::ProfileLoaded(*chat_id))?,
                 Err(e) => media::status(&app_context, format!("No profile: {}", e.message)),
             },
+            Action::SetPinnedChats(archived, order) => {
+                if let Err(e) = client.set_pinned_chats(*archived, order.clone()).await {
+                    media::status(&app_context, format!("Can't move the chat: {}", e.message));
+                }
+            }
             Action::RunChatCommand(command, chat_id) => {
                 run_chat_command(&app_context, client, *command, *chat_id).await;
             }

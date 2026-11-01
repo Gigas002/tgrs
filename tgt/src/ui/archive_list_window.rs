@@ -3,7 +3,7 @@
 use crate::app::action::Action;
 use crate::app::context::AppContext;
 use crate::settings::HighlightGroup;
-use crate::ui::chat_actions::chat_command_action;
+use crate::ui::chat_actions::{chat_command_action, move_pinned_action};
 use crate::ui::chat_list_window::{CHAT_LIST_ITEM_ROWS, chat_list_item_text, open_chat};
 use crate::ui::component_name::ComponentName;
 use crate::ui::component_traits::{Component, HandleFocus};
@@ -176,6 +176,14 @@ impl Component for ArchiveListWindow {
                         Action::ShowProfile => Action::ShowProfileFor(chat_id),
                         _ => Action::ShowChatActionsFor(chat_id, None),
                     });
+                }
+            }
+            // The selection stays on its chat, which moves
+            Action::MovePinnedChat(up) => {
+                self.refresh();
+                if let Some(chat_id) = self.selected_chat_id {
+                    let action = move_pinned_action(self.app_context.store(), chat_id, up);
+                    let _ = self.app_context.action_tx().send(action);
                 }
             }
             // Shown again: start at the open chat, or the first

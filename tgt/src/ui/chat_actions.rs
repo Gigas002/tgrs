@@ -9,7 +9,10 @@ use crate::{
     ui::popup_list::{self, PopupRow},
 };
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-use libtgt::model::{ChatKind, ChatState};
+use libtgt::{
+    model::{ChatKind, ChatState, PinMoveError, move_pinned},
+    store::Store,
+};
 use ratatui::{Frame, layout::Rect, text::Span};
 use std::{io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
@@ -32,6 +35,24 @@ fn run_action(command: ChatCommand, chat_id: i64) -> Action {
     match command {
         ChatCommand::Report => Action::ShowReport(chat_id, Vec::new()),
         _ => Action::RunChatCommand(command, chat_id),
+    }
+}
+
+/// What moving `chat_id` one place up or down among the pinned chats of its
+/// chat list does: sends their new order, or says why it can't move.
+pub fn move_pinned_action(store: &Store, chat_id: i64, up: bool) -> Action {
+    let archived = store.is_archived(chat_id);
+    match move_pinned(&store.pinned_chat_ids(archived), chat_id, up) {
+        Ok(order) => Action::SetPinnedChats(archived, order),
+        Err(PinMoveError::NotPinned) => {
+            Action::StatusMessage("Only pinned chats can be moved: pin it first.".into())
+        }
+        Err(PinMoveError::AtEdge) if up => {
+            Action::StatusMessage("It's already the first pinned chat.".into())
+        }
+        Err(PinMoveError::AtEdge) => {
+            Action::StatusMessage("It's already the last pinned chat.".into())
+        }
     }
 }
 

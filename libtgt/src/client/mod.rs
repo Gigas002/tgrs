@@ -425,6 +425,23 @@ impl Client {
             .inspect_err(|e| tracing::error!("Failed to pin chat {chat_id}: {e:?}"))
     }
 
+    /// Sets the order of the pinned chats of the main chat list, or of the
+    /// archive, top first.
+    pub async fn set_pinned_chats(
+        &self,
+        archived: bool,
+        chat_ids: Vec<i64>,
+    ) -> Result<(), TdError> {
+        let list = if archived {
+            ChatList::Archive
+        } else {
+            ChatList::Main
+        };
+        functions::set_pinned_chats(list, chat_ids, self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to reorder pinned chats: {e:?}"))
+    }
+
     /// Reads a chat up to `last_message_id` (0: nothing to read) with its
     /// mentions, or marks it as unread.
     pub async fn set_chat_read(
