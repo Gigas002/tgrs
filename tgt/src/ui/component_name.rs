@@ -56,13 +56,15 @@ pub enum ComponentName {
     Downloads,
     /// The disk space used, to clear the cache.
     Storage,
+    /// Telegram's notification settings.
+    NotificationSettings,
     /// The leader menu (Space), like concord's.
     LeaderMenu,
 }
 
 impl ComponentName {
     /// Every component, in a fixed order.
-    pub const ALL: [Self; 27] = [
+    pub const ALL: [Self; 28] = [
         Self::CoreWindow,
         Self::ChatList,
         Self::ArchiveList,
@@ -89,11 +91,12 @@ impl ComponentName {
         Self::Forward,
         Self::Downloads,
         Self::Storage,
+        Self::NotificationSettings,
         Self::LeaderMenu,
     ];
 
     /// The popups (modal overlays); only one is shown at a time.
-    pub const POPUPS: [Self; 18] = [
+    pub const POPUPS: [Self; 19] = [
         Self::CommandGuide,
         Self::SearchOverlay,
         Self::MessageActions,
@@ -111,6 +114,7 @@ impl ComponentName {
         Self::Forward,
         Self::Downloads,
         Self::Storage,
+        Self::NotificationSettings,
         Self::LeaderMenu,
     ];
 
@@ -150,6 +154,7 @@ impl Display for ComponentName {
             ComponentName::Forward => write!(f, "Forward"),
             ComponentName::Downloads => write!(f, "Downloads"),
             ComponentName::Storage => write!(f, "Storage"),
+            ComponentName::NotificationSettings => write!(f, "Notification Settings"),
             ComponentName::LeaderMenu => write!(f, "Leader Menu"),
         }
     }

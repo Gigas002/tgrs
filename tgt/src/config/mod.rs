@@ -108,6 +108,10 @@ pub struct CredentialsFile {
 pub struct NotificationsFile {
     pub enabled: Option<bool>,
     pub show_preview: Option<bool>,
+    pub sound: Option<String>,
+    pub quiet_hours: Option<String>,
+    pub open_on_click: Option<bool>,
+    pub unread_in_title: Option<bool>,
 }
 
 /// `[media]`: automatic downloads and the local file cache.

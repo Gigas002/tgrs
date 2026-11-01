@@ -47,6 +47,7 @@ Like [concord](https://github.com/chojs23/concord): `left`/`right` move between 
 | `d`     | [Active sessions](#active-sessions).         |
 | `t`     | [Downloads](#downloads).                     |
 | `S`     | [Storage and cache](#storage-and-cache).     |
+| `N`     | [Notification settings](#notifications).     |
 | `n`     | Open a chat by username.                     |
 | `b`     | [Blocked users](#blocking-and-reporting).    |
 | `?`     | List every key.                              |
@@ -160,6 +161,31 @@ You can also drop files on the terminal window: most terminals paste the paths o
 ### Downloads
 
 Leader `t` lists the files you've downloaded with `s` or opened with `x` since tgt started, latest first, with their progress: `⬇` downloading, `⏸` paused, `✓` done, `✗` cancelled or failed. `p` pauses a download, keeping what was downloaded, and resumes a paused (or failed) one from where it stopped; once done, it's opened or saved as you first asked, even if you've switched chats. `x` cancels a download and deletes what was downloaded of it, `enter` opens a finished file and `c` clears finished downloads from the list. Image previews in the chat aren't listed.
+
+### Notifications
+
+New messages show desktop notifications (with the `notifications` feature), except for the open chat. Which chats notify is Telegram's own setting, saved on the server for every device: leader `N` lists the open chat's settings first, then the defaults of private chats, groups and channels. `enter` (or `space`) changes the highlighted one:
+
+- **Notifications**: off mutes them.
+- **Message preview**: the message text in notifications.
+- **Mentions and replies** (groups): notify even when muted.
+- **Pinned messages** (groups, channels): notify about new pins.
+
+A chat's own options cycle between `default` (its kind's setting), on and off. `m` in the chat list still mutes or unmutes a chat.
+
+What tgt does with a notification is set in `config.toml`:
+
+```toml
+[notifications]
+enabled = true
+show_preview = true                # false hides every message text
+sound = "message-new-instant"      # a freedesktop sound name; silent messages never play it
+quiet_hours = "23:00-07:00"        # no notifications then, in local time
+open_on_click = true               # clicking a notification opens its chat
+unread_in_title = false            # "tgt (3)" in the terminal's title
+```
+
+Clicking needs a notification server that supports actions, and the window title needs a terminal that lets programs set it. tgt can't bring its terminal to the front, so it opens the chat in the background.
 
 ### Storage and cache
 

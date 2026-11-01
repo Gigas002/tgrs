@@ -524,3 +524,64 @@ fn previews_can_be_left_to_load_by_hand() {
     let media = env.resolve(CliOverrides::default()).unwrap().media;
     assert!(!media.auto_downloads(1));
 }
+
+#[test]
+fn notification_defaults() {
+    let notifications = Env::new()
+        .resolve(CliOverrides::default())
+        .unwrap()
+        .notifications;
+    assert!(notifications.enabled);
+    assert!(notifications.show_preview);
+    assert_eq!(notifications.sound, None);
+    assert_eq!(notifications.quiet_hours, None);
+    assert!(notifications.open_on_click);
+    assert!(!notifications.unread_in_title);
+}
+
+#[test]
+fn notification_values_apply() {
+    let env = Env::new();
+    env.write_config(
+        "config.toml",
+        r#"
+        [notifications]
+        sound = "message-new-instant"
+        quiet_hours = "22:00-07:30"
+        open_on_click = false
+        unread_in_title = true
+        "#,
+    );
+    let notifications = env.resolve(CliOverrides::default()).unwrap().notifications;
+    assert_eq!(notifications.sound.as_deref(), Some("message-new-instant"));
+    assert_eq!(
+        notifications.quiet_hours,
+        Some(QuietHours {
+            start: 22 * 60,
+            end: 7 * 60 + 30
+        })
+    );
+    assert!(!notifications.open_on_click);
+    assert!(notifications.unread_in_title);
+}
+
+#[test]
+fn malformed_quiet_hours_are_an_error() {
+    for bad in ["22-07", "25:00-07:00", "22:00-22:00", "22:00", "7:00-8:00"] {
+        let env = Env::new();
+        env.write_config(
+            "config.toml",
+            &format!("[notifications]\nquiet_hours = \"{bad}\"\n"),
+        );
+        let err = env.resolve(CliOverrides::default()).unwrap_err();
+        assert!(matches!(err, SettingsError::QuietHours(_)), "{bad}: {err}");
+    }
+}
+
+#[test]
+fn quiet_hours_within_a_day() {
+    let hours = QuietHours::parse("12:00-13:00").unwrap();
+    assert!(hours.contains(12 * 60));
+    assert!(!hours.contains(13 * 60));
+    assert!(!hours.contains(0));
+}

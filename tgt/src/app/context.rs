@@ -53,7 +53,7 @@ impl AppContext {
         Self {
             app: settings.app.clone(),
             keymap: settings.keymap.clone(),
-            notifications: settings.notifications,
+            notifications: settings.notifications.clone(),
             media: settings.media,
             dirs: settings.dirs.clone(),
             theme: settings.theme.clone(),
@@ -75,8 +75,8 @@ impl AppContext {
         &self.keymap
     }
 
-    pub fn notifications(&self) -> Notifications {
-        self.notifications
+    pub fn notifications(&self) -> &Notifications {
+        &self.notifications
     }
 
     pub fn media(&self) -> Media {

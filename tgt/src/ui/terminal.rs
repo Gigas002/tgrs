@@ -310,3 +310,21 @@ impl TuiBackend {
         });
     }
 }
+
+/// Saves the terminal's title on its stack (xterm), to restore on exit;
+/// terminals without a stack ignore it.
+pub fn save_window_title() {
+    let _ = io::Write::write_all(&mut std::io::stderr(), b"\x1b[22;0t");
+}
+
+/// Sets the terminal's title.
+pub fn set_window_title(title: &str) {
+    if let Err(e) = crossterm::execute!(std::io::stderr(), crossterm::terminal::SetTitle(title)) {
+        tracing::warn!("failed to set the window title: {e}");
+    }
+}
+
+/// Restores the title saved by [`save_window_title`].
+pub fn restore_window_title() {
+    let _ = io::Write::write_all(&mut std::io::stderr(), b"\x1b[23;0t");
+}

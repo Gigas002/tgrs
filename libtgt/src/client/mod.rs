@@ -18,10 +18,13 @@ use tdlib_rs::types::{
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
+use crate::model::notification_settings::MUTE_FOREVER;
 use crate::model::{
-    BlockedSender, MessageEntry, ProfileChange, ProfileSource, ReportStep, SessionEntry,
-    StickerEntry, StickerSetEntry, StorageUsage, TdChatList, TdMessageReplyToMessage,
-    TdMessageSender, TopicEntry, session_entries, text_draft,
+    BlockedSender, ChatSettings, MessageEntry, NotificationOption, NotificationScope,
+    NotificationSettings, NotificationTarget, ProfileChange, ProfileSource, ReportStep,
+    ScopeSettings, SessionEntry, StickerEntry, StickerSetEntry, StorageUsage, TdChatList,
+    TdMessageReplyToMessage, TdMessageSender, TopicEntry, apply_chat_option, apply_scope_option,
+    session_entries, text_draft,
 };
 use crate::store::Store;
 
@@ -44,8 +47,6 @@ pub type TdError = tdlib_rs::types::Error;
 
 /// Messages per `getChatHistory` request.
 const HISTORY_BATCH: i32 = 50;
-/// `mute_for` that TDLib takes as forever (more than a year, in seconds).
-const MUTE_FOREVER: i32 = i32::MAX;
 /// Topics per `getForumTopics` request (TDLib's maximum).
 const TOPICS_BATCH: i32 = 100;
 /// Blocked users and chats per `getBlockedMessageSenders` request (TDLib's maximum).
@@ -402,6 +403,74 @@ impl Client {
         functions::set_chat_notification_settings(chat_id, settings, self.client_id)
             .await
             .inspect_err(|e| tracing::error!("Failed to mute chat {chat_id}: {e:?}"))
+    }
+
+    /// The defaults of private chats, groups and channels, and `chat_id`'s
+    /// own settings when given.
+    pub async fn notification_settings(
+        &self,
+        chat_id: Option<i64>,
+    ) -> Result<NotificationSettings, TdError> {
+        let mut scopes = Vec::with_capacity(NotificationScope::ALL.len());
+        for scope in NotificationScope::ALL {
+            let enums::ScopeNotificationSettings::ScopeNotificationSettings(td) =
+                functions::get_scope_notification_settings(scope.into(), self.client_id)
+                    .await
+                    .inspect_err(|e| {
+                        tracing::error!("Failed to get notification settings of {scope:?}: {e:?}")
+                    })?;
+            scopes.push(ScopeSettings::new(scope, &td));
+        }
+        let chat = chat_id.filter(|id| *id != 0).and_then(|chat_id| {
+            let state = self.store.chat_state(chat_id)?;
+            let td = self
+                .store
+                .chats()
+                .get(&chat_id)?
+                .notification_settings
+                .clone();
+            Some(ChatSettings::new(chat_id, state.title, state.kind, &td))
+        });
+        Ok(NotificationSettings { scopes, chat })
+    }
+
+    /// Turns a notification option on or off for a scope, or for a chat,
+    /// where None goes back to the scope's default. The other settings are kept.
+    pub async fn set_notification_option(
+        &self,
+        target: NotificationTarget,
+        option: NotificationOption,
+        value: Option<bool>,
+    ) -> Result<(), TdError> {
+        match target {
+            NotificationTarget::Scope(scope) => {
+                let enums::ScopeNotificationSettings::ScopeNotificationSettings(mut td) =
+                    functions::get_scope_notification_settings(scope.into(), self.client_id)
+                        .await?;
+                apply_scope_option(&mut td, option, value.unwrap_or(true));
+                functions::set_scope_notification_settings(scope.into(), td, self.client_id)
+                    .await
+                    .inspect_err(|e| {
+                        tracing::error!("Failed to set notification settings of {scope:?}: {e:?}")
+                    })
+            }
+            NotificationTarget::Chat(chat_id) => {
+                let Some(mut td) = self
+                    .store
+                    .chats()
+                    .get(&chat_id)
+                    .map(|chat| chat.notification_settings.clone())
+                else {
+                    return Ok(());
+                };
+                apply_chat_option(&mut td, option, value);
+                functions::set_chat_notification_settings(chat_id, td, self.client_id)
+                    .await
+                    .inspect_err(|e| {
+                        tracing::error!("Failed to set notification settings of {chat_id}: {e:?}")
+                    })
+            }
+        }
     }
 
     /// Moves a chat to the archive, or back to the main chat list.

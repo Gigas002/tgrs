@@ -87,6 +87,19 @@
 # enabled = true
 # Include the message text; chats that hide previews in Telegram never show it.
 # show_preview = true
+# A sound from the freedesktop sound theme played with them, e.g.
+# "message-new-instant"; silent messages never play it. Empty for silence.
+# sound = ""
+# Daily hours without notifications, in local time; it may pass midnight.
+# quiet_hours = "23:00-07:00"
+# Clicking a notification opens its chat (on notification servers that
+# support actions).
+# open_on_click = true
+# Show the number of unread messages in unmuted chats in the terminal's
+# title, e.g. "tgt (3)".
+# unread_in_title = false
+# Which chats notify, with previews, mentions and pinned messages, are
+# Telegram's own settings: leader N changes them for every device.
 
 [media]
 # Load the images shown under photos, videos and stickers in the chat without

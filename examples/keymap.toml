@@ -310,6 +310,18 @@ keymap = [
 
 # The sessions key bindings are only usable in the list of your active
 # sessions (space d). Logging out asks for the same key a second time.
+[notification_settings]
+keymap = [
+  { keys = ["esc"], command = "hide_notification_settings", description = "Close the notification settings"},
+  { keys = ["q"], command = "hide_notification_settings", description = "Close the notification settings"},
+  { keys = ["enter"], command = "notification_settings_toggle", description = "Change the option"},
+  { keys = ["space"], command = "notification_settings_toggle", description = "Change the option"},
+  { keys = ["up"], command = "notification_settings_previous", description = "Previous"},
+  { keys = ["k"], command = "notification_settings_previous", description = "Previous"},
+  { keys = ["down"], command = "notification_settings_next", description = "Next"},
+  { keys = ["j"], command = "notification_settings_next", description = "Next"},
+]
+
 [storage]
 keymap = [
   { keys = ["esc"], command = "hide_storage", description = "Close the storage popup"},
@@ -398,6 +410,7 @@ keymap = [
   { keys = ["d"], command = "show_sessions", description = "Active sessions (devices)"},
   { keys = ["t"], command = "show_downloads", description = "Downloads (transfers)"},
   { keys = ["S"], command = "show_storage", description = "Storage usage and cache"},
+  { keys = ["N"], command = "show_notification_settings", description = "Notification settings"},
   { keys = ["n"], command = "show_find_chat", description = "Open a chat by username"},
   { keys = ["b"], command = "show_blocked_list", description = "Blocked users"},
   { keys = ["?"], command = "show_command_guide", description = "Help: every key"},

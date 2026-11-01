@@ -1281,3 +1281,110 @@ mod storage {
         );
     }
 }
+
+mod notification_settings {
+    use crate::model::ChatKind;
+    use crate::model::notification_settings::*;
+    use tdlib_rs::types::{ChatNotificationSettings, ScopeNotificationSettings};
+
+    fn scope_td() -> ScopeNotificationSettings {
+        ScopeNotificationSettings {
+            mute_for: 0,
+            show_preview: true,
+            disable_mention_notifications: false,
+            disable_pinned_message_notifications: true,
+            ..ScopeNotificationSettings::default()
+        }
+    }
+
+    fn defaults() -> ChatNotificationSettings {
+        ChatNotificationSettings {
+            use_default_mute_for: true,
+            use_default_show_preview: true,
+            use_default_disable_mention_notifications: true,
+            use_default_disable_pinned_message_notifications: true,
+            ..ChatNotificationSettings::default()
+        }
+    }
+
+    #[test]
+    fn scopes_read_what_telegram_has() {
+        let settings = ScopeSettings::new(NotificationScope::Groups, &scope_td());
+        assert!(settings.alerts);
+        assert!(settings.preview);
+        assert!(settings.mentions);
+        assert!(!settings.pinned_messages);
+        let muted = ScopeSettings::new(
+            NotificationScope::Channels,
+            &ScopeNotificationSettings {
+                mute_for: 3600,
+                ..scope_td()
+            },
+        );
+        assert!(!muted.alerts);
+    }
+
+    #[test]
+    fn scope_options_change_only_themselves() {
+        let mut td = scope_td();
+        apply_scope_option(&mut td, NotificationOption::Alerts, false);
+        assert_eq!(td.mute_for, MUTE_FOREVER);
+        apply_scope_option(&mut td, NotificationOption::PinnedMessages, true);
+        assert!(!td.disable_pinned_message_notifications);
+        apply_scope_option(&mut td, NotificationOption::Mentions, false);
+        assert!(td.disable_mention_notifications);
+        assert!(td.show_preview);
+        apply_scope_option(&mut td, NotificationOption::Alerts, true);
+        assert_eq!(td.mute_for, 0);
+    }
+
+    #[test]
+    fn chats_follow_their_scope_unless_set() {
+        let mut td = defaults();
+        td.use_default_show_preview = false;
+        td.show_preview = false;
+        let chat = ChatSettings::new(5, "Rust".into(), ChatKind::Group, &td);
+        assert_eq!(chat.scope, NotificationScope::Groups);
+        assert_eq!(chat.alerts, None);
+        assert_eq!(chat.preview, Some(false));
+        let settings = NotificationSettings {
+            scopes: vec![ScopeSettings::new(NotificationScope::Groups, &scope_td())],
+            chat: Some(chat.clone()),
+        };
+        assert!(settings.effective(&chat, NotificationOption::Alerts));
+        assert!(!settings.effective(&chat, NotificationOption::Preview));
+        assert!(!settings.effective(&chat, NotificationOption::PinnedMessages));
+    }
+
+    #[test]
+    fn chat_options_set_and_go_back_to_the_default() {
+        let mut td = defaults();
+        apply_chat_option(&mut td, NotificationOption::Alerts, Some(false));
+        assert!(!td.use_default_mute_for);
+        assert_eq!(td.mute_for, MUTE_FOREVER);
+        apply_chat_option(&mut td, NotificationOption::Mentions, Some(true));
+        assert!(!td.use_default_disable_mention_notifications);
+        assert!(!td.disable_mention_notifications);
+        apply_chat_option(&mut td, NotificationOption::Alerts, None);
+        assert!(td.use_default_mute_for);
+        assert_eq!(td.mute_for, 0);
+        // The others are kept
+        assert!(!td.use_default_disable_mention_notifications);
+        assert!(td.use_default_show_preview);
+    }
+
+    #[test]
+    fn scopes_offer_the_options_that_apply() {
+        use NotificationOption::*;
+        assert_eq!(
+            NotificationScope::of(ChatKind::Bot),
+            NotificationScope::PrivateChats
+        );
+        assert_eq!(
+            NotificationScope::of(ChatKind::Channel),
+            NotificationScope::Channels
+        );
+        assert_eq!(NotificationScope::PrivateChats.options(), [Alerts, Preview]);
+        assert!(!NotificationScope::Channels.options().contains(&Mentions));
+    }
+}

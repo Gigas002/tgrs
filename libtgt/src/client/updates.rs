@@ -31,6 +31,8 @@ pub enum Notification {
     NewSignIn(SignInAlert),
     /// A followed download progressed or finished.
     TransferChanged(i32),
+    /// The number of unread messages in unmuted chats of the main chat list.
+    UnreadCountChanged(i32),
 }
 
 /// Minimum gap between two [`Notification::ChatListChanged`] (~1 frame at 60fps).
@@ -416,6 +418,11 @@ async fn apply(
                     let _ = notify.send(Notification::NewMessage(alert));
                 }
             }
+        }
+        Update::UnreadMessageCount(update) if update.chat_list == ChatList::Main => {
+            let _ = notify.send(Notification::UnreadCountChanged(
+                update.unread_unmuted_count,
+            ));
         }
         Update::ForumTopicInfo(update) => {
             let changed = store.set_open_chat_topic_info(&update.info);

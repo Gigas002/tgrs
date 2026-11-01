@@ -99,11 +99,56 @@ pub struct App {
 }
 
 /// `[notifications]`, resolved.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Notifications {
     pub enabled: bool,
     /// Include the message text.
     pub show_preview: bool,
+    /// The freedesktop sound name played with them; None for silence.
+    pub sound: Option<String>,
+    /// When no desktop notifications are shown.
+    pub quiet_hours: Option<QuietHours>,
+    /// Clicking a notification opens its chat.
+    pub open_on_click: bool,
+    /// The terminal's title counts unread messages in unmuted chats.
+    pub unread_in_title: bool,
+}
+
+/// A daily span of local time without notifications, e.g. `22:00-07:30`;
+/// it may pass midnight.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QuietHours {
+    /// Minutes after midnight, the first one included.
+    pub start: u16,
+    /// Minutes after midnight, the first one excluded.
+    pub end: u16,
+}
+
+impl QuietHours {
+    /// Parses `HH:MM-HH:MM`; None when malformed or empty.
+    pub fn parse(text: &str) -> Option<Self> {
+        let minutes = |time: &str| {
+            let (hours, minutes) = time.trim().split_once(':')?;
+            let hours: u16 = hours.parse().ok()?;
+            let minutes: u16 = minutes.parse().ok()?;
+            (hours < 24 && minutes < 60 && time.trim().len() == 5).then_some(hours * 60 + minutes)
+        };
+        let (start, end) = text.split_once('-')?;
+        let hours = QuietHours {
+            start: minutes(start)?,
+            end: minutes(end)?,
+        };
+        (hours.start != hours.end).then_some(hours)
+    }
+
+    /// Whether `minute` (after midnight) is quiet.
+    pub fn contains(&self, minute: u16) -> bool {
+        if self.start < self.end {
+            (self.start..self.end).contains(&minute)
+        } else {
+            minute >= self.start || minute < self.end
+        }
+    }
 }
 
 /// `[media]`, resolved.
@@ -184,6 +229,9 @@ pub enum SettingsError {
 
     #[error("config.toml: `app.frame_rate` must be positive")]
     FrameRate,
+
+    #[error("config.toml: `notifications.quiet_hours` must look like \"22:00-07:30\", got {0:?}")]
+    QuietHours(String),
 }
 
 impl Settings {
@@ -259,10 +307,7 @@ impl Settings {
             theme,
             warnings,
             credentials: file.credentials.store.unwrap_or_default(),
-            notifications: Notifications {
-                enabled: file.notifications.enabled.unwrap_or(true),
-                show_preview: file.notifications.show_preview.unwrap_or(true),
-            },
+            notifications: resolve_notifications(&file.notifications)?,
             media: Media::resolve(&file.media),
             command: cli.command,
         })
@@ -276,6 +321,25 @@ impl Settings {
         })
         .expect("default settings resolve")
     }
+}
+
+fn resolve_notifications(
+    file: &crate::config::NotificationsFile,
+) -> Result<Notifications, SettingsError> {
+    let quiet_hours = match file.quiet_hours.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some(text) => Some(
+            QuietHours::parse(text).ok_or_else(|| SettingsError::QuietHours(text.to_owned()))?,
+        ),
+    };
+    Ok(Notifications {
+        enabled: file.enabled.unwrap_or(true),
+        show_preview: file.show_preview.unwrap_or(true),
+        sound: file.sound.clone().filter(|sound| !sound.trim().is_empty()),
+        quiet_hours,
+        open_on_click: file.open_on_click.unwrap_or(true),
+        unread_in_title: file.unread_in_title.unwrap_or(false),
+    })
 }
 
 fn resolve_app(file: &FileConfig, download_dir: PathBuf) -> Result<App, SettingsError> {

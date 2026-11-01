@@ -48,3 +48,50 @@ fn markup_is_escaped() {
         "&lt;b&gt;a &amp; b&lt;/b&gt;"
     );
 }
+
+fn settings() -> Notifications {
+    Notifications {
+        enabled: true,
+        show_preview: true,
+        sound: Some("message-new-instant".into()),
+        quiet_hours: crate::settings::QuietHours::parse("23:00-07:30"),
+        open_on_click: true,
+        unread_in_title: true,
+    }
+}
+
+fn at(hour: u32, minute: u32) -> chrono::NaiveTime {
+    chrono::NaiveTime::from_hms_opt(hour, minute, 0).unwrap()
+}
+
+#[test]
+fn quiet_hours_silence_notifications_past_midnight() {
+    let settings = settings();
+    assert!(is_quiet(&settings, at(23, 0)));
+    assert!(is_quiet(&settings, at(3, 15)));
+    assert!(is_quiet(&settings, at(7, 29)));
+    assert!(!is_quiet(&settings, at(7, 30)));
+    assert!(!is_quiet(&settings, at(12, 0)));
+    let always = Notifications {
+        quiet_hours: None,
+        ..settings
+    };
+    assert!(!is_quiet(&always, at(3, 0)));
+}
+
+#[test]
+fn silent_messages_play_no_sound() {
+    let settings = settings();
+    assert_eq!(sound(&alert(None), &settings), Some("message-new-instant"));
+    let silent = MessageAlert {
+        is_silent: true,
+        ..alert(None)
+    };
+    assert_eq!(sound(&silent, &settings), None);
+}
+
+#[test]
+fn window_title_counts_unread_messages() {
+    assert_eq!(window_title(0), "tgt");
+    assert_eq!(window_title(3), "tgt (3)");
+}

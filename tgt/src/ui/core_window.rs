@@ -24,6 +24,7 @@ use crate::{
         forward::Forward,
         leader_menu::LeaderMenu,
         message_actions::MessageActions,
+        notification_settings::NotificationSettingsPopup,
         picker::Picker,
         pinned_messages_popup::PinnedMessagesPopup,
         profile_popup::ProfilePopup,
@@ -94,6 +95,7 @@ pub struct CoreWindow {
     /// The pane focused when the downloads opened, focused again after.
     focus_before_downloads: Option<ComponentName>,
     focus_before_storage: Option<ComponentName>,
+    focus_before_notification_settings: Option<ComponentName>,
     /// The size of the message reply component.
     size_message_reply: u16,
     /// The size of the chat list component.
@@ -213,6 +215,12 @@ impl CoreWindow {
                     .new_boxed(),
             ),
             (
+                ComponentName::NotificationSettings,
+                NotificationSettingsPopup::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::NotificationSettings.to_string())
+                    .new_boxed(),
+            ),
+            (
                 ComponentName::Storage,
                 Storage::new(Arc::clone(&app_context))
                     .with_name(ComponentName::Storage.to_string())
@@ -314,6 +322,7 @@ impl CoreWindow {
             focus_before_forward: None,
             focus_before_downloads: None,
             focus_before_storage: None,
+            focus_before_notification_settings: None,
             size_message_reply,
             small_area,
             component_focused,
@@ -566,6 +575,7 @@ impl CoreWindow {
             ComponentName::Forward => Action::HideForward,
             ComponentName::Downloads => Action::HideDownloads,
             ComponentName::Storage => Action::HideStorage,
+            ComponentName::NotificationSettings => Action::HideNotificationSettings,
             ComponentName::LeaderMenu => Action::HideLeaderMenu,
             _ => return None,
         })
@@ -936,6 +946,23 @@ impl Component for CoreWindow {
             Action::HideDownloads => {
                 let refocus = self.focus_before_downloads.take();
                 self.close_popup(ComponentName::Downloads, refocus);
+            }
+            Action::ShowNotificationSettings => {
+                self.focus_before_notification_settings =
+                    self.component_focused.filter(|c| !c.is_popup());
+                self.show_popup(ComponentName::NotificationSettings, action);
+            }
+            Action::HideNotificationSettings => {
+                let refocus = self.focus_before_notification_settings.take();
+                self.close_popup(ComponentName::NotificationSettings, refocus);
+            }
+            Action::NotificationSettingsLoaded(_) => {
+                if let Some(component) = self
+                    .components
+                    .get_mut(&ComponentName::NotificationSettings)
+                {
+                    component.update(action);
+                }
             }
             Action::ShowStorage => {
                 self.focus_before_storage = self.component_focused.filter(|c| !c.is_popup());

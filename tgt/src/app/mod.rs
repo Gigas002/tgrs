@@ -41,7 +41,10 @@ use crate::{
     notifier,
     settings::{ActionBinding, Command, Settings, is_plain_char},
     ui::component_name::ComponentName,
-    ui::{Tui, chat_actions, find_chat, terminal::TuiBackend},
+    ui::{
+        Tui, chat_actions, find_chat,
+        terminal::{self, TuiBackend},
+    },
 };
 
 /// Messages per history request.
@@ -131,6 +134,10 @@ async fn run_tui(
     client.disable_animated_emoji(true).await;
 
     tui_backend.enter()?;
+    if app_context.notifications().unread_in_title {
+        terminal::save_window_title();
+        terminal::set_window_title(&notifier::window_title(0));
+    }
     tui.register_action_handler(app_context.action_tx().clone())?;
     app_context.mark_dirty();
 
@@ -191,6 +198,9 @@ async fn run_tui(
     };
 
     client.offline().await;
+    if app_context.notifications().unread_in_title {
+        terminal::restore_window_title();
+    }
     tui_backend.exit();
     tracing::info!("quitting");
     // Clear the terminal and move the cursor to the top left corner.
@@ -274,10 +284,23 @@ fn handle_notification(
         Notification::NewMessage(alert)
             if alert.chat_id != app_context.store().open_chat_id_i64() =>
         {
-            notifier::show(alert, app_context.notifications().show_preview);
+            let settings = app_context.notifications();
+            if notifier::is_quiet(settings, chrono::Local::now().time()) {
+                tracing::debug!(chat_id = alert.chat_id, "quiet hours: no notification");
+            } else {
+                let open_tx = action_tx.clone();
+                notifier::show(alert, settings, move |chat_id| {
+                    let _ = open_tx.send(Action::OpenChatById(chat_id));
+                });
+            }
         }
         Notification::NewMessage(_) => {}
         Notification::TransferChanged(_) => app_context.mark_dirty(),
+        Notification::UnreadCountChanged(unread) => {
+            if app_context.notifications().unread_in_title {
+                terminal::set_window_title(&notifier::window_title(unread));
+            }
+        }
         Notification::NewSignIn(alert) => {
             action_tx.send(Action::StatusMessage(sign_in_message(&alert)))?
         }
@@ -501,6 +524,12 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::DownloadsCancel
             | Action::DownloadsOpen
             | Action::DownloadsClearFinished
+            | Action::ShowNotificationSettings
+            | Action::HideNotificationSettings
+            | Action::NotificationSettingsLoaded(_)
+            | Action::NotificationSettingsNext
+            | Action::NotificationSettingsPrevious
+            | Action::NotificationSettingsToggle
             | Action::ShowStorage
             | Action::HideStorage
             | Action::StorageLoaded(_)
@@ -806,6 +835,45 @@ async fn handle_app_actions(
                     )
                     .await;
                 media::status(&app_context, forward_status(request, count, result));
+            }
+            Action::ShowNotificationSettings => {
+                let open_chat = app_context.store().open_chat_id_i64();
+                match client.notification_settings(Some(open_chat)).await {
+                    Ok(settings) => app_context
+                        .action_tx()
+                        .send(Action::NotificationSettingsLoaded(settings))?,
+                    Err(e) => {
+                        media::status(
+                            &app_context,
+                            format!("No notification settings: {}", e.message),
+                        );
+                        app_context
+                            .action_tx()
+                            .send(Action::HideNotificationSettings)?;
+                    }
+                }
+            }
+            Action::SetNotificationOption(target, option, value) => {
+                if let Err(e) = client
+                    .set_notification_option(*target, *option, *value)
+                    .await
+                {
+                    media::status(
+                        &app_context,
+                        format!(
+                            "Can't change {}: {}",
+                            option.label().to_lowercase(),
+                            e.message
+                        ),
+                    );
+                    // Show what Telegram has
+                    let open_chat = app_context.store().open_chat_id_i64();
+                    if let Ok(settings) = client.notification_settings(Some(open_chat)).await {
+                        app_context
+                            .action_tx()
+                            .send(Action::NotificationSettingsLoaded(settings))?;
+                    }
+                }
             }
             Action::ShowStorage => match client.storage_usage().await {
                 Ok(usage) => app_context.action_tx().send(Action::StorageLoaded(usage))?,

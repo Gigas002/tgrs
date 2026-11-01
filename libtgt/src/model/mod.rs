@@ -6,6 +6,7 @@ pub mod draft;
 pub mod ids;
 pub mod message;
 pub mod moderation;
+pub mod notification_settings;
 pub mod ordered_chat;
 pub mod profile;
 pub mod profile_edit;
@@ -29,6 +30,10 @@ pub use message::{
     TextStyle, format_duration, format_size, format_timestamp, reaction_emoji,
 };
 pub use moderation::{BlockedSender, ReportOption, ReportStep};
+pub use notification_settings::{
+    ChatSettings, NotificationOption, NotificationScope, NotificationSettings, NotificationTarget,
+    ScopeSettings, apply_chat_option, apply_scope_option,
+};
 pub use ordered_chat::OrderedChat;
 pub use profile::{Profile, ProfileSource};
 pub use profile_edit::{ProfileChange, ProfileEdit, ProfileField, profile_change_failure};

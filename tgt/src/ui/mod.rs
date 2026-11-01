@@ -25,6 +25,7 @@ pub mod forward;
 pub mod leader_menu;
 pub mod message;
 pub mod message_actions;
+pub mod notification_settings;
 pub mod pane;
 pub mod picker;
 pub mod pinned_messages_popup;

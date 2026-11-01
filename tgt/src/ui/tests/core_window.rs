@@ -963,3 +963,16 @@ fn the_storage_popup_gives_the_focus_back() {
     window.update(Action::HideStorage);
     assert_eq!(window.component_focused, Some(ComponentName::Chat));
 }
+
+#[test]
+fn the_notification_settings_give_the_focus_back() {
+    let mut window = create_test_core_window();
+    window.focus_only(Some(ComponentName::Chat));
+    window.update(Action::ShowNotificationSettings);
+    assert_eq!(
+        window.component_focused,
+        Some(ComponentName::NotificationSettings)
+    );
+    window.update(Action::HideNotificationSettings);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+}

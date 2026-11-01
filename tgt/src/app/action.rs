@@ -2,9 +2,9 @@ use std::str::FromStr;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use libtgt::model::{
-    BlockedSender, ProfileChange, ProfileField, ReportStep, SessionEntry, StickerEntry,
-    StickerSetEntry, StorageUsage, TdChatList, TdMessageReplyToMessage, TdMessageSender,
-    TransferPurpose,
+    BlockedSender, NotificationOption, NotificationSettings, NotificationTarget, ProfileChange,
+    ProfileField, ReportStep, SessionEntry, StickerEntry, StickerSetEntry, StorageUsage,
+    TdChatList, TdMessageReplyToMessage, TdMessageSender, TransferPurpose,
 };
 use ratatui::layout::Rect;
 
@@ -506,6 +506,21 @@ pub enum Action {
     /// Download a followed file (again) and open or save it.
     FetchMedia(i32, TransferPurpose),
 
+    /// Show Telegram's notification settings, with the open chat's.
+    ShowNotificationSettings,
+    /// Close the notification settings.
+    HideNotificationSettings,
+    /// The notification settings, to show.
+    NotificationSettingsLoaded(NotificationSettings),
+    /// Highlight the next option.
+    NotificationSettingsNext,
+    /// Highlight the previous option.
+    NotificationSettingsPrevious,
+    /// Change the highlighted option.
+    NotificationSettingsToggle,
+    /// Save a notification option in Telegram; None for a chat's default.
+    SetNotificationOption(NotificationTarget, NotificationOption, Option<bool>),
+
     /// Show how much disk space Telegram takes.
     ShowStorage,
     /// Close the storage popup.
@@ -859,6 +874,11 @@ impl FromStr for Action {
             "downloads_cancel" => Ok(Action::DownloadsCancel),
             "downloads_open" => Ok(Action::DownloadsOpen),
             "downloads_clear_finished" => Ok(Action::DownloadsClearFinished),
+            "show_notification_settings" => Ok(Action::ShowNotificationSettings),
+            "hide_notification_settings" => Ok(Action::HideNotificationSettings),
+            "notification_settings_next" => Ok(Action::NotificationSettingsNext),
+            "notification_settings_previous" => Ok(Action::NotificationSettingsPrevious),
+            "notification_settings_toggle" => Ok(Action::NotificationSettingsToggle),
             "show_storage" => Ok(Action::ShowStorage),
             "hide_storage" => Ok(Action::HideStorage),
             "storage_next" => Ok(Action::StorageNext),
