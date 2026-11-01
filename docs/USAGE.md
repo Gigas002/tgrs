@@ -67,6 +67,7 @@ In the chat list and the archive, these keys act on the selected chat (leader `c
 | `m` | Mute or unmute.                                                                                |
 | `A` | Archive or unarchive.                                                                          |
 | `P` | Pin or unpin.                                                                                  |
+| `K` / `J` | Move a pinned chat up / down among the pinned chats (also `shift+up` / `shift+down`).    |
 | `u` | Mark as read or unread.                                                                        |
 | `B` | Block or unblock the person or bot of a private chat.                                          |
 | `!` | [Report](#blocking-and-reporting) the chat.                                                    |
@@ -96,6 +97,10 @@ The bio or description is loaded from Telegram when the profile opens. `j`/`k` s
 ## Messages
 
 In the prompt, `enter` sends; `alt+enter` or `ctrl+j` start a new line (also `shift+enter` in terminals with the kitty keyboard protocol, e.g. kitty, foot, WezTerm, Ghostty).
+
+### Drafts
+
+What you write and don't send stays with its chat (or forum topic) as a draft, kept by Telegram and shared with your other devices: switching chats saves it and brings back the next chat's, and so does leaving the prompt. In the chat and topic lists, a chat with a draft shows `Draft:` and its text instead of its last message. A draft written on another device appears in the prompt unless you've changed the text here since. Editing a message doesn't touch the draft: once the edit is sent or cancelled, the draft comes back. Cancelling a reply keeps what you wrote.
 
 `alt+s` opens the sticker picker: your recent stickers and installed sets as tabs (`tab`/`shift+tab`) over a grid of stickers (arrows or `h`/`j`/`k`/`l`), drawn as images with the `media-preview` feature and as their emoji otherwise. `enter` sends the selected one, as a reply when you're replying.
 

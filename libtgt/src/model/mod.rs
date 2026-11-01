@@ -2,6 +2,7 @@
 
 pub mod alert;
 pub mod chat;
+pub mod draft;
 pub mod ids;
 pub mod message;
 pub mod moderation;
@@ -17,6 +18,7 @@ mod tests;
 
 pub use alert::MessageAlert;
 pub use chat::{ChatKind, ChatListEntry, ChatState, PinMoveError, move_pinned};
+pub use draft::{draft_text, text_draft};
 pub use ids::{ChatId, MessageId};
 pub use message::{
     Media, MediaFile, MediaKind, MessageContentType, MessageEntry, Reaction, TextLine, TextSpan,

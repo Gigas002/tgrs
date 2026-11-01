@@ -497,3 +497,22 @@ fn a_pinned_chat_moves_with_the_selection() {
     );
     assert_eq!(window.chat_list_state.selected(), Some(3));
 }
+
+#[test]
+fn a_draft_shows_instead_of_the_last_message_except_in_the_open_chat() {
+    let app_context = create_test_app_context();
+    let mut entry = create_mock_chat(5, "Ada");
+    entry.last_message = Some(create_mock_message(1, "the last one"));
+    entry.draft = "half\na thought".to_owned();
+    let row =
+        |app_context: &AppContext| row_text(&chat_list_item_text(&entry, app_context, 60, false));
+
+    let lines = row(&app_context);
+    assert!(lines[1].contains("Draft: half a thought"), "{lines:?}");
+    assert!(!lines[1].contains("the last one"));
+
+    app_context.store().set_open_chat_id_i64(5);
+    let lines = row(&app_context);
+    assert!(lines[1].contains("the last one"), "{lines:?}");
+    assert!(!lines[1].contains("Draft:"));
+}

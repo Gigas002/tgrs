@@ -230,3 +230,151 @@ fn a_reply_sent_elsewhere_ends_reply_mode() {
     window.update(Action::HideChatWindowReply);
     assert!(matches!(window.current_mode(), Mode::Normal));
 }
+
+mod drafts {
+    use super::*;
+    use libtgt::model::TopicEntry;
+    use ratatui::{Terminal, backend::TestBackend};
+    use tokio::sync::mpsc::UnboundedReceiver;
+
+    /// A prompt in chat 5 with topics 3 and 4, drafts as given, topic 3 open.
+    fn prompt_in_forum(draft_3: &str) -> (PromptWindow, UnboundedReceiver<Action>) {
+        let app_context = create_test_app_context();
+        let store = app_context.store();
+        store.set_open_chat_id_i64(5);
+        set_drafts(&app_context, draft_3, "");
+        store.set_open_topic_id(Some(3));
+        let mut window = PromptWindow::new(Arc::clone(&app_context));
+        let (tx, rx) = unbounded_channel();
+        window.register_action_handler(tx).unwrap();
+        (window, rx)
+    }
+
+    /// The drafts of topics 3 and 4 as TDLib last sent them.
+    fn set_drafts(app_context: &AppContext, draft_3: &str, draft_4: &str) {
+        let topic = |topic_id, draft: &str| TopicEntry {
+            chat_id: 5,
+            topic_id,
+            draft: draft.to_owned(),
+            ..TopicEntry::default()
+        };
+        app_context
+            .store()
+            .set_open_chat_topics(vec![topic(3, draft_3), topic(4, draft_4)]);
+    }
+
+    fn draw(window: &mut PromptWindow) {
+        let mut terminal = Terminal::new(TestBackend::new(40, 5)).unwrap();
+        terminal
+            .draw(|frame| window.draw(frame, frame.area()).unwrap())
+            .unwrap();
+    }
+
+    fn type_text(window: &mut PromptWindow, text: &str) {
+        for c in text.chars() {
+            window.update(Action::Key(
+                KeyCode::Char(c),
+                Modifiers::from(KeyModifiers::empty()),
+            ));
+        }
+    }
+
+    fn saves(rx: &mut UnboundedReceiver<Action>) -> Vec<Action> {
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .filter(|action| matches!(action, Action::SaveDraft(..)))
+            .collect()
+    }
+
+    #[test]
+    fn switching_topics_saves_one_draft_and_loads_the_other() {
+        let (mut window, mut rx) = prompt_in_forum("hello");
+        draw(&mut window);
+        assert_eq!(typed(&window), "hello");
+        type_text(&mut window, "!");
+        assert_eq!(typed(&window), "hello!", "typed at the end of the draft");
+
+        window.app_context.store().set_open_topic_id(Some(4));
+        draw(&mut window);
+        assert_eq!(
+            saves(&mut rx),
+            [Action::SaveDraft(5, Some(3), "hello!".into())]
+        );
+        assert_eq!(typed(&window), "");
+
+        // Nothing written in topic 4: nothing to save
+        window.app_context.store().set_open_topic_id(Some(3));
+        draw(&mut window);
+        assert!(saves(&mut rx).is_empty());
+    }
+
+    #[test]
+    fn a_draft_changed_elsewhere_is_loaded_unless_edited_here() {
+        let (mut window, mut rx) = prompt_in_forum("a");
+        draw(&mut window);
+        set_drafts(&window.app_context, "from phone", "");
+        draw(&mut window);
+        assert_eq!(typed(&window), "from phone");
+
+        type_text(&mut window, "!");
+        set_drafts(&window.app_context, "newer", "");
+        draw(&mut window);
+        assert_eq!(typed(&window), "from phone!", "what's typed here wins");
+        assert!(saves(&mut rx).is_empty());
+    }
+
+    #[test]
+    fn leaving_the_prompt_saves_an_edited_draft_once() {
+        let (mut window, mut rx) = prompt_in_forum("");
+        draw(&mut window);
+        window.unfocus();
+        assert!(saves(&mut rx).is_empty(), "nothing written");
+        type_text(&mut window, "later");
+        window.unfocus();
+        window.unfocus();
+        assert_eq!(
+            saves(&mut rx),
+            [Action::SaveDraft(5, Some(3), "later".into())]
+        );
+    }
+
+    #[test]
+    fn an_edited_message_is_not_a_draft_and_the_draft_comes_back() {
+        let (mut window, mut rx) = prompt_in_forum("keep me");
+        draw(&mut window);
+
+        // Leaving an edit cancels it
+        window.update(Action::EditMessage(1, "old text".into()));
+        window.unfocus();
+        assert!(matches!(window.current_mode(), Mode::Normal));
+        assert_eq!(typed(&window), "keep me");
+
+        // Esc cancels it too
+        window.update(Action::EditMessage(1, "old text".into()));
+        window.update(Action::Key(
+            KeyCode::Esc,
+            Modifiers::from(KeyModifiers::empty()),
+        ));
+        assert_eq!(typed(&window), "keep me");
+
+        // Sending it brings the draft back
+        window.update(Action::EditMessage(1, "old text".into()));
+        type_text(&mut window, "!");
+        window.update(Action::PromptSendMessage);
+        assert_eq!(typed(&window), "keep me");
+        assert!(saves(&mut rx).is_empty());
+    }
+
+    #[test]
+    fn cancelling_a_reply_keeps_what_was_written() {
+        let (mut window, _rx) = prompt_in_forum("");
+        draw(&mut window);
+        window.update(Action::ReplyMessage(1, "preview".into()));
+        type_text(&mut window, "an answer");
+        window.update(Action::Key(
+            KeyCode::Esc,
+            Modifiers::from(KeyModifiers::empty()),
+        ));
+        assert!(matches!(window.current_mode(), Mode::Normal));
+        assert_eq!(typed(&window), "an answer");
+    }
+}

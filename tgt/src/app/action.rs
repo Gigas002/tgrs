@@ -480,6 +480,9 @@ pub enum Action {
     ProfileScrollUp,
     /// Run a command on a chat.
     RunChatCommand(ChatCommand, i64),
+    /// Keep this text as the unsent message of a chat, or of a forum topic of
+    /// it; blank text clears it.
+    SaveDraft(i64, Option<i32>, String),
     /// Move the selected pinned chat up (true) or down among the pinned chats.
     MovePinnedChat(bool),
     /// Set the order of the pinned chats of the main chat list, or of the

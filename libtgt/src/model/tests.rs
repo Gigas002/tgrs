@@ -906,3 +906,31 @@ mod pinned_order {
         assert_eq!(move_pinned(&[], 9, false), Err(PinMoveError::NotPinned));
     }
 }
+
+mod draft {
+    use tdlib_rs::enums::DraftMessageContent;
+    use tdlib_rs::types::DraftMessageContentVideoNote;
+
+    use crate::model::{draft_text, text_draft};
+
+    #[test]
+    fn a_text_draft_round_trips() {
+        let draft = text_draft("see you\nat 5", 1_700_000_000).expect("a draft");
+        assert_eq!(draft.date, 1_700_000_000);
+        assert_eq!(draft_text(Some(&draft)), "see you\nat 5");
+    }
+
+    #[test]
+    fn blank_text_clears_the_draft() {
+        assert!(text_draft("", 1).is_none());
+        assert!(text_draft(" \n\t", 1).is_none());
+        assert_eq!(draft_text(None), "");
+    }
+
+    #[test]
+    fn a_draft_that_is_not_text_has_no_text() {
+        let mut draft = text_draft("x", 1).unwrap();
+        draft.content = DraftMessageContent::VideoNote(DraftMessageContentVideoNote::default());
+        assert_eq!(draft_text(Some(&draft)), "");
+    }
+}

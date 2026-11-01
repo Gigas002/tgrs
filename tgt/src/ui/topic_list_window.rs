@@ -3,7 +3,9 @@
 use crate::app::action::Action;
 use crate::app::context::AppContext;
 use crate::settings::HighlightGroup;
-use crate::ui::chat_list_window::{CHAT_LIST_ITEM_ROWS, badge_spans, preview_spans, spread};
+use crate::ui::chat_list_window::{
+    CHAT_LIST_ITEM_ROWS, badge_spans, draft_spans, preview_spans, spread,
+};
 use crate::ui::component_name::ComponentName;
 use crate::ui::component_traits::{Component, HandleFocus};
 use crate::ui::{message, pane};
@@ -80,12 +82,18 @@ pub(crate) fn topic_list_item_text(
     let badges_width: usize = badges.iter().map(Span::width).sum();
     let preview_width = width.saturating_sub(indent + badges_width + 1).max(1);
     let mut second = vec![Span::raw(" ".repeat(indent))];
-    second.extend(preview_spans(
-        topic.last_message.as_ref(),
-        true,
-        app_context,
-        preview_width,
-    ));
+    // An unsent message shows instead of the last one, except in the open
+    // topic, where it's in the prompt
+    if !open && !topic.draft.trim().is_empty() {
+        second.extend(draft_spans(theme, &topic.draft, preview_width));
+    } else {
+        second.extend(preview_spans(
+            topic.last_message.as_ref(),
+            true,
+            app_context,
+            preview_width,
+        ));
+    }
 
     let mut lines = vec![spread(first, time, width), spread(second, badges, width)];
     if selected {

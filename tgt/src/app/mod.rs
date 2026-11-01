@@ -741,6 +741,11 @@ async fn handle_app_actions(
                     .send(Action::ProfileLoaded(*chat_id))?,
                 Err(e) => media::status(&app_context, format!("No profile: {}", e.message)),
             },
+            Action::SaveDraft(chat_id, topic_id, text) => {
+                if let Err(e) = client.set_draft(*chat_id, *topic_id, text).await {
+                    media::status(&app_context, format!("Can't save the draft: {}", e.message));
+                }
+            }
             Action::SetPinnedChats(archived, order) => {
                 if let Err(e) = client.set_pinned_chats(*archived, order.clone()).await {
                     media::status(&app_context, format!("Can't move the chat: {}", e.message));

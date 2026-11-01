@@ -12,15 +12,15 @@ use tdlib_rs::enums::{
 use tdlib_rs::functions;
 use tdlib_rs::types::{
     FormattedText, InputFileId, InputFileLocal, InputMessageDocument, InputMessageSticker,
-    InputMessageText, InputSticker, LogStreamFile, OptionValueBoolean, OptionValueInteger,
-    ReactionTypeEmoji,
+    InputMessageText, InputSticker, LogStreamFile, MessageTopicForum, OptionValueBoolean,
+    OptionValueInteger, ReactionTypeEmoji,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
 use crate::model::{
     BlockedSender, MessageEntry, ProfileSource, ReportStep, StickerEntry, StickerSetEntry,
-    TdChatList, TdMessageReplyToMessage, TdMessageSender, TopicEntry,
+    TdChatList, TdMessageReplyToMessage, TdMessageSender, TopicEntry, text_draft,
 };
 use crate::store::Store;
 
@@ -423,6 +423,24 @@ impl Client {
         functions::toggle_chat_is_pinned(list, chat_id, pinned, self.client_id)
             .await
             .inspect_err(|e| tracing::error!("Failed to pin chat {chat_id}: {e:?}"))
+    }
+
+    /// Keeps `text` as the unsent message of a chat, or of one of its forum
+    /// topics (none for the General topic); blank text clears it.
+    pub async fn set_draft(
+        &self,
+        chat_id: i64,
+        topic_id: Option<i32>,
+        text: &str,
+    ) -> Result<(), TdError> {
+        let topic = topic_id
+            .map(|forum_topic_id| MessageTopic::Forum(MessageTopicForum { forum_topic_id }));
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs() as i32);
+        functions::set_chat_draft_message(chat_id, topic, text_draft(text, now), self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to save the draft of {chat_id}: {e:?}"))
     }
 
     /// Sets the order of the pinned chats of the main chat list, or of the

@@ -33,6 +33,23 @@ pub(crate) fn spread(
 /// Rows each chat takes in the list: its two lines and a blank spacer.
 pub(crate) const CHAT_LIST_ITEM_ROWS: u16 = 3;
 
+/// Before the text of an unsent message in the chat and topic lists.
+pub(crate) const DRAFT_LABEL: &str = "Draft:";
+
+/// An unsent message as a preview `width` wide: `Draft:` and its text on
+/// one line.
+pub(crate) fn draft_spans(theme: &Theme, draft: &str, width: usize) -> Vec<Span<'static>> {
+    let label = format!("{DRAFT_LABEL} ");
+    let rest = width.saturating_sub(label.width()).max(1);
+    vec![
+        Span::styled(label, theme.style(HighlightGroup::Warning)),
+        Span::styled(
+            message::truncate_display_width(&draft.replace('\n', " "), rest),
+            theme.style(HighlightGroup::ChatPreview),
+        ),
+    ]
+}
+
 /// The chat list row, like concord's channel list: the selection marker, the
 /// chat's icon and name with the time of its last message, then a preview of
 /// that message with the badges (pinned, mentions, unread), and a blank line
@@ -114,12 +131,18 @@ pub(crate) fn chat_list_item_text(
     let badges_width: usize = badges.iter().map(Span::width).sum();
     let preview_width = width.saturating_sub(indent + badges_width + 1).max(1);
     let mut second = vec![Span::raw(" ".repeat(indent))];
-    match &entry.summary {
-        Some(summary) => second.push(Span::styled(
+    // An unsent message shows instead of the last one, like in Telegram,
+    // except in the open chat, where it's in the prompt
+    let open_id = app_context.store().open_chat_id().as_i64();
+    let draft =
+        (!entry.draft.trim().is_empty() && entry.chat_id != open_id).then(|| entry.draft.clone());
+    match (&entry.summary, draft) {
+        (Some(summary), _) => second.push(Span::styled(
             message::truncate_display_width(summary, preview_width),
             theme.style(HighlightGroup::ChatPreview),
         )),
-        None => second.extend(preview_spans(
+        (None, Some(draft)) => second.extend(draft_spans(theme, &draft, preview_width)),
+        (None, None) => second.extend(preview_spans(
             entry.last_message.as_ref(),
             entry.kind.is_group(),
             app_context,

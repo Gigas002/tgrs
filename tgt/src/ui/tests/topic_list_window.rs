@@ -117,3 +117,14 @@ fn rows_show_the_icon_name_and_badges() {
             .contains("# General")
     );
 }
+
+#[test]
+fn a_topic_s_draft_shows_unless_it_is_open() {
+    let app_context = create_test_app_context();
+    let mut entry = topic(3, "Rust", 1);
+    entry.draft = "unsent".to_owned();
+    let second_line =
+        |open| row_text(&topic_list_item_text(&entry, &app_context, 50, false, open))[1].clone();
+    assert!(second_line(false).contains("Draft: unsent"));
+    assert!(!second_line(true).contains("Draft:"));
+}

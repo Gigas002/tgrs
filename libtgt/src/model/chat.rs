@@ -65,6 +65,8 @@ pub struct ChatListEntry {
     pub unread_mention_count: i32,
     /// Shown instead of the last message (the archive row lists its chats).
     pub summary: Option<String>,
+    /// The text of an unsent message; empty if none.
+    pub draft: String,
 }
 
 /// What the chat actions see of a chat: its state, which they toggle.

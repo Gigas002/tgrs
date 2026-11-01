@@ -16,7 +16,7 @@ use tdlib_rs::{
 
 use crate::model::{
     ChatKind, ChatListEntry, ChatState, MessageAlert, MessageEntry, OrderedChat, Profile,
-    ProfileSource, TdMessageSender, TopicEntry, format_timestamp,
+    ProfileSource, TdMessageSender, TopicEntry, draft_text, format_timestamp,
     ids::{AtomicChatId, AtomicMessageId, ChatId, MessageId},
     profile::{birthdate_text, member_count_text, user_status_text},
 };
@@ -734,6 +734,27 @@ impl Store {
         Some(profile)
     }
 
+    /// The text of the unsent message of a chat, or of a topic of the open
+    /// chat (none for the General topic, whose draft is the chat's); empty if
+    /// none.
+    pub fn draft(&self, chat_id: i64, topic_id: Option<i32>) -> String {
+        match topic_id {
+            Some(topic_id) => self
+                .open_chat_topics
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|topic| topic.chat_id == chat_id && topic.topic_id == topic_id)
+                .map(|topic| topic.draft.clone())
+                .unwrap_or_default(),
+            None => self
+                .chats()
+                .get(&chat_id)
+                .map(|chat| draft_text(chat.draft_message.as_ref()))
+                .unwrap_or_default(),
+        }
+    }
+
     /// The pinned chats of the main chat list, or of the archive, top first.
     pub fn pinned_chat_ids(&self, archived: bool) -> Vec<i64> {
         let index = if archived {
@@ -811,6 +832,7 @@ impl Store {
                 entry.unread_count = chat.unread_count;
                 entry.last_message = chat.last_message.as_ref().map(MessageEntry::from);
                 entry.unread_mention_count = chat.unread_mention_count;
+                entry.draft = draft_text(chat.draft_message.as_ref());
                 let settings = &chat.notification_settings;
                 entry.is_muted = !settings.use_default_mute_for && settings.mute_for > 0;
                 if let ChatType::Private(p) = &chat.r#type {

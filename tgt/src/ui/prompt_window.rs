@@ -276,6 +276,11 @@ impl Input {
     fn move_cursor_to_end(&mut self) {
         self.cursor.0 = self.text[self.cursor.1].len();
     }
+    /// Move the cursor to the end of the last line.
+    fn move_cursor_to_text_end(&mut self) {
+        let last = self.text.len().saturating_sub(1);
+        self.cursor = (self.text.get(last).map_or(0, Vec::len), last);
+    }
     /// Move the cursor to the end of the line.
     fn move_cursor_to_start(&mut self) {
         self.cursor.0 = 0;
@@ -484,6 +489,10 @@ impl Input {
     /// * `message` - The message to edit.
     fn edit_message(&mut self, message_id: i64, message: String) {
         self.mode = Mode::Edit(message_id);
+        self.set_text(&message);
+    }
+    /// Replaces the text, lines split at `\n`, with the cursor at the start.
+    fn set_text(&mut self, message: &str) {
         self.text = message
             .split('\n')
             .map(|line| {
@@ -623,7 +632,15 @@ pub struct PromptWindow {
     focused_keys: Vec<Event>,
     /// The current input of the `PromptWindow`.
     input: Input,
+    /// The chat (and forum topic) the text is the draft of.
+    draft_target: Option<DraftTarget>,
+    /// The draft as last loaded or saved, to tell whether it was edited.
+    saved_draft: String,
 }
+
+/// A chat, and a forum topic of it (none for the General topic), that has
+/// its own draft.
+type DraftTarget = (i64, Option<i32>);
 /// Implement the `PromptWindow` struct.
 impl PromptWindow {
     /// Create a new instance of the `PromptWindow` struct.
@@ -656,6 +673,82 @@ impl PromptWindow {
             focused,
             focused_keys,
             input,
+            draft_target: None,
+            saved_draft: String::new(),
+        }
+    }
+
+    /// The chat and topic messages are written to now, if a chat is open.
+    fn current_draft_target(&self) -> Option<DraftTarget> {
+        let store = self.app_context.store();
+        let chat_id = store.open_chat_id().as_i64();
+        let topic_id = store
+            .open_topic()
+            .filter(|topic| !topic.is_general)
+            .map(|topic| topic.topic_id);
+        (chat_id != 0).then_some((chat_id, topic_id))
+    }
+
+    /// Saves the text as the draft of its chat if it was edited since it
+    /// was loaded or last saved. A message being edited isn't a draft.
+    fn save_draft(&mut self) {
+        let Some((chat_id, topic_id)) = self.draft_target else {
+            return;
+        };
+        if !matches!(self.input.mode, Mode::Normal | Mode::Reply(_)) {
+            return;
+        }
+        let text = self.input.text_to_string();
+        if text == self.saved_draft {
+            return;
+        }
+        if let Some(tx) = self.action_tx.as_ref() {
+            let _ = tx.send(Action::SaveDraft(chat_id, topic_id, text.clone()));
+        }
+        self.saved_draft = text;
+    }
+
+    /// Puts the chat's draft back in the prompt, e.g. after editing a message.
+    fn restore_draft(&mut self) {
+        let draft = self.saved_draft.clone();
+        self.input.set_text(&draft);
+        self.input.move_cursor_to_text_end();
+    }
+
+    /// Keeps the text the draft of the open chat: switching chats (or
+    /// topics) saves the old one's and loads the new one's, and a draft
+    /// changed on another device is loaded unless the text was edited here.
+    fn sync_draft(&mut self) {
+        // Searching uses the prompt for the query, not a draft
+        if matches!(
+            self.input.mode,
+            Mode::SearchChatList | Mode::SearchChatMessages
+        ) {
+            return;
+        }
+        let target = self.current_draft_target();
+        if target != self.draft_target {
+            self.save_draft();
+            self.draft_target = target;
+            self.saved_draft = target
+                .map(|(chat_id, topic_id)| self.app_context.store().draft(chat_id, topic_id))
+                .unwrap_or_default();
+            self.input.mode = Mode::Normal;
+            let draft = self.saved_draft.clone();
+            self.input.set_text(&draft);
+            self.input.move_cursor_to_text_end();
+            return;
+        }
+        let Some((chat_id, topic_id)) = target else {
+            return;
+        };
+        let unedited = matches!(self.input.mode, Mode::Normal)
+            && self.input.text_to_string() == self.saved_draft;
+        let stored = self.app_context.store().draft(chat_id, topic_id);
+        if unedited && stored != self.saved_draft {
+            self.input.set_text(&stored);
+            self.input.move_cursor_to_text_end();
+            self.saved_draft = stored;
         }
     }
     /// Set the name of the `PromptWindow`.
@@ -720,6 +813,8 @@ impl HandleFocus for PromptWindow {
     /// Set the `focused` flag for the `PromptWindow`.
     fn unfocus(&mut self) {
         self.focused = false;
+        // Leaving the prompt keeps what was written as the chat's draft
+        self.save_draft();
         match self.input.mode {
             Mode::SearchChatList => {
                 if let Some(tx) = self.input.action_tx.as_ref() {
@@ -735,8 +830,13 @@ impl HandleFocus for PromptWindow {
                 self.input.mode = Mode::Normal;
                 self.input.clear_and_reset_cursor();
             }
+            // Leaving an edit cancels it: the draft comes back
+            Mode::Edit(_) => {
+                self.input.mode = Mode::Normal;
+                self.restore_draft();
+            }
             _ => {
-                // Normal / Edit / Reply: preserve draft; only reset mode if needed
+                // Normal / Reply: preserve the draft; only reset the mode
                 self.input.mode = Mode::Normal;
             }
         }
@@ -755,7 +855,12 @@ impl Component for PromptWindow {
         match action {
             Action::PromptSendMessage => {
                 self.input.unselect_all();
+                let editing = matches!(self.input.mode, Mode::Edit(_));
                 self.input.send_message(Arc::clone(&self.app_context));
+                // The edit is sent: the draft comes back
+                if editing && matches!(self.input.mode, Mode::Normal) {
+                    self.restore_draft();
+                }
             }
             Action::PromptCopy => {
                 self.input.copy_selected();
@@ -763,14 +868,19 @@ impl Component for PromptWindow {
             }
             Action::Key(key_code, modifiers) => match (key_code, modifiers) {
                 (KeyCode::Esc, ..) => {
-                    // ESC cancels reply or edit mode and returns focus to chat
+                    // ESC cancels reply or edit mode and returns focus to chat:
+                    // a reply keeps its text as the draft, an edit brings the
+                    // draft back
                     if matches!(self.input.mode, Mode::Reply(_) | Mode::Edit(_)) {
                         if let Some(tx) = self.action_tx.as_ref() {
                             let _ = tx.send(Action::HideChatWindowReply);
                             let _ = tx.send(Action::FocusComponent(ComponentName::Chat));
                         }
+                        let editing = matches!(self.input.mode, Mode::Edit(_));
                         self.input.mode = Mode::Normal;
-                        self.input.clear_and_reset_cursor();
+                        if editing {
+                            self.restore_draft();
+                        }
                     }
                 }
                 (KeyCode::Home, ..)
@@ -996,6 +1106,7 @@ impl Component for PromptWindow {
     }
 
     fn draw(&mut self, frame: &mut Frame<'_>, area: Rect) -> io::Result<()> {
+        self.sync_draft();
         self.update_input(area);
 
         let app_context = Arc::clone(&self.app_context);

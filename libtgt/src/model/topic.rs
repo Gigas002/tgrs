@@ -1,7 +1,7 @@
 use tdlib_rs::enums::MessageTopic;
 use tdlib_rs::types::{ChatNotificationSettings, ForumTopic, ForumTopicInfo, UpdateForumTopic};
 
-use super::message::MessageEntry;
+use super::{draft::draft_text, message::MessageEntry};
 
 /// One row of a forum's topic list.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -27,6 +27,8 @@ pub struct TopicEntry {
     pub last_read_inbox_message_id: i64,
     /// Notifications are turned off.
     pub is_muted: bool,
+    /// The text of an unsent message; empty if none.
+    pub draft: String,
 }
 
 impl TopicEntry {
@@ -44,6 +46,7 @@ impl TopicEntry {
         self.unread_mention_count = update.unread_mention_count;
         self.last_read_inbox_message_id = update.last_read_inbox_message_id;
         self.is_muted = is_muted(&update.notification_settings);
+        self.draft = draft_text(update.draft_message.as_ref());
     }
 
     /// The icon shown before the topic's name.
@@ -74,6 +77,7 @@ impl From<&ForumTopic> for TopicEntry {
             unread_mention_count: topic.unread_mention_count,
             last_read_inbox_message_id: topic.last_read_inbox_message_id,
             is_muted: is_muted(&topic.notification_settings),
+            draft: draft_text(topic.draft_message.as_ref()),
             ..Self::default()
         };
         entry.set_info(&topic.info);

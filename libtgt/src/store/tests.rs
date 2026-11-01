@@ -399,6 +399,40 @@ mod archive {
     }
 
     #[test]
+    fn drafts_of_chats_and_topics_are_looked_up() {
+        use crate::model::{TopicEntry, text_draft};
+        let store = Store::default();
+        assert_eq!(store.draft(1, None), "");
+
+        let mut with_draft = chat(1, "Ada", 0, false);
+        with_draft.draft_message = text_draft("half a thought", 1);
+        add(&store, with_draft, ChatList::Main, 1);
+        add(&store, chat(2, "Bob", 0, false), ChatList::Main, 2);
+        assert_eq!(store.draft(1, None), "half a thought");
+        assert_eq!(store.draft(2, None), "");
+        let drafts: Vec<(i64, String)> = store
+            .chat_list()
+            .into_iter()
+            .map(|entry| (entry.chat_id, entry.draft))
+            .collect();
+        assert_eq!(
+            drafts,
+            [(2, String::new()), (1, "half a thought".to_owned())]
+        );
+
+        // Topics are looked up among the open chat's
+        store.set_open_chat_topics(vec![TopicEntry {
+            chat_id: 1,
+            topic_id: 3,
+            draft: "for the topic".to_owned(),
+            ..TopicEntry::default()
+        }]);
+        assert_eq!(store.draft(1, Some(3)), "for the topic");
+        assert_eq!(store.draft(1, Some(4)), "");
+        assert_eq!(store.draft(9, Some(3)), "");
+    }
+
+    #[test]
     fn pinned_chats_are_listed_top_first_per_chat_list() {
         let store = Store::default();
         let put = |chat_id: i64, list: ChatList, order: i64, is_pinned: bool| {
