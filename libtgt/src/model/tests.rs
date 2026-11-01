@@ -516,6 +516,16 @@ mod message {
             entry.message_content_to_string(),
             "📄 backup.tar.gz (3.0 MiB)\nweekly"
         );
+        // Editing it edits the caption alone
+        assert_eq!(entry.caption().as_deref(), Some("weekly"));
+    }
+
+    #[test]
+    fn only_media_messages_have_a_caption() {
+        let text = MessageEntry::plain(1, crate::model::TdMessageSender::User(1), "hi", 0);
+        assert_eq!(text.caption(), None);
+        assert!(MediaKind::Photo.has_caption() && MediaKind::Document.has_caption());
+        assert!(!MediaKind::Sticker.has_caption() && !MediaKind::VideoNote.has_caption());
     }
 
     #[test]

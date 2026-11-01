@@ -327,12 +327,20 @@ impl ChatWindow {
             // Not our message: do nothing to avoid bugging the chat.
             return;
         }
+        // Media messages edit their caption
+        let text = match entry.media() {
+            Some(media) if !media.kind.has_caption() => {
+                self.send(Action::StatusMessage(
+                    "Stickers and round videos have no caption.".into(),
+                ));
+                return;
+            }
+            Some(_) => entry.caption().unwrap_or_default(),
+            None => entry.message_content_to_string(),
+        };
         // The prompt must be focused first: actions go to the focused component.
         self.send(Action::FocusComponent(ComponentName::Prompt));
-        self.send(Action::EditMessage(
-            entry.id(),
-            entry.message_content_to_string(),
-        ));
+        self.send(Action::EditMessage(entry.id(), text));
     }
 
     /// Replies to a message.

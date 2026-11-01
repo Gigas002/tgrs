@@ -912,3 +912,18 @@ fn the_forward_popup_gives_the_focus_back() {
     assert_eq!(window.component_focused, Some(ComponentName::Chat));
     assert!(!window.is_popup_visible(ComponentName::Forward));
 }
+
+#[test]
+fn a_picked_file_goes_to_the_prompt_for_its_caption() {
+    let mut window = create_test_core_window();
+    let tx = window.app_context.action_tx().clone();
+    window.register_action_handler(tx).unwrap();
+    window.update(Action::ShowFileUploadExplorer);
+    sent_actions(&window);
+    window.update(Action::UploadFile("/tmp/a.jpg".into()));
+    assert!(sent_actions(&window).contains(&Action::SendFile(
+        "/tmp/a.jpg".into(),
+        String::new(),
+        None
+    )));
+}

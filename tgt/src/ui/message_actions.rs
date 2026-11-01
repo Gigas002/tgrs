@@ -65,7 +65,13 @@ impl MessageActions {
                 let disabled = match command {
                     MessageCommand::Copy if !has_text => Some("no text"),
                     MessageCommand::Edit if !mine => Some("not your message"),
-                    MessageCommand::Edit if message.media().is_some() => Some("media message"),
+                    MessageCommand::Edit
+                        if message
+                            .media()
+                            .is_some_and(|media| !media.kind.has_caption()) =>
+                    {
+                        Some("no caption")
+                    }
                     MessageCommand::Report if mine => Some("your message"),
                     MessageCommand::Forward if !message.can_be_forwarded() => {
                         Some("protected content")

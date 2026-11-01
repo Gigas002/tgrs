@@ -71,8 +71,21 @@ fn own_media_message_enables_media_and_delete() {
     ] {
         assert_eq!(disabled(&menu, command), None, "{command:?}");
     }
-    // Media captions can't be edited as text
-    assert_eq!(disabled(&menu, MessageCommand::Edit), Some("media message"));
+    // Its caption is edited
+    assert_eq!(disabled(&menu, MessageCommand::Edit), None);
+
+    // Stickers have none
+    let media = libtgt::model::Media {
+        kind: libtgt::model::MediaKind::Sticker,
+        ..create_mock_media_message(6, "").media().cloned().unwrap()
+    };
+    let sticker = MessageEntry::with_media(6, TdMessageSender::User(me), media, 0);
+    menu.app_context
+        .store()
+        .open_chat_messages()
+        .insert_messages([sticker]);
+    menu.update(Action::ShowMessageActionsFor(6));
+    assert_eq!(disabled(&menu, MessageCommand::Edit), Some("no caption"));
 }
 
 #[test]

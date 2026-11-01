@@ -953,24 +953,33 @@ impl Client {
         }
     }
 
-    /// Sends a local file as a document, to a forum topic when `topic` is
-    /// given, and clears the pending reply.
+    /// Sends a local file as a document with `caption` (none if empty), to
+    /// a forum topic when `topic` is given and as a reply when `reply_to`
+    /// is, and clears the pending reply.
     pub async fn send_document(
         &self,
         file_path: String,
+        caption: String,
         chat_id: i64,
         topic: Option<MessageTopic>,
+        reply_to: Option<TdMessageReplyToMessage>,
     ) -> Result<tdlib_rs::types::Message, TdError> {
         self.store.clear_reply_message();
+        let reply_to = reply_to.map(|r| InputMessageReplyTo::Message((&r).into()));
+        let caption = (!caption.trim().is_empty()).then(|| FormattedText {
+            text: caption,
+            entities: vec![],
+        });
         let content = InputMessageContent::InputMessageDocument(InputMessageDocument {
             document: tdlib_rs::types::InputDocument {
                 document: enums::InputFile::Local(InputFileLocal { path: file_path }),
                 thumbnail: None,
                 disable_content_type_detection: true,
             },
-            caption: None,
+            caption,
         });
-        match functions::send_message(chat_id, topic, None, None, content, self.client_id).await {
+        match functions::send_message(chat_id, topic, reply_to, None, content, self.client_id).await
+        {
             Ok(enums::Message::Message(message)) => Ok(message),
             Err(e) => {
                 tracing::error!("Failed to send document: {e:?}");
@@ -1044,18 +1053,34 @@ impl Client {
         }
     }
 
-    /// Replaces the text of a message in the open chat.
-    pub async fn edit_message(&self, message_id: i64, message: String) {
-        match functions::edit_message_text(
-            self.store.open_chat_id().as_i64(),
-            message_id,
-            text_content(message),
-            self.client_id,
-        )
-        .await
-        {
-            Ok(_) => tracing::info!("Message edited"),
-            Err(e) => tracing::error!("Failed to edit message: {e:?}"),
+    /// Replaces the text of a message in the open chat, or the caption of a
+    /// media message (an empty one removes it).
+    pub async fn edit_message(&self, message_id: i64, message: String) -> Result<(), TdError> {
+        let chat_id = self.store.open_chat_id().as_i64();
+        let is_media = self
+            .store
+            .get_message(message_id)
+            .is_some_and(|entry| entry.media().is_some());
+        let edited = if is_media {
+            let caption = (!message.trim().is_empty()).then(|| FormattedText {
+                text: message,
+                entities: vec![],
+            });
+            functions::edit_message_caption(chat_id, message_id, caption, false, self.client_id)
+                .await
+        } else {
+            functions::edit_message_text(chat_id, message_id, text_content(message), self.client_id)
+                .await
+        };
+        match edited {
+            Ok(_) => {
+                tracing::info!("Message edited");
+                Ok(())
+            }
+            Err(e) => {
+                tracing::error!("Failed to edit message: {e:?}");
+                Err(e)
+            }
         }
     }
 

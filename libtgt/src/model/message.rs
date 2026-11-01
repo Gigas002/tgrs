@@ -142,6 +142,12 @@ pub enum MediaKind {
 }
 
 impl MediaKind {
+    /// Whether messages of this kind have a caption: every kind but
+    /// stickers and round video messages.
+    pub fn has_caption(self) -> bool {
+        !matches!(self, Self::Sticker | Self::VideoNote)
+    }
+
     /// Human-readable name, e.g. for popup titles.
     pub fn label(self) -> &'static str {
         match self {
@@ -479,6 +485,20 @@ impl MessageEntry {
             .map(|line| line.iter().map(|s| s.text.as_str()).collect::<String>())
             .collect::<Vec<String>>()
             .join("\n")
+    }
+
+    /// The caption of a media message, without the media's summary line;
+    /// None for other messages.
+    pub fn caption(&self) -> Option<String> {
+        self.media()?;
+        Some(
+            self.content
+                .iter()
+                .skip(1)
+                .map(|line| line.iter().map(|s| s.text.as_str()).collect::<String>())
+                .collect::<Vec<String>>()
+                .join("\n"),
+        )
     }
 
     /// Whether the message can be forwarded; protected content can't.

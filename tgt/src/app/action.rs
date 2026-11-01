@@ -672,8 +672,11 @@ pub enum Action {
     /// Hide the file upload explorer popup.
     HideFileUploadExplorer,
 
-    /// UploadFile action with a selected local path.
+    /// A file was picked to upload: the prompt sends it with its text as
+    /// the caption.
     UploadFile(String),
+    /// Send this file with this caption (none if empty), maybe as a reply.
+    SendFile(String, String, Option<TdMessageReplyToMessage>),
 }
 /// Implement the `Action` enum.
 impl Action {

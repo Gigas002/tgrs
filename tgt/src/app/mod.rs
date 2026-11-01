@@ -909,9 +909,11 @@ async fn handle_app_actions(
                 }
             }
             Action::SendMessageEdited(message_id, message) => {
-                client.edit_message(*message_id, message.to_string()).await;
+                if let Err(e) = client.edit_message(*message_id, message.to_string()).await {
+                    media::status(&app_context, format!("Not edited: {}", e.message));
+                }
             }
-            Action::UploadFile(file_path) => {
+            Action::SendFile(file_path, caption, reply_to) => {
                 let chat_id = app_context.store().open_chat_id().as_i64();
                 if chat_id == 0 {
                     let _ = app_context.action_tx().send(Action::StatusMessage(
@@ -920,9 +922,21 @@ async fn handle_app_actions(
                     continue;
                 }
                 let topic = app_context.store().open_send_topic();
-                let _ = client
-                    .send_document(file_path.to_string(), chat_id, topic)
+                let sent = client
+                    .send_document(
+                        file_path.to_string(),
+                        caption.clone(),
+                        chat_id,
+                        topic,
+                        reply_to.clone(),
+                    )
                     .await;
+                if let Err(e) = sent {
+                    media::status(&app_context, format!("File not sent: {}", e.message));
+                }
+                if reply_to.is_some() {
+                    app_context.action_tx().send(Action::HideChatWindowReply)?;
+                }
             }
             Action::OpenMedia(message_id) => {
                 media::open(&app_context, client.files(), *message_id);

@@ -419,3 +419,23 @@ fn without_an_open_chat_a_hint_is_shown() {
         .collect();
     assert!(text.contains("Select a chat to start messaging"), "{text}");
 }
+
+#[test]
+fn editing_a_media_message_edits_its_caption() {
+    let mut window = create_test_chat_window();
+    let mut rx = with_action_rx(&mut window);
+    // create_mock_media_message is from user 1
+    window.app_context.store().set_me(1);
+    setup_messages(
+        &mut window,
+        vec![crate::ui::tests::create_mock_media_message(100, "a.zip")],
+    );
+    window.update(Action::RunMessageCommand(MessageCommand::Edit, 100));
+    assert_eq!(
+        sent(&mut rx),
+        vec![
+            Action::FocusComponent(ComponentName::Prompt),
+            Action::EditMessage(100, String::new()),
+        ]
+    );
+}

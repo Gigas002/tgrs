@@ -38,7 +38,7 @@ Like [concord](https://github.com/chojs23/concord): `left`/`right` move between 
 | `space` | Search chats.                                |
 | `/`     | Search messages.                             |
 | `p`     | Pinned messages.                             |
-| `u`     | Upload a file.                               |
+| `u`     | Upload a file, captioned by the prompt.      |
 | `s`     | Send a sticker.                              |
 | `c`     | Actions of the open chat.                    |
 | `i`     | Profile of the open chat.                    |
@@ -125,7 +125,7 @@ Select a message in the chat (`up`/`down`) and press a key, or `enter` for the a
 | `y` | Copy the text.                                                                                     |
 | `r` | React: pick an emoji the chat allows; picking one of yours removes it. `1`-`9`, `0` pick directly. |
 | `R` | Reply.                                                                                             |
-| `e` | Edit your message.                                                                                 |
+| `e` | Edit your message, or the caption of your photo, video, file or other media.                       |
 | `d` | Delete your message for everyone (`D`: only for you).                                              |
 | `o` | Open a link of the message in the browser, picked from a list when there are several.              |
 | `x` | Open the media (photo, video, GIF, audio, voice message, sticker or file) via `xdg-open`.          |
@@ -143,6 +143,8 @@ Reactions are shown under their messages, yours highlighted, and pinned messages
 `f` on a selected message (or "forward message" in its actions menu) asks where to send it: type part of a chat's name to narrow your chats and archived chats down, best match first, move with `up`/`down` (or `ctrl+p`/`ctrl+n`, or a click) and press `enter` to forward. `tab` toggles **without the original author**, which sends a copy as your own message instead of a "Forwarded from" one. Forwarding to a forum goes to its General topic. Messages from chats that protect their content can't be forwarded, and the menu dims the action for them. The status bar says where the message went, or why Telegram refused, e.g. when you can't write in that chat.
 
 ### Media and files
+
+To send a file, write its caption in the prompt (or leave it empty), then press `alt+u` (leader `u`) and pick the file: it's sent with the prompt's text as its caption, as a reply if you were replying, and the prompt is cleared. While you're editing a message, the text stays and the file goes without a caption. Files are sent as documents, so photos keep their full quality. `e` on one of your media messages edits its caption; send it empty to remove the caption. Stickers and round videos have none. If Telegram refuses an upload or an edit, the status bar says why.
 
 `tgt` doesn't play media itself. With `media-preview`, images (and the thumbnails of videos, GIFs and files) are previewed under their messages. Files are fetched from Telegram first when needed; progress and errors are shown in the status bar.
 

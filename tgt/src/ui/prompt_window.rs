@@ -517,7 +517,12 @@ impl Input {
     fn send_message(&mut self, app_context: Arc<AppContext>) {
         let action_tx = app_context.action_tx();
         let composing = matches!(self.mode, Mode::Normal | Mode::Edit(_) | Mode::Reply(_));
-        if composing && self.text_to_string().trim().is_empty() {
+        // An empty caption is sent to remove it
+        let editing_caption = matches!(
+            self.mode,
+            Mode::Edit(id) if app_context.store().get_message(id).is_some_and(|m| m.media().is_some())
+        );
+        if composing && !editing_caption && self.text_to_string().trim().is_empty() {
             // Nothing to send: Enter on an empty prompt does nothing
             return;
         }
@@ -706,6 +711,34 @@ impl PromptWindow {
             let _ = tx.send(Action::SaveDraft(chat_id, topic_id, text.clone()));
         }
         self.saved_draft = text;
+    }
+
+    /// Sends a picked file with the text as its caption, as a reply when
+    /// replying, and clears the text. While editing or searching, the text
+    /// isn't a caption and stays.
+    fn send_file(&mut self, path: String) {
+        let (caption, reply_to) = match self.input.mode {
+            Mode::Normal => (self.input.text_to_string(), None),
+            Mode::Reply(message_id) => (
+                self.input.text_to_string(),
+                // TDLib finds the chat from the message, like for text replies
+                Some(TdMessageReplyToMessage {
+                    chat_id: 0,
+                    message_id,
+                }),
+            ),
+            _ => (String::new(), None),
+        };
+        if matches!(self.input.mode, Mode::Normal | Mode::Reply(_)) {
+            self.input.mode = Mode::Normal;
+            self.input.set_text("");
+            self.input.set_prompt_size_to_one_focused();
+        }
+        if let Some(tx) = self.action_tx.as_ref() {
+            let _ = tx.send(Action::SendFile(path, caption.trim().to_owned(), reply_to));
+        }
+        // The caption was the draft: it's sent now
+        self.save_draft();
     }
 
     /// Puts the chat's draft back in the prompt, e.g. after editing a message.
@@ -1092,6 +1125,7 @@ impl Component for PromptWindow {
             Action::EditMessage(message_id, message) => {
                 self.input.edit_message(message_id, message);
             }
+            Action::UploadFile(path) => self.send_file(path),
             // A sticker answered the message; the text stays
             Action::HideChatWindowReply if matches!(self.input.mode, Mode::Reply(_)) => {
                 self.input.mode = Mode::Normal;

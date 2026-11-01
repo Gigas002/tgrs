@@ -894,6 +894,12 @@ impl Component for CoreWindow {
                     component.update(action);
                 }
             }
+            // The prompt has the caption, whatever is focused
+            Action::UploadFile(_) => {
+                if let Some(component) = self.components.get_mut(&ComponentName::Prompt) {
+                    component.update(action);
+                }
+            }
             Action::ShowForward(..) => {
                 self.focus_before_forward = self.component_focused.filter(|c| !c.is_popup());
                 self.show_popup(ComponentName::Forward, action);

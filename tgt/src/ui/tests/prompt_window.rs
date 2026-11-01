@@ -378,3 +378,113 @@ mod drafts {
         assert_eq!(typed(&window), "an answer");
     }
 }
+
+mod captions {
+    use super::*;
+    use crate::ui::tests::create_mock_media_message;
+
+    fn prompt() -> (PromptWindow, tokio::sync::mpsc::UnboundedReceiver<Action>) {
+        let mut window = create_test_prompt_window();
+        let (tx, rx) = unbounded_channel();
+        window.register_action_handler(tx).unwrap();
+        (window, rx)
+    }
+
+    fn sent_files(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Action>) -> Vec<Action> {
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .filter(|action| matches!(action, Action::SendFile(..)))
+            .collect()
+    }
+
+    fn type_text(window: &mut PromptWindow, text: &str) {
+        for c in text.chars() {
+            window.update(Action::Key(
+                KeyCode::Char(c),
+                Modifiers::from(KeyModifiers::empty()),
+            ));
+        }
+    }
+
+    #[test]
+    fn a_picked_file_takes_the_text_as_its_caption() {
+        let (mut window, mut rx) = prompt();
+        type_text(&mut window, " holiday photos ");
+        window.update(Action::UploadFile("/tmp/a.jpg".into()));
+        assert_eq!(
+            sent_files(&mut rx),
+            [Action::SendFile(
+                "/tmp/a.jpg".into(),
+                "holiday photos".into(),
+                None
+            )]
+        );
+        assert_eq!(typed(&window), "");
+
+        // Without text there's no caption
+        window.update(Action::UploadFile("/tmp/b.zip".into()));
+        assert_eq!(
+            sent_files(&mut rx),
+            [Action::SendFile("/tmp/b.zip".into(), String::new(), None)]
+        );
+    }
+
+    #[test]
+    fn a_file_picked_while_replying_is_the_reply() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::ReplyMessage(42, "question".into()));
+        type_text(&mut window, "here");
+        window.update(Action::UploadFile("/tmp/a.pdf".into()));
+        assert_eq!(
+            sent_files(&mut rx),
+            [Action::SendFile(
+                "/tmp/a.pdf".into(),
+                "here".into(),
+                Some(TdMessageReplyToMessage {
+                    chat_id: 0,
+                    message_id: 42
+                })
+            )]
+        );
+        assert!(matches!(window.current_mode(), Mode::Normal));
+    }
+
+    #[test]
+    fn an_edit_in_progress_isn_t_a_caption() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::EditMessage(10, "fixed text".into()));
+        window.update(Action::UploadFile("/tmp/a.pdf".into()));
+        assert_eq!(
+            sent_files(&mut rx),
+            [Action::SendFile("/tmp/a.pdf".into(), String::new(), None)]
+        );
+        assert_eq!(typed(&window), "fixed text");
+        assert!(matches!(window.current_mode(), Mode::Edit(10)));
+    }
+
+    #[test]
+    fn a_caption_can_be_edited_away() {
+        let (mut window, _rx) = prompt();
+        // Sending goes through the app's channel
+        let app_context = Arc::clone(&window.app_context);
+        let mut rx = app_context.action_rx();
+        window
+            .app_context
+            .store()
+            .open_chat_messages()
+            .insert_messages([create_mock_media_message(10, "a.zip")]);
+        window.update(Action::EditMessage(10, String::new()));
+        window.update(Action::PromptSendMessage);
+        let edits: Vec<Action> = std::iter::from_fn(|| rx.try_recv().ok())
+            .filter(|action| matches!(action, Action::SendMessageEdited(..)))
+            .collect();
+        assert_eq!(edits, [Action::SendMessageEdited(10, String::new())]);
+
+        // A text message can't be emptied
+        window.update(Action::EditMessage(11, String::new()));
+        window.update(Action::PromptSendMessage);
+        assert!(
+            std::iter::from_fn(|| rx.try_recv().ok())
+                .all(|action| !matches!(action, Action::SendMessageEdited(..)))
+        );
+    }
+}
