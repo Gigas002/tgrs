@@ -58,3 +58,25 @@ fn execute_reports_errors() {
     let err = execute::execute(&serde_json::json!({"@type": "noSuchRequest"})).unwrap_err();
     assert!(!err.is_empty());
 }
+
+#[test]
+fn albums_hold_ten_files_split_evenly() {
+    let paths = |n: usize| (0..n).map(|i| i.to_string()).collect::<Vec<_>>();
+    let sizes = |n| {
+        album_groups(&paths(n))
+            .iter()
+            .map(|g| g.len())
+            .collect::<Vec<_>>()
+    };
+    assert!(sizes(0).is_empty());
+    assert_eq!(sizes(1), [1]);
+    assert_eq!(sizes(2), [2]);
+    assert_eq!(sizes(10), [10]);
+    // No album is left with a single file
+    assert_eq!(sizes(11), [6, 5]);
+    assert_eq!(sizes(21), [7, 7, 7]);
+    // The order is kept
+    let all = paths(12);
+    let groups = album_groups(&all);
+    assert_eq!(groups.concat(), all);
+}

@@ -679,6 +679,10 @@ pub enum Action {
     PromptPasteImage,
     /// Send this file with this caption (none if empty), maybe as a reply.
     SendFile(String, String, Option<TdMessageReplyToMessage>),
+    /// Send these files as albums, the first with this caption, maybe as a reply.
+    SendAlbum(Vec<String>, String, Option<TdMessageReplyToMessage>),
+    /// Attach this file to the prompt, to send it with others.
+    AttachFile(String),
 }
 /// Implement the `Action` enum.
 impl Action {

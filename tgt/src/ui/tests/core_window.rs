@@ -927,3 +927,19 @@ fn a_picked_file_goes_to_the_prompt_for_its_caption() {
         None
     )));
 }
+
+#[test]
+fn files_attached_in_the_explorer_go_to_the_prompt() {
+    let mut window = create_test_core_window();
+    let tx = window.app_context.action_tx().clone();
+    window.register_action_handler(tx).unwrap();
+    window.update(Action::ShowFileUploadExplorer);
+    window.update(Action::AttachFile("/tmp/a.jpg".into()));
+    sent_actions(&window);
+    window.update(Action::UploadFile("/tmp/b.jpg".into()));
+    assert!(sent_actions(&window).contains(&Action::SendAlbum(
+        vec!["/tmp/a.jpg".into(), "/tmp/b.jpg".into()],
+        String::new(),
+        None
+    )));
+}

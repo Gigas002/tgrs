@@ -24,6 +24,8 @@ pub struct FileUploadExplorer {
     focused: bool,
     visible: bool,
     explorer: FileExplorer,
+    /// Files attached with `a` since the explorer opened, sent together.
+    attached: usize,
 }
 
 impl FileUploadExplorer {
@@ -50,6 +52,7 @@ impl FileUploadExplorer {
             focused: false,
             visible: false,
             explorer,
+            attached: 0,
         }
     }
 
@@ -132,6 +135,7 @@ impl Component for FileUploadExplorer {
             Action::ShowFileUploadExplorer => {
                 self.visible = true;
                 self.focused = true;
+                self.attached = 0;
 
                 self.explorer
                     .set_theme(Self::build_explorer_theme(Arc::clone(&self.app_context)));
@@ -176,6 +180,24 @@ impl Component for FileUploadExplorer {
                                     filename
                                 )));
                             }
+                        }
+                    }
+                    // Attach and keep browsing, to send several files together
+                    KeyCode::Char('a') => {
+                        let current = self.explorer.current();
+                        let message = if current.is_dir {
+                            None
+                        } else if current.path.is_file() {
+                            self.attached += 1;
+                            Some(Action::AttachFile(current.path.display().to_string()))
+                        } else {
+                            Some(Action::StatusMessage(format!(
+                                "Selected path is not a file: {}",
+                                current.name
+                            )))
+                        };
+                        if let (Some(tx), Some(message)) = (self.action_tx.as_ref(), message) {
+                            let _ = tx.send(message);
                         }
                     }
                     KeyCode::Esc | KeyCode::Char('q') => {
@@ -237,7 +259,10 @@ impl Component for FileUploadExplorer {
             Span::styled(selected_label, self.app_context.style_timestamp()),
             Span::raw("  "),
             Span::styled(
-                "Enter=upload  Esc/q=cancel",
+                match self.attached {
+                    0 => "Enter=upload  a=attach more  Esc/q=cancel".to_owned(),
+                    n => format!("Enter=upload with the {n} attached  a=attach more  Esc/q=close"),
+                },
                 self.app_context.style_timestamp(),
             ),
         ])];

@@ -502,7 +502,7 @@ mod attachments {
 
     fn sent_files(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Action>) -> Vec<Action> {
         std::iter::from_fn(|| rx.try_recv().ok())
-            .filter(|action| matches!(action, Action::SendFile(..)))
+            .filter(|action| matches!(action, Action::SendFile(..) | Action::SendAlbum(..)))
             .collect()
     }
 
@@ -530,13 +530,54 @@ mod attachments {
         window.update(Action::PromptSendMessage);
         assert_eq!(
             sent_files(&mut rx),
-            [
-                Action::SendFile(a.display().to_string(), "look".into(), None),
-                Action::SendFile(b.display().to_string(), String::new(), None),
-            ]
+            [Action::SendAlbum(
+                vec![a.display().to_string(), b.display().to_string()],
+                "look".into(),
+                None
+            )]
         );
         assert!(window.attachments.is_empty());
         assert_eq!(typed(&window), "");
+    }
+
+    #[test]
+    fn a_picked_file_joins_the_attached_ones_in_an_album() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::AttachFile("/tmp/a.jpg".into()));
+        window.update(Action::AttachFile("/tmp/b.jpg".into()));
+        assert_eq!(window.attachments.len(), 2);
+        window.update(Action::ReplyMessage(42, "q".into()));
+        window.update(Action::UploadFile("/tmp/c.jpg".into()));
+        assert_eq!(
+            sent_files(&mut rx),
+            [Action::SendAlbum(
+                vec![
+                    "/tmp/a.jpg".into(),
+                    "/tmp/b.jpg".into(),
+                    "/tmp/c.jpg".into()
+                ],
+                String::new(),
+                Some(TdMessageReplyToMessage {
+                    chat_id: 0,
+                    message_id: 42
+                })
+            )]
+        );
+        assert!(window.attachments.is_empty());
+    }
+
+    #[test]
+    fn attaching_while_editing_is_refused() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::EditMessage(10, "text".into()));
+        window.update(Action::AttachFile("/tmp/a.jpg".into()));
+        assert!(window.attachments.is_empty());
+        assert!(
+            std::iter::from_fn(|| rx.try_recv().ok()).any(|action| matches!(
+                action,
+                Action::StatusMessage(ref m) if m.contains("Finish editing")
+            ))
+        );
     }
 
     #[test]

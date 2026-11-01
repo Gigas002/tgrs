@@ -762,14 +762,12 @@ impl PromptWindow {
         }
         if let Some(tx) = self.action_tx.as_ref() {
             let path = |p: &PathBuf| p.display().to_string();
-            let _ = tx.send(Action::SendFile(
-                path(first),
-                caption.trim().to_owned(),
-                reply_to,
-            ));
-            for file in rest {
-                let _ = tx.send(Action::SendFile(path(file), String::new(), None));
-            }
+            let caption = caption.trim().to_owned();
+            let _ = tx.send(if rest.is_empty() {
+                Action::SendFile(path(first), caption, reply_to)
+            } else {
+                Action::SendAlbum(paths.iter().map(path).collect(), caption, reply_to)
+            });
         }
         // The caption was the draft: it's sent now
         self.save_draft();
@@ -1189,7 +1187,30 @@ impl Component for PromptWindow {
             Action::EditMessage(message_id, message) => {
                 self.input.edit_message(message_id, message);
             }
-            Action::UploadFile(path) => self.send_files(vec![PathBuf::from(path)]),
+            // A picked file goes with the files attached before it
+            Action::UploadFile(path) => {
+                let mut files = if self.can_attach() {
+                    std::mem::take(&mut self.attachments)
+                } else {
+                    Vec::new()
+                };
+                files.push(PathBuf::from(path));
+                self.send_files(files);
+            }
+            Action::AttachFile(path) => {
+                let message = if self.can_attach() {
+                    self.attachments.push(PathBuf::from(path));
+                    format!(
+                        "Attached {}: enter in the prompt sends them",
+                        attachment::names(&self.attachments)
+                    )
+                } else {
+                    "Finish editing the message before attaching files.".to_owned()
+                };
+                if let Some(tx) = self.action_tx.as_ref() {
+                    let _ = tx.send(Action::StatusMessage(message));
+                }
+            }
             // A sticker answered the message; the text stays
             Action::HideChatWindowReply if matches!(self.input.mode, Mode::Reply(_)) => {
                 self.input.mode = Mode::Normal;

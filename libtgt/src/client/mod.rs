@@ -966,18 +966,7 @@ impl Client {
     ) -> Result<tdlib_rs::types::Message, TdError> {
         self.store.clear_reply_message();
         let reply_to = reply_to.map(|r| InputMessageReplyTo::Message((&r).into()));
-        let caption = (!caption.trim().is_empty()).then(|| FormattedText {
-            text: caption,
-            entities: vec![],
-        });
-        let content = InputMessageContent::InputMessageDocument(InputMessageDocument {
-            document: tdlib_rs::types::InputDocument {
-                document: enums::InputFile::Local(InputFileLocal { path: file_path }),
-                thumbnail: None,
-                disable_content_type_detection: true,
-            },
-            caption,
-        });
+        let content = document_content(file_path, &caption);
         match functions::send_message(chat_id, topic, reply_to, None, content, self.client_id).await
         {
             Ok(enums::Message::Message(message)) => Ok(message),
@@ -986,6 +975,58 @@ impl Client {
                 Err(e)
             }
         }
+    }
+
+    /// Sends local files as albums of documents, at most [`ALBUM_SIZE`] in
+    /// each: the first file has `caption` (none if empty) and the first album
+    /// answers `reply_to`. A last single file goes as a plain document.
+    /// Clears the pending reply. Every group is tried; the first error is
+    /// returned.
+    pub async fn send_album(
+        &self,
+        file_paths: Vec<String>,
+        caption: String,
+        chat_id: i64,
+        topic: Option<MessageTopic>,
+        reply_to: Option<TdMessageReplyToMessage>,
+    ) -> Result<(), TdError> {
+        let mut caption = Some(caption);
+        let mut reply_to = reply_to;
+        let mut first_error = None;
+        for group in album_groups(&file_paths) {
+            let caption = caption.take().unwrap_or_default();
+            let reply = reply_to.take();
+            let sent = if let [path] = group {
+                self.send_document(path.clone(), caption, chat_id, topic.clone(), reply)
+                    .await
+                    .map(|_| ())
+            } else {
+                self.store.clear_reply_message();
+                let reply = reply.map(|r| InputMessageReplyTo::Message((&r).into()));
+                let contents = group
+                    .iter()
+                    .enumerate()
+                    .map(|(index, path)| {
+                        document_content(path.clone(), if index == 0 { &caption } else { "" })
+                    })
+                    .collect();
+                functions::send_message_album(
+                    chat_id,
+                    topic.clone(),
+                    reply,
+                    None,
+                    contents,
+                    self.client_id,
+                )
+                .await
+                .map(|_| ())
+                .inspect_err(|e| tracing::error!("Failed to send an album: {e:?}"))
+            };
+            if let Err(e) = sent {
+                first_error.get_or_insert(e);
+            }
+        }
+        first_error.map_or(Ok(()), Err)
     }
 
     /// Sends a sticker, to a forum topic when `topic` is given, and clears
@@ -1245,6 +1286,36 @@ impl Files {
             }
         }
     }
+}
+
+/// Most files in one album.
+pub const ALBUM_SIZE: usize = 10;
+
+/// `paths` in albums of at most [`ALBUM_SIZE`], sized evenly so that none
+/// is left with a single file when it can be avoided: 11 files are 6 and 5.
+pub fn album_groups(paths: &[String]) -> Vec<&[String]> {
+    if paths.is_empty() {
+        return Vec::new();
+    }
+    let albums = paths.len().div_ceil(ALBUM_SIZE);
+    let size = paths.len().div_ceil(albums);
+    paths.chunks(size).collect()
+}
+
+/// A local file as a document, with `caption` unless it's blank.
+fn document_content(file_path: String, caption: &str) -> InputMessageContent {
+    let caption = (!caption.trim().is_empty()).then(|| FormattedText {
+        text: caption.to_owned(),
+        entities: vec![],
+    });
+    InputMessageContent::InputMessageDocument(InputMessageDocument {
+        document: tdlib_rs::types::InputDocument {
+            document: enums::InputFile::Local(InputFileLocal { path: file_path }),
+            thumbnail: None,
+            disable_content_type_detection: true,
+        },
+        caption,
+    })
 }
 
 fn text_content(text: String) -> InputMessageContent {

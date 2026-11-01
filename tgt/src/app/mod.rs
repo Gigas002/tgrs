@@ -939,6 +939,28 @@ async fn handle_app_actions(
                     app_context.action_tx().send(Action::HideChatWindowReply)?;
                 }
             }
+            Action::SendAlbum(file_paths, caption, reply_to) => {
+                let chat_id = app_context.store().open_chat_id().as_i64();
+                if chat_id == 0 {
+                    continue;
+                }
+                let topic = app_context.store().open_send_topic();
+                let sent = client
+                    .send_album(
+                        file_paths.clone(),
+                        caption.clone(),
+                        chat_id,
+                        topic,
+                        reply_to.clone(),
+                    )
+                    .await;
+                if let Err(e) = sent {
+                    media::status(&app_context, format!("Files not sent: {}", e.message));
+                }
+                if reply_to.is_some() {
+                    app_context.action_tx().send(Action::HideChatWindowReply)?;
+                }
+            }
             Action::OpenMedia(message_id) => {
                 media::open(&app_context, client.files(), *message_id);
             }
