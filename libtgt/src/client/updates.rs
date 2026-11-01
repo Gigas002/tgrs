@@ -29,6 +29,8 @@ pub enum Notification {
     NewMessage(MessageAlert),
     /// Someone logged in to your account and the session isn't confirmed yet.
     NewSignIn(SignInAlert),
+    /// A followed download progressed or finished.
+    TransferChanged(i32),
 }
 
 /// Minimum gap between two [`Notification::ChatListChanged`] (~1 frame at 60fps).
@@ -120,6 +122,11 @@ async fn apply(
         }
         Update::User(update) => {
             store.users().insert(update.user.id, update.user);
+        }
+        Update::File(update) => {
+            if store.apply_file_update(&update.file) {
+                let _ = notify.send(Notification::TransferChanged(update.file.id));
+            }
         }
         Update::UnconfirmedSession(update) => {
             if let Some(alert) = update

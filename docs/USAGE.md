@@ -45,6 +45,7 @@ Like [concord](https://github.com/chojs23/concord): `left`/`right` move between 
 | `m`     | Your own profile.                            |
 | `e`     | [Edit your profile](#editing-your-profile).  |
 | `d`     | [Active sessions](#active-sessions).         |
+| `t`     | [Downloads](#downloads).                     |
 | `n`     | Open a chat by username.                     |
 | `b`     | [Blocked users](#blocking-and-reporting).    |
 | `?`     | List every key.                              |
@@ -150,9 +151,14 @@ You can also drop files on the terminal window: most terminals paste the paths o
 
 `tgt` doesn't play media itself. With `media-preview`, images (and the thumbnails of videos, GIFs and files) are previewed under their messages. Files are fetched from Telegram first when needed; progress and errors are shown in the status bar.
 
+- Downloads are listed by leader `t`, see [Downloads](#downloads).
 - Downloads never overwrite: `file.zip` becomes `file (1).zip`.
 - Programs and scripts (`.sh`, `.desktop`, `.AppImage`, `.jar`, ...) are never opened, only downloaded.
 - Only web, e-mail, phone and `tg:` links are opened; others, like `file:` links, are refused.
+
+### Downloads
+
+Leader `t` lists the files you've downloaded with `s` or opened with `x` since tgt started, latest first, with their progress: `⬇` downloading, `⏸` paused, `✓` done, `✗` cancelled or failed. `p` pauses a download, keeping what was downloaded, and resumes a paused (or failed) one from where it stopped; once done, it's opened or saved as you first asked, even if you've switched chats. `x` cancels a download and deletes what was downloaded of it, `enter` opens a finished file and `c` clears finished downloads from the list. Image previews in the chat aren't listed.
 
 ## Configuration
 

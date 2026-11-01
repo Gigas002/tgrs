@@ -20,7 +20,9 @@ use std::{
 
 use libtgt::{
     client::{Client, Notification},
-    model::{ReportStep, SignInAlert, TdMessageReplyToMessage, profile_change_failure},
+    model::{
+        ReportStep, SignInAlert, TdMessageReplyToMessage, TransferState, profile_change_failure,
+    },
     store::Store,
     tdlib_rs::enums::ChatList,
 };
@@ -271,6 +273,7 @@ fn handle_notification(
             notifier::show(alert, app_context.notifications().show_preview);
         }
         Notification::NewMessage(_) => {}
+        Notification::TransferChanged(_) => app_context.mark_dirty(),
         Notification::NewSignIn(alert) => {
             action_tx.send(Action::StatusMessage(sign_in_message(&alert)))?
         }
@@ -486,6 +489,14 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::ForwardPrevious
             | Action::ForwardToggleCopy
             | Action::ForwardConfirm
+            | Action::ShowDownloads
+            | Action::HideDownloads
+            | Action::DownloadsNext
+            | Action::DownloadsPrevious
+            | Action::DownloadsTogglePause
+            | Action::DownloadsCancel
+            | Action::DownloadsOpen
+            | Action::DownloadsClearFinished
             | Action::ShowSessions
             | Action::HideSessions
             | Action::SessionsLoaded(_)
@@ -959,6 +970,32 @@ async fn handle_app_actions(
                 }
                 if reply_to.is_some() {
                     app_context.action_tx().send(Action::HideChatWindowReply)?;
+                }
+            }
+            Action::PauseDownload(file_id) => {
+                let store = app_context.store();
+                store.set_transfer_state(*file_id, TransferState::Paused);
+                if let Err(e) = client.files().pause(*file_id).await {
+                    store.set_transfer_state(*file_id, TransferState::Downloading);
+                    media::status(&app_context, format!("Can't pause: {}", e.message));
+                }
+                app_context.mark_dirty();
+            }
+            Action::CancelDownload(file_id) => {
+                let store = app_context.store();
+                let before = store.transfer(*file_id).map(|t| t.state);
+                store.set_transfer_state(*file_id, TransferState::Cancelled);
+                if let Err(e) = client.files().cancel(*file_id).await {
+                    if let Some(state) = before {
+                        store.set_transfer_state(*file_id, state);
+                    }
+                    media::status(&app_context, format!("Can't cancel: {}", e.message));
+                }
+                app_context.mark_dirty();
+            }
+            Action::FetchMedia(file_id, purpose) => {
+                if let Some(transfer) = app_context.store().transfer(*file_id) {
+                    media::fetch(&app_context, client.files(), transfer.media, *purpose);
                 }
             }
             Action::OpenMedia(message_id) => {

@@ -1273,6 +1273,21 @@ pub struct Files {
 }
 
 impl Files {
+    /// Stops downloading a file, keeping what was downloaded to resume.
+    pub async fn pause(&self, file_id: i32) -> Result<(), TdError> {
+        functions::cancel_download_file(file_id, false, self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to pause download {file_id}: {e:?}"))
+    }
+
+    /// Stops downloading a file and deletes what was downloaded of it.
+    pub async fn cancel(&self, file_id: i32) -> Result<(), TdError> {
+        self.pause(file_id).await?;
+        functions::delete_file(file_id, self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to delete file {file_id}: {e:?}"))
+    }
+
     /// Downloads a file completely and returns its local path.
     pub async fn download(&self, file_id: i32) -> Result<String, TdError> {
         match functions::download_file(file_id, 32, 0, 0, true, self.client_id).await {

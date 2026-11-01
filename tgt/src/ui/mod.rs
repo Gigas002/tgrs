@@ -17,6 +17,7 @@ pub mod command_guide;
 pub mod component_name;
 pub mod component_traits;
 pub mod core_window;
+pub mod downloads;
 pub mod edit_profile;
 pub mod file_upload_explorer;
 pub mod find_chat;

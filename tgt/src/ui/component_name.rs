@@ -52,13 +52,15 @@ pub enum ComponentName {
     Sessions,
     /// Picks a chat to forward messages to.
     Forward,
+    /// The downloads started from messages.
+    Downloads,
     /// The leader menu (Space), like concord's.
     LeaderMenu,
 }
 
 impl ComponentName {
     /// Every component, in a fixed order.
-    pub const ALL: [Self; 25] = [
+    pub const ALL: [Self; 26] = [
         Self::CoreWindow,
         Self::ChatList,
         Self::ArchiveList,
@@ -83,11 +85,12 @@ impl ComponentName {
         Self::BlockedList,
         Self::Sessions,
         Self::Forward,
+        Self::Downloads,
         Self::LeaderMenu,
     ];
 
     /// The popups (modal overlays); only one is shown at a time.
-    pub const POPUPS: [Self; 16] = [
+    pub const POPUPS: [Self; 17] = [
         Self::CommandGuide,
         Self::SearchOverlay,
         Self::MessageActions,
@@ -103,6 +106,7 @@ impl ComponentName {
         Self::BlockedList,
         Self::Sessions,
         Self::Forward,
+        Self::Downloads,
         Self::LeaderMenu,
     ];
 
@@ -140,6 +144,7 @@ impl Display for ComponentName {
             ComponentName::BlockedList => write!(f, "Blocked List"),
             ComponentName::Sessions => write!(f, "Sessions"),
             ComponentName::Forward => write!(f, "Forward"),
+            ComponentName::Downloads => write!(f, "Downloads"),
             ComponentName::LeaderMenu => write!(f, "Leader Menu"),
         }
     }

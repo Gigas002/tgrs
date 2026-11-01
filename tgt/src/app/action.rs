@@ -3,7 +3,7 @@ use std::str::FromStr;
 use crossterm::event::{KeyCode, KeyModifiers};
 use libtgt::model::{
     BlockedSender, ProfileChange, ProfileField, ReportStep, SessionEntry, StickerEntry,
-    StickerSetEntry, TdChatList, TdMessageReplyToMessage, TdMessageSender,
+    StickerSetEntry, TdChatList, TdMessageReplyToMessage, TdMessageSender, TransferPurpose,
 };
 use ratatui::layout::Rect;
 
@@ -482,6 +482,29 @@ pub enum Action {
     /// Forward messages.
     ForwardMessages(ForwardRequest),
 
+    /// List the downloads started from messages.
+    ShowDownloads,
+    /// Close the downloads list.
+    HideDownloads,
+    /// Highlight the next download.
+    DownloadsNext,
+    /// Highlight the previous download.
+    DownloadsPrevious,
+    /// Pause the highlighted download, or resume it.
+    DownloadsTogglePause,
+    /// Cancel the highlighted download, deleting what was downloaded.
+    DownloadsCancel,
+    /// Open the highlighted download once it's done.
+    DownloadsOpen,
+    /// Take finished downloads off the list.
+    DownloadsClearFinished,
+    /// Pause downloading this file.
+    PauseDownload(i32),
+    /// Cancel downloading this file and delete what was downloaded.
+    CancelDownload(i32),
+    /// Download a followed file (again) and open or save it.
+    FetchMedia(i32, TransferPurpose),
+
     /// List your active sessions.
     ShowSessions,
     /// Close the session list.
@@ -808,6 +831,14 @@ impl FromStr for Action {
             "profile_scroll_down" => Ok(Action::ProfileScrollDown),
             "profile_scroll_up" => Ok(Action::ProfileScrollUp),
             "show_edit_profile" => Ok(Action::ShowEditProfile),
+            "show_downloads" => Ok(Action::ShowDownloads),
+            "hide_downloads" => Ok(Action::HideDownloads),
+            "downloads_next" => Ok(Action::DownloadsNext),
+            "downloads_previous" => Ok(Action::DownloadsPrevious),
+            "downloads_toggle_pause" => Ok(Action::DownloadsTogglePause),
+            "downloads_cancel" => Ok(Action::DownloadsCancel),
+            "downloads_open" => Ok(Action::DownloadsOpen),
+            "downloads_clear_finished" => Ok(Action::DownloadsClearFinished),
             "show_sessions" => Ok(Action::ShowSessions),
             "hide_sessions" => Ok(Action::HideSessions),
             "sessions_next" => Ok(Action::SessionsNext),

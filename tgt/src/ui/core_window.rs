@@ -17,6 +17,7 @@ use crate::{
         chat_window::ChatWindow,
         command_guide::CommandGuide,
         component_traits::{Component, HandleFocus},
+        downloads::Downloads,
         edit_profile::EditProfile,
         file_upload_explorer::FileUploadExplorer,
         find_chat::FindChat,
@@ -89,6 +90,8 @@ pub struct CoreWindow {
     focus_before_sessions: Option<ComponentName>,
     /// The pane focused when the forward popup opened, focused again after.
     focus_before_forward: Option<ComponentName>,
+    /// The pane focused when the downloads opened, focused again after.
+    focus_before_downloads: Option<ComponentName>,
     /// The size of the message reply component.
     size_message_reply: u16,
     /// The size of the chat list component.
@@ -202,6 +205,12 @@ impl CoreWindow {
                     .new_boxed(),
             ),
             (
+                ComponentName::Downloads,
+                Downloads::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::Downloads.to_string())
+                    .new_boxed(),
+            ),
+            (
                 ComponentName::Forward,
                 Forward::new(Arc::clone(&app_context))
                     .with_name(ComponentName::Forward.to_string())
@@ -295,6 +304,7 @@ impl CoreWindow {
             focus_before_blocked_list: None,
             focus_before_sessions: None,
             focus_before_forward: None,
+            focus_before_downloads: None,
             size_message_reply,
             small_area,
             component_focused,
@@ -545,6 +555,7 @@ impl CoreWindow {
             ComponentName::BlockedList => Action::HideBlockedList,
             ComponentName::Sessions => Action::HideSessions,
             ComponentName::Forward => Action::HideForward,
+            ComponentName::Downloads => Action::HideDownloads,
             ComponentName::LeaderMenu => Action::HideLeaderMenu,
             _ => return None,
         })
@@ -907,6 +918,14 @@ impl Component for CoreWindow {
             Action::HideForward => {
                 let refocus = self.focus_before_forward.take();
                 self.close_popup(ComponentName::Forward, refocus);
+            }
+            Action::ShowDownloads => {
+                self.focus_before_downloads = self.component_focused.filter(|c| !c.is_popup());
+                self.show_popup(ComponentName::Downloads, action);
+            }
+            Action::HideDownloads => {
+                let refocus = self.focus_before_downloads.take();
+                self.close_popup(ComponentName::Downloads, refocus);
             }
             Action::ShowSessions => {
                 self.focus_before_sessions = self.component_focused.filter(|c| !c.is_popup());

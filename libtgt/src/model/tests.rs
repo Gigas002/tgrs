@@ -1163,3 +1163,57 @@ mod session {
         assert_eq!(unknown.text(), "New sign-in on a new device");
     }
 }
+
+mod transfer {
+    use crate::model::{Media, MediaFile, MediaKind, Transfer, TransferPurpose, TransferState};
+
+    pub(crate) fn media(id: i32, name: &str, size: i64) -> Media {
+        Media {
+            kind: MediaKind::Document,
+            file: MediaFile {
+                id,
+                size,
+                ..MediaFile::default()
+            },
+            file_name: name.into(),
+            mime_type: String::new(),
+            duration_secs: 0,
+            preview: None,
+            thumbnail: None,
+        }
+    }
+
+    #[test]
+    fn progress_reads_as_amount_percent_and_state() {
+        let mut transfer =
+            Transfer::new(media(1, "a.zip", 4 * 1024 * 1024), TransferPurpose::Save, 0);
+        assert_eq!(transfer.name, "a.zip");
+        transfer.downloaded = 1024 * 1024;
+        assert_eq!(transfer.percent(), Some(25));
+        assert_eq!(
+            transfer.status_text(),
+            "1.0 MiB / 4.0 MiB · 25% · downloading"
+        );
+        transfer.state = TransferState::Paused;
+        assert!(transfer.status_text().ends_with("25% · paused"));
+        assert!(!transfer.is_finished());
+
+        transfer.state = TransferState::Done;
+        assert_eq!(transfer.percent(), Some(100));
+        assert_eq!(transfer.status_text(), "4.0 MiB · done");
+        assert!(transfer.is_finished());
+
+        transfer.state = TransferState::Failed("no space".into());
+        assert!(transfer.status_text().ends_with("failed: no space"));
+        transfer.state = TransferState::Cancelled;
+        assert_eq!(transfer.status_text(), "cancelled");
+    }
+
+    #[test]
+    fn an_unknown_size_has_no_percent() {
+        let mut transfer = Transfer::new(media(1, "a.zip", 0), TransferPurpose::Open, 0);
+        transfer.downloaded = 2048;
+        assert_eq!(transfer.percent(), None);
+        assert_eq!(transfer.status_text(), "2.0 KiB · downloading");
+    }
+}

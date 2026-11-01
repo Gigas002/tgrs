@@ -292,6 +292,22 @@ keymap = [
   { keys = ["tab"], command = "forward_toggle_copy", description = "Toggle forwarding without the author"},
 ]
 
+# The downloads key bindings are only usable in the list of downloads
+# (space t).
+[downloads]
+keymap = [
+  { keys = ["esc"], command = "hide_downloads", description = "Close the downloads"},
+  { keys = ["q"], command = "hide_downloads", description = "Close the downloads"},
+  { keys = ["p"], command = "downloads_toggle_pause", description = "Pause or resume the download"},
+  { keys = ["x"], command = "downloads_cancel", description = "Cancel the download, deleting what was downloaded"},
+  { keys = ["enter"], command = "downloads_open", description = "Open the downloaded file"},
+  { keys = ["c"], command = "downloads_clear_finished", description = "Clear finished downloads from the list"},
+  { keys = ["up"], command = "downloads_previous", description = "Previous"},
+  { keys = ["k"], command = "downloads_previous", description = "Previous"},
+  { keys = ["down"], command = "downloads_next", description = "Next"},
+  { keys = ["j"], command = "downloads_next", description = "Next"},
+]
+
 # The sessions key bindings are only usable in the list of your active
 # sessions (space d). Logging out asks for the same key a second time.
 [sessions]
@@ -367,6 +383,7 @@ keymap = [
   { keys = ["m"], command = "show_my_profile", description = "Your profile"},
   { keys = ["e"], command = "show_edit_profile", description = "Edit your profile"},
   { keys = ["d"], command = "show_sessions", description = "Active sessions (devices)"},
+  { keys = ["t"], command = "show_downloads", description = "Downloads (transfers)"},
   { keys = ["n"], command = "show_find_chat", description = "Open a chat by username"},
   { keys = ["b"], command = "show_blocked_list", description = "Blocked users"},
   { keys = ["?"], command = "show_command_guide", description = "Help: every key"},

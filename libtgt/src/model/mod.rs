@@ -13,6 +13,7 @@ pub mod session;
 pub mod sticker;
 pub mod td_enums;
 pub mod topic;
+pub mod transfer;
 pub mod username;
 
 #[cfg(test)]
@@ -34,4 +35,5 @@ pub use session::{DeviceKind, SessionEntry, SignInAlert, session_entries};
 pub use sticker::{StickerEntry, StickerSetEntry};
 pub use td_enums::{TdChatList, TdMessageReplyTo, TdMessageReplyToMessage, TdMessageSender};
 pub use topic::TopicEntry;
+pub use transfer::{Transfer, TransferPurpose, TransferState};
 pub use username::parse_username;

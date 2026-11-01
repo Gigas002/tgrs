@@ -3,7 +3,7 @@
 //! The client's update loop writes here; the UI reads through the accessors.
 
 use std::collections::{BTreeSet, HashMap};
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
 
 use tdlib_rs::{
@@ -15,8 +15,9 @@ use tdlib_rs::{
 };
 
 use crate::model::{
-    ChatKind, ChatListEntry, ChatState, MessageAlert, MessageEntry, OrderedChat, Profile,
-    ProfileEdit, ProfileSource, TdMessageSender, TopicEntry, draft_text, format_timestamp,
+    ChatKind, ChatListEntry, ChatState, Media, MessageAlert, MessageEntry, OrderedChat, Profile,
+    ProfileEdit, ProfileSource, TdMessageSender, TopicEntry, Transfer, TransferPurpose,
+    TransferState, draft_text, format_timestamp,
     ids::{AtomicChatId, AtomicMessageId, ChatId, MessageId},
     profile::{birthdate_text, member_count_text, user_status_text},
 };
@@ -35,6 +36,10 @@ const ARCHIVE_PREVIEW_CHATS: usize = 10;
 
 #[derive(Debug)]
 pub struct Store {
+    /// Downloads the user started, by file ID.
+    transfers: Mutex<HashMap<i32, Transfer>>,
+    /// Counts started downloads, to list newer first.
+    transfers_started: AtomicU64,
     users: Mutex<HashMap<i64, User>>,
     basic_groups: Mutex<HashMap<i64, BasicGroup>>,
     supergroups: Mutex<HashMap<i64, Supergroup>>,
@@ -632,6 +637,68 @@ impl Store {
         self.users().get(&user_id).cloned()
     }
 
+    /// Starts following a download of `media` for `purpose`, or follows it
+    /// again as downloading when it's resumed or downloaded once more.
+    pub fn start_transfer(&self, media: &Media, purpose: TransferPurpose) {
+        let started = self.transfers_started.fetch_add(1, Ordering::Relaxed);
+        let mut transfers = self.transfers.lock().unwrap();
+        let transfer = transfers
+            .entry(media.file.id)
+            .or_insert_with(|| Transfer::new(media.clone(), purpose, started));
+        transfer.purpose = purpose;
+        transfer.state = TransferState::Downloading;
+        transfer.started = started;
+    }
+
+    /// A download being followed.
+    pub fn transfer(&self, file_id: i32) -> Option<Transfer> {
+        self.transfers.lock().unwrap().get(&file_id).cloned()
+    }
+
+    /// The downloads being followed, the latest started first.
+    pub fn transfers(&self) -> Vec<Transfer> {
+        let mut transfers: Vec<Transfer> =
+            self.transfers.lock().unwrap().values().cloned().collect();
+        transfers.sort_by_key(|t| std::cmp::Reverse(t.started));
+        transfers
+    }
+
+    /// Sets the state of a followed download.
+    pub fn set_transfer_state(&self, file_id: i32, state: TransferState) {
+        if let Some(transfer) = self.transfers.lock().unwrap().get_mut(&file_id) {
+            transfer.state = state;
+        }
+    }
+
+    /// Takes in TDLib's progress of a file; whether it's a followed download.
+    /// A paused or cancelled download stays so, whatever TDLib reports.
+    pub fn apply_file_update(&self, file: &tdlib_rs::types::File) -> bool {
+        let mut transfers = self.transfers.lock().unwrap();
+        let Some(transfer) = transfers.get_mut(&file.id) else {
+            return false;
+        };
+        transfer.downloaded = file.local.downloaded_size;
+        if file.size > 0 {
+            transfer.size = file.size;
+        } else if file.expected_size > 0 {
+            transfer.size = file.expected_size;
+        }
+        if file.local.is_downloading_completed {
+            transfer.state = TransferState::Done;
+            transfer.media.file.local_path = file.local.path.clone();
+            transfer.media.file.is_downloaded = true;
+        }
+        true
+    }
+
+    /// Stops following finished downloads (done, cancelled or failed).
+    pub fn clear_finished_transfers(&self) {
+        self.transfers
+            .lock()
+            .unwrap()
+            .retain(|_, t| !t.is_finished());
+    }
+
     /// Your profile as the edit popup starts it: your name, the editable
     /// username and the bio, which is empty until your full info is loaded.
     /// None until TDLib has sent your user.
@@ -876,6 +943,8 @@ impl Store {
 impl Default for Store {
     fn default() -> Self {
         Self {
+            transfers: Mutex::default(),
+            transfers_started: AtomicU64::new(0),
             users: Mutex::default(),
             basic_groups: Mutex::default(),
             supergroups: Mutex::default(),

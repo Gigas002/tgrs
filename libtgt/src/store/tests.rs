@@ -711,3 +711,102 @@ mod profile {
         assert_eq!(profile.status, "42");
     }
 }
+
+mod transfers {
+    use crate::model::{Media, MediaFile, MediaKind};
+    use crate::model::{TransferPurpose, TransferState};
+    use crate::store::Store;
+
+    fn media(id: i32, name: &str) -> Media {
+        Media {
+            kind: MediaKind::Document,
+            file: MediaFile {
+                id,
+                size: 100,
+                ..MediaFile::default()
+            },
+            file_name: name.into(),
+            mime_type: String::new(),
+            duration_secs: 0,
+            preview: None,
+            thumbnail: None,
+        }
+    }
+
+    fn progress(id: i32, downloaded: i64, done: bool) -> tdlib_rs::types::File {
+        tdlib_rs::types::File {
+            id,
+            size: 100,
+            local: tdlib_rs::types::LocalFile {
+                path: if done {
+                    "/cache/a.zip".into()
+                } else {
+                    String::new()
+                },
+                downloaded_size: downloaded,
+                is_downloading_completed: done,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn downloads_are_listed_latest_first() {
+        let store = Store::default();
+        store.start_transfer(&media(1, "a.zip"), TransferPurpose::Save);
+        store.start_transfer(&media(2, "b.pdf"), TransferPurpose::Open);
+        let names: Vec<String> = store.transfers().into_iter().map(|t| t.name).collect();
+        assert_eq!(names, ["b.pdf", "a.zip"]);
+        // Starting one again (a resume) moves it up and keeps one entry
+        store.start_transfer(&media(1, "a.zip"), TransferPurpose::Open);
+        let transfers = store.transfers();
+        assert_eq!(transfers.len(), 2);
+        assert_eq!(transfers[0].name, "a.zip");
+        assert_eq!(transfers[0].purpose, TransferPurpose::Open);
+    }
+
+    #[test]
+    fn tdlib_progress_updates_followed_downloads_only() {
+        let store = Store::default();
+        assert!(!store.apply_file_update(&progress(1, 10, false)));
+        store.start_transfer(&media(1, "a.zip"), TransferPurpose::Save);
+        assert!(store.apply_file_update(&progress(1, 40, false)));
+        assert_eq!(store.transfer(1).unwrap().downloaded, 40);
+
+        // A pause holds while TDLib reports the last progress
+        store.set_transfer_state(1, TransferState::Paused);
+        store.apply_file_update(&progress(1, 45, false));
+        let paused = store.transfer(1).unwrap();
+        assert_eq!(
+            (paused.downloaded, paused.state),
+            (45, TransferState::Paused)
+        );
+
+        store.set_transfer_state(1, TransferState::Downloading);
+        store.apply_file_update(&progress(1, 100, true));
+        let done = store.transfer(1).unwrap();
+        assert_eq!(done.state, TransferState::Done);
+        assert_eq!(done.media.file.downloaded_path(), None, "not on this disk");
+        assert_eq!(done.media.file.local_path, "/cache/a.zip");
+    }
+
+    #[test]
+    fn clearing_keeps_unfinished_downloads() {
+        let store = Store::default();
+        for (id, state) in [
+            (1, TransferState::Downloading),
+            (2, TransferState::Paused),
+            (3, TransferState::Done),
+            (4, TransferState::Cancelled),
+            (5, TransferState::Failed("x".into())),
+        ] {
+            store.start_transfer(&media(id, &id.to_string()), TransferPurpose::Save);
+            store.set_transfer_state(id, state);
+        }
+        store.clear_finished_transfers();
+        let mut ids: Vec<i32> = store.transfers().into_iter().map(|t| t.file_id).collect();
+        ids.sort();
+        assert_eq!(ids, [1, 2]);
+    }
+}

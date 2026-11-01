@@ -943,3 +943,13 @@ fn files_attached_in_the_explorer_go_to_the_prompt() {
         None
     )));
 }
+
+#[test]
+fn the_downloads_give_the_focus_back() {
+    let mut window = create_test_core_window();
+    window.focus_only(Some(ComponentName::Chat));
+    window.update(Action::ShowDownloads);
+    assert_eq!(window.component_focused, Some(ComponentName::Downloads));
+    window.update(Action::HideDownloads);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+}
