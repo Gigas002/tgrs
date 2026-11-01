@@ -1217,3 +1217,67 @@ mod transfer {
         assert_eq!(transfer.status_text(), "2.0 KiB · downloading");
     }
 }
+
+mod storage {
+    use crate::model::storage::*;
+    use tdlib_rs::types::{StorageStatistics, StorageStatisticsByChat, StorageStatisticsFast};
+
+    fn chat(chat_id: i64, size: i64, count: i32) -> StorageStatisticsByChat {
+        StorageStatisticsByChat {
+            chat_id,
+            size,
+            count,
+            by_file_type: Vec::new(),
+        }
+    }
+
+    fn usage() -> StorageUsage {
+        let fast = StorageStatisticsFast {
+            files_size: 1,
+            file_count: 1,
+            database_size: 3 * 1024 * 1024,
+            language_pack_database_size: 1024 * 1024,
+            log_size: 2048,
+        };
+        let stats = StorageStatistics {
+            size: 10 * 1024 * 1024,
+            count: 7,
+            by_chat: vec![
+                chat(5, 1024 * 1024, 2),
+                chat(0, 0, 0),
+                chat(9, 8 * 1024 * 1024, 4),
+                chat(0, 1024, 1),
+            ],
+        };
+        StorageUsage::new(&fast, &stats, |chat_id| {
+            (chat_id == 9).then(|| "Rust".to_owned())
+        })
+    }
+
+    #[test]
+    fn chats_are_biggest_first_without_empty_ones() {
+        let usage = usage();
+        let ids: Vec<i64> = usage.chats.iter().map(|chat| chat.chat_id).collect();
+        assert_eq!(ids, [9, 5, 0]);
+    }
+
+    #[test]
+    fn chats_are_named_by_title_or_id() {
+        let usage = usage();
+        assert_eq!(usage.chats[0].summary(), "Rust · 8.0 MiB · 4 files");
+        assert_eq!(usage.chats[1].summary(), "Chat 5 · 1.0 MiB · 2 files");
+        assert_eq!(usage.chats[2].summary(), "Other files · 1.0 KiB · 1 file");
+    }
+
+    #[test]
+    fn totals_use_exact_file_sizes_and_both_databases() {
+        let usage = usage();
+        assert_eq!(usage.files_size, 10 * 1024 * 1024);
+        assert_eq!(usage.database_size, 4 * 1024 * 1024);
+        assert_eq!(usage.total(), 14 * 1024 * 1024 + 2048);
+        assert_eq!(
+            usage.summary(),
+            "Files 10.0 MiB (7 files) · Database 4.0 MiB · Log 2.0 KiB"
+        );
+    }
+}

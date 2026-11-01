@@ -356,16 +356,23 @@ impl ChatWindow {
     /// Wraps each line with a border span on one side only (reply-target border-only highlight).
     /// Messages from others: `│` at the start of each line. Messages from me: `│` at the end.
     /// This keeps borders aligned and avoids broken vertical bars under each other.
-    /// The image shown under a media message in the chat.
+    /// The image shown under a media message in the chat: one downloaded
+    /// already, or one `[media]` lets load without being asked.
     #[cfg(feature = "media-preview")]
-    fn preview_file(entry: &MessageEntry) -> Option<&libtgt::model::MediaFile> {
-        entry.media()?.inline_preview()
+    fn preview_file(
+        media: crate::settings::Media,
+        entry: &MessageEntry,
+    ) -> Option<&libtgt::model::MediaFile> {
+        entry
+            .media()?
+            .inline_preview()
+            .filter(|file| file.downloaded_path().is_some() || media.auto_downloads(file.size))
     }
 
     /// Rows reserved under a message for its preview.
-    fn preview_rows(_entry: &MessageEntry) -> u16 {
+    fn preview_rows(_media: crate::settings::Media, _entry: &MessageEntry) -> u16 {
         #[cfg(feature = "media-preview")]
-        if Self::preview_file(_entry).is_some() {
+        if Self::preview_file(_media, _entry).is_some() {
             return crate::ui::preview::CHAT_PREVIEW_ROWS;
         }
         0
@@ -667,14 +674,14 @@ impl Component for ChatWindow {
                 first_unread: first_unread == Some(index),
                 selected: selected == Some(index),
                 reply_target: reply_message_id != 0 && entry.id() == reply_message_id,
-                preview_rows: Self::preview_rows(entry),
+                preview_rows: Self::preview_rows(self.app_context.media(), entry),
             };
             let laid_out = message::message_lines(entry, row, &self.app_context, list_inner.width);
             #[cfg(feature = "media-preview")]
             slots.push(
                 laid_out
                     .preview_row
-                    .zip(Self::preview_file(entry))
+                    .zip(Self::preview_file(self.app_context.media(), entry))
                     .map(|(row, file)| (entry.id(), file.clone(), row)),
             );
             items.push(ListItem::new(laid_out.lines));

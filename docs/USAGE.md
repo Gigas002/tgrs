@@ -46,6 +46,7 @@ Like [concord](https://github.com/chojs23/concord): `left`/`right` move between 
 | `e`     | [Edit your profile](#editing-your-profile).  |
 | `d`     | [Active sessions](#active-sessions).         |
 | `t`     | [Downloads](#downloads).                     |
+| `S`     | [Storage and cache](#storage-and-cache).     |
 | `n`     | Open a chat by username.                     |
 | `b`     | [Blocked users](#blocking-and-reporting).    |
 | `?`     | List every key.                              |
@@ -159,6 +160,22 @@ You can also drop files on the terminal window: most terminals paste the paths o
 ### Downloads
 
 Leader `t` lists the files you've downloaded with `s` or opened with `x` since tgt started, latest first, with their progress: `⬇` downloading, `⏸` paused, `✓` done, `✗` cancelled or failed. `p` pauses a download, keeping what was downloaded, and resumes a paused (or failed) one from where it stopped; once done, it's opened or saved as you first asked, even if you've switched chats. `x` cancels a download and deletes what was downloaded of it, `enter` opens a finished file and `c` clears finished downloads from the list. Image previews in the chat aren't listed.
+
+### Storage and cache
+
+Leader `S` shows how much disk space Telegram takes: downloaded and cached files, the database and TDLib's log, then the 10 chats with the most files, biggest first. `C` deletes every cached file and `D` (or `delete`) the highlighted chat's; each asks for a second press. Messages stay, and files are downloaded again when needed. Files saved to `app.download_dir` are copies and aren't touched.
+
+The `[media]` section of `config.toml` sets what's downloaded on its own:
+
+```toml
+[media]
+auto_download_previews = true  # load chat previews without being asked
+max_preview_size_mb = 0        # skip bigger previews; 0 for no limit
+cache_max_size_mb = 0          # trim the cache to this size at startup; 0 keeps it
+cache_max_age_days = 0         # delete files unused this long at startup; 0 keeps them
+```
+
+Previews already downloaded always show. Files are only downloaded otherwise when you open (`x`) or save (`s`) them. Traffic limits and photo/video quality aren't configurable.
 
 ## Configuration
 

@@ -439,3 +439,59 @@ fn editing_a_media_message_edits_its_caption() {
         ]
     );
 }
+
+/// A photo whose chat preview is `size` bytes, on disk at `local_path` when given.
+#[cfg(feature = "media-preview")]
+fn photo_with_preview(size: i64, local_path: Option<&std::path::Path>) -> MessageEntry {
+    use libtgt::model::TdMessageSender;
+    use libtgt::model::{Media, MediaFile, MediaKind};
+    let thumbnail = MediaFile {
+        id: 3,
+        size,
+        is_downloaded: local_path.is_some(),
+        local_path: local_path
+            .map(|p| p.display().to_string())
+            .unwrap_or_default(),
+    };
+    let media = Media {
+        kind: MediaKind::Photo,
+        file: MediaFile {
+            id: 4,
+            ..MediaFile::default()
+        },
+        file_name: String::new(),
+        mime_type: "image/jpeg".to_owned(),
+        duration_secs: 0,
+        preview: None,
+        thumbnail: Some(thumbnail),
+    };
+    MessageEntry::with_media(1, TdMessageSender::User(1), media, 0)
+}
+
+#[cfg(feature = "media-preview")]
+#[test]
+fn previews_follow_the_media_settings() {
+    use crate::settings::Media;
+    let auto = Media {
+        auto_download_previews: true,
+        max_preview_size: 1000,
+        ..Media::default()
+    };
+    let manual = Media::default();
+    let small = photo_with_preview(1000, None);
+    let big = photo_with_preview(1001, None);
+    assert!(ChatWindow::preview_file(auto, &small).is_some());
+    assert!(ChatWindow::preview_file(auto, &big).is_none());
+    assert_eq!(ChatWindow::preview_rows(auto, &big), 0);
+    assert!(ChatWindow::preview_file(manual, &small).is_none());
+
+    // Downloaded ones show whatever the settings
+    let dir = std::env::temp_dir().join(format!("tgt-preview-test-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("thumb.jpg");
+    std::fs::write(&path, b"jpeg").unwrap();
+    let downloaded = photo_with_preview(5000, Some(&path));
+    assert!(ChatWindow::preview_file(manual, &downloaded).is_some());
+    assert!(ChatWindow::preview_rows(auto, &downloaded) > 0);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

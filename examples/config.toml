@@ -87,3 +87,15 @@
 # enabled = true
 # Include the message text; chats that hide previews in Telegram never show it.
 # show_preview = true
+
+[media]
+# Load the images shown under photos, videos and stickers in the chat without
+# being asked. When off, only previews already downloaded are shown; opening
+# or saving a file still downloads it.
+# auto_download_previews = true
+# Previews bigger than this (in MiB) aren't loaded automatically; 0 for no limit.
+# max_preview_size_mb = 0
+# At startup, trim the downloaded file cache to this size (in MiB); 0 keeps it all.
+# cache_max_size_mb = 0
+# At startup, delete cached files not used for this many days; 0 keeps them.
+# cache_max_age_days = 0

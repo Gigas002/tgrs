@@ -486,3 +486,41 @@ fn link_cycles_are_reported_not_fatal() {
     assert!(warnings.iter().any(|w| w.contains("cycle")), "{warnings:?}");
     assert_eq!(theme.style(HighlightGroup::Normal).fg, Some(Color::Reset));
 }
+
+#[test]
+fn media_defaults_load_previews_and_keep_the_cache() {
+    let media = Env::new().resolve(CliOverrides::default()).unwrap().media;
+    assert!(media.auto_download_previews);
+    assert!(media.auto_downloads(i64::MAX));
+    assert!(!media.trims_cache());
+}
+
+#[test]
+fn media_values_apply() {
+    let env = Env::new();
+    env.write_config(
+        "config.toml",
+        r#"
+        [media]
+        auto_download_previews = true
+        max_preview_size_mb = 2
+        cache_max_size_mb = 500
+        cache_max_age_days = 7
+        "#,
+    );
+    let media = env.resolve(CliOverrides::default()).unwrap().media;
+    assert_eq!(media.max_preview_size, 2 * 1024 * 1024);
+    assert!(media.auto_downloads(2 * 1024 * 1024));
+    assert!(!media.auto_downloads(2 * 1024 * 1024 + 1));
+    assert_eq!(media.cache_max_size, 500 * 1024 * 1024);
+    assert_eq!(media.cache_max_age, 7 * 86_400);
+    assert!(media.trims_cache());
+}
+
+#[test]
+fn previews_can_be_left_to_load_by_hand() {
+    let env = Env::new();
+    env.write_config("config.toml", "[media]\nauto_download_previews = false\n");
+    let media = env.resolve(CliOverrides::default()).unwrap().media;
+    assert!(!media.auto_downloads(1));
+}

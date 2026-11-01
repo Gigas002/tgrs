@@ -20,10 +20,13 @@ use tokio::task::JoinHandle;
 
 use crate::model::{
     BlockedSender, MessageEntry, ProfileChange, ProfileSource, ReportStep, SessionEntry,
-    StickerEntry, StickerSetEntry, TdChatList, TdMessageReplyToMessage, TdMessageSender,
-    TopicEntry, session_entries, text_draft,
+    StickerEntry, StickerSetEntry, StorageUsage, TdChatList, TdMessageReplyToMessage,
+    TdMessageSender, TopicEntry, session_entries, text_draft,
 };
 use crate::store::Store;
+
+/// The chats with the most files that the storage popup lists.
+const STORAGE_CHAT_LIMIT: i32 = 10;
 
 mod auth;
 mod execute;
@@ -659,6 +662,65 @@ impl Client {
         functions::terminate_all_other_sessions(self.client_id)
             .await
             .inspect_err(|e| tracing::error!("Failed to terminate other sessions: {e:?}"))
+    }
+
+    /// The disk space Telegram's files and database take, with the chats
+    /// that have the most files.
+    pub async fn storage_usage(&self) -> Result<StorageUsage, TdError> {
+        let enums::StorageStatisticsFast::StorageStatisticsFast(fast) =
+            functions::get_storage_statistics_fast(self.client_id)
+                .await
+                .inspect_err(|e| tracing::error!("Failed to get storage statistics: {e:?}"))?;
+        let enums::StorageStatistics::StorageStatistics(stats) =
+            functions::get_storage_statistics(STORAGE_CHAT_LIMIT, self.client_id)
+                .await
+                .inspect_err(|e| tracing::error!("Failed to get storage statistics: {e:?}"))?;
+        Ok(StorageUsage::new(&fast, &stats, |chat_id| {
+            self.store.name_from_chats(chat_id)
+        }))
+    }
+
+    /// Deletes cached files: those of `chat_id` only when given, else all of
+    /// them. Returns the bytes freed.
+    pub async fn clear_cache(&self, chat_id: Option<i64>) -> Result<i64, TdError> {
+        let enums::StorageStatistics::StorageStatistics(deleted) = functions::optimize_storage(
+            0,
+            0,
+            0,
+            0,
+            Vec::new(),
+            chat_id.into_iter().collect(),
+            Vec::new(),
+            true,
+            0,
+            self.client_id,
+        )
+        .await
+        .inspect_err(|e| tracing::error!("Failed to clear the cache: {e:?}"))?;
+        Ok(deleted.size)
+    }
+
+    /// Trims the file cache to `max_size` bytes and deletes files unused for
+    /// `max_age` seconds, as TDLib does on its own; 0 leaves either alone.
+    pub async fn trim_cache(&self, max_size: i64, max_age: i32) -> Result<i64, TdError> {
+        // TDLib's defaults (-1) would trim by the other limits too
+        let size = if max_size > 0 { max_size } else { i64::MAX };
+        let ttl = if max_age > 0 { max_age } else { i32::MAX };
+        let enums::StorageStatistics::StorageStatistics(deleted) = functions::optimize_storage(
+            size,
+            ttl,
+            i32::MAX,
+            -1,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            true,
+            0,
+            self.client_id,
+        )
+        .await
+        .inspect_err(|e| tracing::error!("Failed to trim the cache: {e:?}"))?;
+        Ok(deleted.size)
     }
 
     /// Confirms a new login as yours.

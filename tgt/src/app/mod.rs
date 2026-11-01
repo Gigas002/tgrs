@@ -21,7 +21,8 @@ use std::{
 use libtgt::{
     client::{Client, Notification},
     model::{
-        ReportStep, SignInAlert, TdMessageReplyToMessage, TransferState, profile_change_failure,
+        ReportStep, SignInAlert, TdMessageReplyToMessage, TransferState, format_size,
+        profile_change_failure,
     },
     store::Store,
     tdlib_rs::enums::ChatList,
@@ -137,6 +138,9 @@ async fn run_tui(
     app_context
         .action_tx()
         .send(Action::LoadChats(ChatList::Main.into(), INITIAL_CHATS))?;
+    if app_context.media().trims_cache() {
+        app_context.action_tx().send(Action::TrimCache)?;
+    }
 
     let (wake_tx, mut wake_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
     let refresh_tx = app_context.action_tx().clone();
@@ -497,6 +501,13 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::DownloadsCancel
             | Action::DownloadsOpen
             | Action::DownloadsClearFinished
+            | Action::ShowStorage
+            | Action::HideStorage
+            | Action::StorageLoaded(_)
+            | Action::StorageNext
+            | Action::StoragePrevious
+            | Action::StorageClearAll
+            | Action::StorageClearChat
             | Action::ShowSessions
             | Action::HideSessions
             | Action::SessionsLoaded(_)
@@ -795,6 +806,47 @@ async fn handle_app_actions(
                     )
                     .await;
                 media::status(&app_context, forward_status(request, count, result));
+            }
+            Action::ShowStorage => match client.storage_usage().await {
+                Ok(usage) => app_context.action_tx().send(Action::StorageLoaded(usage))?,
+                Err(e) => {
+                    media::status(&app_context, format!("No storage usage: {}", e.message));
+                    app_context.action_tx().send(Action::HideStorage)?;
+                }
+            },
+            Action::ClearCache(chat_id) => {
+                match client.clear_cache(*chat_id).await {
+                    Ok(freed) => {
+                        media::status(&app_context, format!("Freed {}", format_size(freed)))
+                    }
+                    Err(e) => media::status(
+                        &app_context,
+                        format!("Can't clear the cache: {}", e.message),
+                    ),
+                }
+                // Show what's left
+                if let Ok(usage) = client.storage_usage().await {
+                    app_context.action_tx().send(Action::StorageLoaded(usage))?;
+                }
+            }
+            Action::TrimCache => {
+                let limits = app_context.media();
+                match client
+                    .trim_cache(limits.cache_max_size, limits.cache_max_age)
+                    .await
+                {
+                    Ok(freed) if freed > 0 => {
+                        tracing::info!("trimmed the file cache by {freed} bytes");
+                        media::status(
+                            &app_context,
+                            format!("Cache trimmed: freed {}", format_size(freed)),
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(e) => {
+                        media::status(&app_context, format!("Can't trim the cache: {}", e.message))
+                    }
+                }
             }
             Action::ShowSessions => match client.active_sessions().await {
                 Ok(sessions) => app_context

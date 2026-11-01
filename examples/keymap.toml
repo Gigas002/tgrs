@@ -310,6 +310,19 @@ keymap = [
 
 # The sessions key bindings are only usable in the list of your active
 # sessions (space d). Logging out asks for the same key a second time.
+[storage]
+keymap = [
+  { keys = ["esc"], command = "hide_storage", description = "Close the storage popup"},
+  { keys = ["q"], command = "hide_storage", description = "Close the storage popup"},
+  { keys = ["C"], command = "storage_clear_all", description = "Delete all cached files (press twice)"},
+  { keys = ["D"], command = "storage_clear_chat", description = "Delete the chat's cached files (press twice)"},
+  { keys = ["delete"], command = "storage_clear_chat", description = "Delete the chat's cached files (press twice)"},
+  { keys = ["up"], command = "storage_previous", description = "Previous"},
+  { keys = ["k"], command = "storage_previous", description = "Previous"},
+  { keys = ["down"], command = "storage_next", description = "Next"},
+  { keys = ["j"], command = "storage_next", description = "Next"},
+]
+
 [sessions]
 keymap = [
   { keys = ["esc"], command = "hide_sessions", description = "Close the session list"},
@@ -384,6 +397,7 @@ keymap = [
   { keys = ["e"], command = "show_edit_profile", description = "Edit your profile"},
   { keys = ["d"], command = "show_sessions", description = "Active sessions (devices)"},
   { keys = ["t"], command = "show_downloads", description = "Downloads (transfers)"},
+  { keys = ["S"], command = "show_storage", description = "Storage usage and cache"},
   { keys = ["n"], command = "show_find_chat", description = "Open a chat by username"},
   { keys = ["b"], command = "show_blocked_list", description = "Blocked users"},
   { keys = ["?"], command = "show_command_guide", description = "Help: every key"},

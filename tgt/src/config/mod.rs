@@ -37,6 +37,7 @@ pub struct FileConfig {
     pub telegram: TelegramFile,
     pub credentials: CredentialsFile,
     pub notifications: NotificationsFile,
+    pub media: MediaFile,
 }
 
 /// `[app]`: terminal and UI behavior.
@@ -107,6 +108,16 @@ pub struct CredentialsFile {
 pub struct NotificationsFile {
     pub enabled: Option<bool>,
     pub show_preview: Option<bool>,
+}
+
+/// `[media]`: automatic downloads and the local file cache.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct MediaFile {
+    pub auto_download_previews: Option<bool>,
+    pub max_preview_size_mb: Option<u64>,
+    pub cache_max_size_mb: Option<u64>,
+    pub cache_max_age_days: Option<u64>,
 }
 
 /// Where the key of the encrypted TDLib database is kept.

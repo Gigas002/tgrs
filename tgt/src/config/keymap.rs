@@ -50,6 +50,7 @@ pub struct KeymapFile {
     pub sessions: Option<KeymapMode>,
     pub forward: Option<KeymapMode>,
     pub downloads: Option<KeymapMode>,
+    pub storage: Option<KeymapMode>,
     pub leader_menu: Option<KeymapMode>,
 }
 

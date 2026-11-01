@@ -39,6 +39,7 @@ pub mod search_overlay;
 pub mod sessions;
 pub mod status_bar;
 pub mod sticker_picker;
+pub mod storage;
 pub mod terminal;
 pub mod text_input;
 pub mod title_bar;

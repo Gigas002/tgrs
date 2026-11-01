@@ -9,7 +9,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
     app::action::Action,
-    settings::{App, Dirs, HighlightGroup, Keymap, Notifications, Settings, Theme},
+    settings::{App, Dirs, HighlightGroup, Keymap, Media, Notifications, Settings, Theme},
     ui::component_name::ComponentName,
 };
 
@@ -29,6 +29,7 @@ pub struct AppContext {
     app: App,
     keymap: Keymap,
     notifications: Notifications,
+    media: Media,
     dirs: Dirs,
     theme: Theme,
     /// Actions from components and background tasks to the run loop.
@@ -53,6 +54,7 @@ impl AppContext {
             app: settings.app.clone(),
             keymap: settings.keymap.clone(),
             notifications: settings.notifications,
+            media: settings.media,
             dirs: settings.dirs.clone(),
             theme: settings.theme.clone(),
             action_tx,
@@ -75,6 +77,10 @@ impl AppContext {
 
     pub fn notifications(&self) -> Notifications {
         self.notifications
+    }
+
+    pub fn media(&self) -> Media {
+        self.media
     }
 
     pub fn dirs(&self) -> &Dirs {

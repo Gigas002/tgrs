@@ -3,7 +3,8 @@ use std::str::FromStr;
 use crossterm::event::{KeyCode, KeyModifiers};
 use libtgt::model::{
     BlockedSender, ProfileChange, ProfileField, ReportStep, SessionEntry, StickerEntry,
-    StickerSetEntry, TdChatList, TdMessageReplyToMessage, TdMessageSender, TransferPurpose,
+    StickerSetEntry, StorageUsage, TdChatList, TdMessageReplyToMessage, TdMessageSender,
+    TransferPurpose,
 };
 use ratatui::layout::Rect;
 
@@ -505,6 +506,25 @@ pub enum Action {
     /// Download a followed file (again) and open or save it.
     FetchMedia(i32, TransferPurpose),
 
+    /// Show how much disk space Telegram takes.
+    ShowStorage,
+    /// Close the storage popup.
+    HideStorage,
+    /// The disk space used, to show.
+    StorageLoaded(StorageUsage),
+    /// Highlight the next chat.
+    StorageNext,
+    /// Highlight the previous chat.
+    StoragePrevious,
+    /// Delete every cached file (on the second press).
+    StorageClearAll,
+    /// Delete the highlighted chat's cached files (on the second press).
+    StorageClearChat,
+    /// Delete cached files: one chat's, or all of them.
+    ClearCache(Option<i64>),
+    /// Trim the file cache to the `[media]` limits.
+    TrimCache,
+
     /// List your active sessions.
     ShowSessions,
     /// Close the session list.
@@ -839,6 +859,12 @@ impl FromStr for Action {
             "downloads_cancel" => Ok(Action::DownloadsCancel),
             "downloads_open" => Ok(Action::DownloadsOpen),
             "downloads_clear_finished" => Ok(Action::DownloadsClearFinished),
+            "show_storage" => Ok(Action::ShowStorage),
+            "hide_storage" => Ok(Action::HideStorage),
+            "storage_next" => Ok(Action::StorageNext),
+            "storage_previous" => Ok(Action::StoragePrevious),
+            "storage_clear_all" => Ok(Action::StorageClearAll),
+            "storage_clear_chat" => Ok(Action::StorageClearChat),
             "show_sessions" => Ok(Action::ShowSessions),
             "hide_sessions" => Ok(Action::HideSessions),
             "sessions_next" => Ok(Action::SessionsNext),
