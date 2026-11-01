@@ -393,6 +393,21 @@ pub enum Action {
     ChatActionsConfirm,
     /// Run a command on the selected chat in a chat list, or the open chat.
     SelectedChat(ChatCommand),
+
+    /// Show the profile of the selected chat in a chat list, or the open chat.
+    ShowProfile,
+    /// Show your own profile.
+    ShowMyProfile,
+    /// Show the profile of this chat, loading its details.
+    ShowProfileFor(i64),
+    /// The details of this chat's profile have been loaded.
+    ProfileLoaded(i64),
+    /// Close the profile popup.
+    HideProfile,
+    /// Scroll the profile popup down a line.
+    ProfileScrollDown,
+    /// Scroll the profile popup up a line.
+    ProfileScrollUp,
     /// Run a command on a chat.
     RunChatCommand(ChatCommand, i64),
     /// Run the action highlighted in the message actions menu.
@@ -604,6 +619,11 @@ impl FromStr for Action {
             "chat_actions_next" => Ok(Action::ChatActionsNext),
             "chat_actions_previous" => Ok(Action::ChatActionsPrevious),
             "chat_actions_confirm" => Ok(Action::ChatActionsConfirm),
+            "show_profile" => Ok(Action::ShowProfile),
+            "show_my_profile" => Ok(Action::ShowMyProfile),
+            "hide_profile" => Ok(Action::HideProfile),
+            "profile_scroll_down" => Ok(Action::ProfileScrollDown),
+            "profile_scroll_up" => Ok(Action::ProfileScrollUp),
             "toggle_chat_mute" => Ok(Action::SelectedChat(ChatCommand::ToggleMute)),
             "toggle_chat_archive" => Ok(Action::SelectedChat(ChatCommand::ToggleArchive)),
             "toggle_chat_pin" => Ok(Action::SelectedChat(ChatCommand::TogglePin)),

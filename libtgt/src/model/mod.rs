@@ -5,6 +5,7 @@ pub mod chat;
 pub mod ids;
 pub mod message;
 pub mod ordered_chat;
+pub mod profile;
 pub mod sticker;
 pub mod td_enums;
 pub mod topic;
@@ -20,6 +21,7 @@ pub use message::{
     TextStyle, format_duration, format_size, format_timestamp, reaction_emoji,
 };
 pub use ordered_chat::OrderedChat;
+pub use profile::{Profile, ProfileSource};
 pub use sticker::{StickerEntry, StickerSetEntry};
 pub use td_enums::{TdChatList, TdMessageReplyTo, TdMessageReplyToMessage, TdMessageSender};
 pub use topic::TopicEntry;

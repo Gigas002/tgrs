@@ -399,8 +399,8 @@ impl ChatListWindow {
         open_chat(&self.app_context, chat);
     }
 
-    /// Runs `action` (the chat actions menu or one of its commands) on the
-    /// selected chat.
+    /// Runs `action` (the chat actions menu or one of its commands, or the
+    /// profile) on the selected chat.
     fn act_on_selected(&self, action: &Action) {
         let action_tx = self.app_context.action_tx();
         let chat = self
@@ -419,6 +419,7 @@ impl ChatListWindow {
         };
         let _ = action_tx.send(match action {
             Action::SelectedChat(command) => chat_command_action(*command, chat_id),
+            Action::ShowProfile => Action::ShowProfileFor(chat_id),
             _ => Action::ShowChatActionsFor(chat_id, None),
         });
     }
@@ -654,7 +655,9 @@ impl Component for ChatListWindow {
                 self.rebuild_visible_chats();
             }
             Action::ChatListSearch => self.start_search(),
-            Action::ShowChatActions | Action::SelectedChat(_) => self.act_on_selected(&action),
+            Action::ShowChatActions | Action::SelectedChat(_) | Action::ShowProfile => {
+                self.act_on_selected(&action)
+            }
             Action::LoadChats(..) => {
                 // Preserve selection when loading more chats (user is scrolling)
                 self.rebuild_visible_chats_with_preserve_selection(true);

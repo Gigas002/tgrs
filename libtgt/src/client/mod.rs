@@ -19,7 +19,8 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
 use crate::model::{
-    MessageEntry, StickerEntry, StickerSetEntry, TdChatList, TdMessageReplyToMessage, TopicEntry,
+    MessageEntry, ProfileSource, StickerEntry, StickerSetEntry, TdChatList,
+    TdMessageReplyToMessage, TopicEntry,
 };
 use crate::store::Store;
 
@@ -460,6 +461,45 @@ impl Client {
         functions::delete_chat_history(chat_id, true, false, self.client_id)
             .await
             .inspect_err(|e| tracing::error!("Failed to delete chat {chat_id}: {e:?}"))
+    }
+
+    /// Loads the full info a chat's profile shows (bio, description) into the
+    /// store, with the user if it isn't known yet.
+    pub async fn load_profile(&self, chat_id: i64) -> Result<(), TdError> {
+        let Some(source) = self.store.profile_source(chat_id) else {
+            return Ok(());
+        };
+        let log = |e: &TdError| tracing::error!("Failed to load profile of {chat_id}: {e:?}");
+        match source {
+            ProfileSource::User(user_id) => {
+                if !self.store.users().contains_key(&user_id) {
+                    let User::User(user) = functions::get_user(user_id, self.client_id)
+                        .await
+                        .inspect_err(log)?;
+                    self.store.users().insert(user_id, user);
+                }
+                let enums::UserFullInfo::UserFullInfo(info) =
+                    functions::get_user_full_info(user_id, self.client_id)
+                        .await
+                        .inspect_err(log)?;
+                self.store.users_full_info().insert(user_id, info);
+            }
+            ProfileSource::BasicGroup(group_id) => {
+                let enums::BasicGroupFullInfo::BasicGroupFullInfo(info) =
+                    functions::get_basic_group_full_info(group_id, self.client_id)
+                        .await
+                        .inspect_err(log)?;
+                self.store.basic_groups_full_info().insert(group_id, info);
+            }
+            ProfileSource::Supergroup(group_id) => {
+                let enums::SupergroupFullInfo::SupergroupFullInfo(info) =
+                    functions::get_supergroup_full_info(group_id, self.client_id)
+                        .await
+                        .inspect_err(log)?;
+                self.store.supergroups_full_info().insert(group_id, info);
+            }
+        }
+        Ok(())
     }
 
     /// The topics of a forum chat, in topic list order.

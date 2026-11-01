@@ -421,6 +421,12 @@ fn chat_keys_act_on_the_selected_chat_but_not_the_archive_row() {
             Action::RunChatCommand(ChatCommand::ToggleArchive, bob)
         ]
     );
+
+    window.update(Action::ShowProfile);
+    assert_eq!(sent(&window), [Action::ShowProfileFor(bob)]);
+    window.chat_list_state.select(Some(0));
+    window.update(Action::ShowProfile);
+    assert!(matches!(sent(&window)[..], [Action::StatusMessage(_)]));
 }
 
 #[test]

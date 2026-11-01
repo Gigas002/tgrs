@@ -707,3 +707,41 @@ fn chat_actions_act_on_the_open_chat_outside_the_chat_lists() {
     window.update(Action::HideChatActions);
     assert_eq!(window.component_focused, Some(ComponentName::Chat));
 }
+
+#[test]
+fn the_profile_shows_the_open_chat_or_yours_and_gives_the_focus_back() {
+    let mut window = create_test_core_window();
+    window.focus_only(Some(ComponentName::Chat));
+    window.update(Action::ShowProfile);
+    window.update(Action::ShowMyProfile);
+    assert_eq!(
+        sent_actions(&window),
+        [
+            Action::StatusMessage("Open a chat first.".into()),
+            Action::StatusMessage("Your profile isn't known yet.".into()),
+        ]
+    );
+
+    window.app_context.store().set_open_chat_id_i64(5);
+    window.app_context.store().set_me(9);
+    window.update(Action::ShowProfile);
+    window.update(Action::ShowMyProfile);
+    assert_eq!(
+        sent_actions(&window),
+        [Action::ShowProfileFor(5), Action::ShowProfileFor(9)]
+    );
+
+    // Chat 5 isn't known, so it has no profile
+    window.update(Action::ShowProfileFor(5));
+    assert_eq!(
+        sent_actions(&window),
+        [Action::StatusMessage("No profile for this chat.".into())]
+    );
+    assert!(!window.is_popup_visible(ComponentName::Profile));
+
+    window.update(Action::ShowProfileFor(9));
+    assert_eq!(window.component_focused, Some(ComponentName::Profile));
+    window.update(Action::HideProfile);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+    assert!(!window.is_popup_visible(ComponentName::Profile));
+}

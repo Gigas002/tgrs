@@ -38,9 +38,9 @@ Groups with topics (forums) open into a topic list, a pane right of the chat lis
 
 Archived chats are behind the `📦 Archived chats` row at the top of the chat list, which names them and counts the unread ones: `enter` on it opens the archive, a pane right of the chat list, and `enter` there opens an archived chat. Opening a chat from the chat list closes the archive again; `alt+a` focuses it and `alt+b` hides or shows it.
 
-In the chat list and the archive, `a` opens the actions of the selected chat, and each has its own key: `m` mutes or unmutes, `A` archives or unarchives, `P` pins or unpins, `u` marks as read or unread and `D` leaves a group or channel or deletes any other chat, after a second `D` or `enter` to confirm.
+In the chat list and the archive, `a` opens the actions of the selected chat, and each has its own key: `m` mutes or unmutes, `A` archives or unarchives, `P` pins or unpins, `u` marks as read or unread and `D` leaves a group or channel or deletes any other chat, after a second `D` or `enter` to confirm. `i` shows the selected chat's profile: a person's name, usernames, phone number, bio and birthday, or a group's or channel's description and member count.
 
-`space` opens the leader menu, which lists what comes next: `1` hides or shows the chat list, `2` the topic list, `3` the archive, `a` opens the actions of the selected message, `space` searches chats, `/` searches messages, `p` shows pinned messages, `u` uploads a file, `s` sends a sticker, `c` opens the actions of the open chat and `?` lists every key. Its entries are the `[leader_menu]` section of `keymap.toml`.
+`space` opens the leader menu, which lists what comes next: `1` hides or shows the chat list, `2` the topic list, `3` the archive, `a` opens the actions of the selected message, `space` searches chats, `/` searches messages, `p` shows pinned messages, `u` uploads a file, `s` sends a sticker, `c` opens the actions of the open chat, `i` shows its profile, `m` shows your own profile and `?` lists every key. Its entries are the `[leader_menu]` section of `keymap.toml`.
 
 ### Messages
 

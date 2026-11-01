@@ -441,6 +441,11 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::ChatActionsNext
             | Action::ChatActionsPrevious
             | Action::ChatActionsConfirm
+            | Action::ShowProfileFor(_)
+            | Action::ProfileLoaded(_)
+            | Action::HideProfile
+            | Action::ProfileScrollDown
+            | Action::ProfileScrollUp
             | Action::HideMessageActions
             | Action::MessageActionsPrevious
             | Action::MessageActionsNext
@@ -652,6 +657,12 @@ async fn handle_app_actions(
                     .await;
                 app_context.action_tx().send(Action::HideChatWindowReply)?;
             }
+            Action::ShowProfileFor(chat_id) => match client.load_profile(*chat_id).await {
+                Ok(()) => app_context
+                    .action_tx()
+                    .send(Action::ProfileLoaded(*chat_id))?,
+                Err(e) => media::status(&app_context, format!("No profile: {}", e.message)),
+            },
             Action::RunChatCommand(command, chat_id) => {
                 run_chat_command(&app_context, client, *command, *chat_id).await;
             }

@@ -62,6 +62,7 @@ const SECTIONS: &[(ComponentName, &str)] = &[
     (ComponentName::Picker, "picker"),
     (ComponentName::StickerPicker, "sticker_picker"),
     (ComponentName::ChatActions, "chat_actions"),
+    (ComponentName::Profile, "profile"),
     (ComponentName::LeaderMenu, "leader_menu"),
 ];
 
@@ -80,6 +81,7 @@ fn section(file: &KeymapFile, component: ComponentName) -> Option<&KeymapMode> {
         ComponentName::Picker => file.picker.as_ref(),
         ComponentName::StickerPicker => file.sticker_picker.as_ref(),
         ComponentName::ChatActions => file.chat_actions.as_ref(),
+        ComponentName::Profile => file.profile.as_ref(),
         ComponentName::LeaderMenu => file.leader_menu.as_ref(),
         _ => file.core_window.as_ref(),
     }

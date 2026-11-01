@@ -699,3 +699,87 @@ mod sticker {
         assert!(!installed.is_loaded());
     }
 }
+
+mod profile {
+    use tdlib_rs::enums::UserStatus;
+    use tdlib_rs::types::{Birthdate, UserStatusRecently};
+
+    use crate::model::profile::*;
+    use crate::model::{ChatKind, Profile};
+
+    fn person() -> Profile {
+        Profile {
+            chat_id: 5,
+            kind: ChatKind::Private,
+            name: "Ada Lovelace".to_owned(),
+            usernames: vec!["ada".to_owned(), "countess".to_owned()],
+            phone_number: "4412345".to_owned(),
+            bio: "Poet of science".to_owned(),
+            status: "recently".to_owned(),
+            id: 5,
+            is_loaded: true,
+            ..Profile::default()
+        }
+    }
+
+    #[test]
+    fn a_person_shows_usernames_phone_and_bio() {
+        assert_eq!(
+            person().fields(),
+            [
+                ("Username", "@ada, @countess".to_owned()),
+                ("Phone", "+4412345".to_owned()),
+                ("Bio", "Poet of science".to_owned()),
+                ("Last seen", "recently".to_owned()),
+                ("ID", "5".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn empty_fields_are_left_out() {
+        let profile = Profile {
+            usernames: Vec::new(),
+            phone_number: String::new(),
+            bio: String::new(),
+            status: String::new(),
+            ..person()
+        };
+        assert_eq!(profile.fields(), [("ID", "5".to_owned())]);
+    }
+
+    #[test]
+    fn labels_follow_the_chat_kind() {
+        let labels = |kind| {
+            Profile { kind, ..person() }
+                .fields()
+                .into_iter()
+                .map(|(label, _)| label)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(labels(ChatKind::Bot)[2], "About");
+        assert_eq!(labels(ChatKind::Group)[2..4], ["Description", "Members"]);
+        assert_eq!(
+            labels(ChatKind::Channel)[2..4],
+            ["Description", "Subscribers"]
+        );
+    }
+
+    #[test]
+    fn birthdays_statuses_and_member_counts_read_naturally() {
+        let date = |year| Birthdate {
+            day: 3,
+            month: 12,
+            year,
+        };
+        assert_eq!(birthdate_text(&date(0)), "03.12");
+        assert_eq!(birthdate_text(&date(1815)), "03.12.1815");
+        assert_eq!(user_status_text(&UserStatus::Empty), "");
+        assert_eq!(
+            user_status_text(&UserStatus::Recently(UserStatusRecently::default())),
+            "recently"
+        );
+        assert_eq!(member_count_text(0), "");
+        assert_eq!(member_count_text(12), "12");
+    }
+}

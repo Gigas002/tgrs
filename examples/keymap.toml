@@ -79,6 +79,8 @@ keymap = [
   { keys = ["P"], command = "toggle_chat_pin", description = "Pin or unpin the chat"},
   { keys = ["u"], command = "toggle_chat_read", description = "Mark the chat as read or unread"},
   { keys = ["D"], command = "leave_chat", description = "Leave or delete the chat (press twice)"},
+  # The profile of the selected chat: a person's bio and usernames, a group's description
+  { keys = ["i"], command = "show_profile", description = "Show the chat's profile"},
   # Open pinned messages for the current chat (no-op if none pinned).
   { keys = ["shift+back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
   { keys = ["back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
@@ -100,6 +102,8 @@ keymap = [
   { keys = ["P"], command = "toggle_chat_pin", description = "Pin or unpin the chat"},
   { keys = ["u"], command = "toggle_chat_read", description = "Mark the chat as read or unread"},
   { keys = ["D"], command = "leave_chat", description = "Leave or delete the chat (press twice)"},
+  # The profile of the selected chat: a person's bio and usernames, a group's description
+  { keys = ["i"], command = "show_profile", description = "Show the chat's profile"},
   { keys = ["shift+back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
   { keys = ["back_tab"], command = "show_pinned_messages_popup", description = "Open pinned messages for the open chat"},
 ]
@@ -219,6 +223,20 @@ keymap = [
   { keys = ["j"], command = "chat_actions_next", description = "Next action"},
 ]
 
+# The profile key bindings are only usable while a profile is shown: i in the
+# chat list and the archive (the selected chat), space i (the open chat) or
+# space m (your own).
+[profile]
+keymap = [
+  { keys = ["esc"], command = "hide_profile", description = "Close the profile"},
+  { keys = ["q"], command = "hide_profile", description = "Close the profile"},
+  { keys = ["i"], command = "hide_profile", description = "Close the profile"},
+  { keys = ["up"], command = "profile_scroll_up", description = "Scroll up"},
+  { keys = ["k"], command = "profile_scroll_up", description = "Scroll up"},
+  { keys = ["down"], command = "profile_scroll_down", description = "Scroll down"},
+  { keys = ["j"], command = "profile_scroll_down", description = "Scroll down"},
+]
+
 [message_actions]
 keymap = [
   { keys = ["esc"], command = "hide_message_actions", description = "Close message actions"},
@@ -245,6 +263,8 @@ keymap = [
   { keys = ["u"], command = "show_file_upload_explorer", description = "Upload a file"},
   { keys = ["s"], command = "show_sticker_picker", description = "Send a sticker"},
   { keys = ["c"], command = "show_chat_actions", description = "Actions of the open chat"},
+  { keys = ["i"], command = "show_profile", description = "Profile of the open chat"},
+  { keys = ["m"], command = "show_my_profile", description = "Your profile"},
   { keys = ["?"], command = "show_command_guide", description = "Help: every key"},
 ]
 

@@ -15,9 +15,10 @@ use tdlib_rs::{
 };
 
 use crate::model::{
-    ChatKind, ChatListEntry, ChatState, MessageAlert, MessageEntry, OrderedChat, TdMessageSender,
-    TopicEntry, format_timestamp,
+    ChatKind, ChatListEntry, ChatState, MessageAlert, MessageEntry, OrderedChat, Profile,
+    ProfileSource, TdMessageSender, TopicEntry, format_timestamp,
     ids::{AtomicChatId, AtomicMessageId, ChatId, MessageId},
+    profile::{birthdate_text, member_count_text, user_status_text},
 };
 
 pub mod open_chat;
@@ -618,6 +619,108 @@ impl Store {
             is_unread: chat.unread_count > 0 || chat.is_marked_as_unread,
             last_message_id: chat.last_message.as_ref().map_or(0, |m| m.id),
         })
+    }
+
+    /// Whose full info the profile of `chat_id` shows; your own for your
+    /// chat ID even before that chat is loaded. None for an unknown chat.
+    pub fn profile_source(&self, chat_id: i64) -> Option<ProfileSource> {
+        let me = self.me();
+        let chats = self.chats();
+        let Some(chat) = chats.get(&chat_id) else {
+            return (me != 0 && chat_id == me).then_some(ProfileSource::User(me));
+        };
+        Some(match &chat.r#type {
+            ChatType::Private(p) => ProfileSource::User(p.user_id),
+            ChatType::Secret(s) => ProfileSource::User(s.user_id),
+            ChatType::BasicGroup(g) => ProfileSource::BasicGroup(g.basic_group_id),
+            ChatType::Supergroup(g) => ProfileSource::Supergroup(g.supergroup_id),
+        })
+    }
+
+    /// The profile of a chat from what's cached; None for an unknown chat.
+    /// The bio or description is there once the full info has been loaded.
+    pub fn profile(&self, chat_id: i64) -> Option<Profile> {
+        let source = self.profile_source(chat_id)?;
+        let (title, kind) = {
+            let chats = self.chats();
+            match chats.get(&chat_id) {
+                Some(chat) => {
+                    let user = match source {
+                        ProfileSource::User(user_id) => self.users().get(&user_id).cloned(),
+                        _ => None,
+                    };
+                    (chat.title.clone(), self.kind_of(chat, user.as_ref()))
+                }
+                None => (String::new(), ChatKind::Saved),
+            }
+        };
+        let mut profile = Profile {
+            chat_id,
+            kind,
+            name: title,
+            id: chat_id,
+            ..Profile::default()
+        };
+        match source {
+            ProfileSource::User(user_id) => {
+                profile.id = user_id;
+                profile.is_me = user_id == self.me();
+                if let Some(user) = self.users().get(&user_id) {
+                    let name = format!("{} {}", user.first_name, user.last_name);
+                    if !name.trim().is_empty() {
+                        profile.name = name.trim().to_owned();
+                    }
+                    profile.usernames = user
+                        .usernames
+                        .as_ref()
+                        .map(|u| u.active_usernames.clone())
+                        .unwrap_or_default();
+                    profile.phone_number = user.phone_number.clone();
+                    profile.status = match user.r#type {
+                        UserType::Bot(_) => String::new(),
+                        _ if profile.is_me => "online".to_owned(),
+                        _ => user_status_text(&user.status),
+                    };
+                }
+                if let Some(full) = self.users_full_info().get(&user_id) {
+                    profile.is_loaded = true;
+                    profile.bio = full
+                        .bot_info
+                        .as_ref()
+                        .map(|bot| bot.description.clone())
+                        .filter(|description| !description.is_empty())
+                        .or_else(|| full.bio.as_ref().map(|bio| bio.text.clone()))
+                        .unwrap_or_default();
+                    profile.birthdate = full.birthdate.as_ref().map(birthdate_text);
+                }
+            }
+            ProfileSource::BasicGroup(group_id) => {
+                let members = self.basic_groups().get(&group_id).map(|g| g.member_count);
+                if let Some(full) = self.basic_groups_full_info().get(&group_id) {
+                    profile.is_loaded = true;
+                    profile.bio = full.description.clone();
+                }
+                profile.status = members.map(member_count_text).unwrap_or_default();
+            }
+            ProfileSource::Supergroup(group_id) => {
+                let mut members = 0;
+                if let Some(group) = self.supergroups().get(&group_id) {
+                    profile.usernames = group
+                        .usernames
+                        .as_ref()
+                        .map(|u| u.active_usernames.clone())
+                        .unwrap_or_default();
+                    members = group.member_count;
+                }
+                if let Some(full) = self.supergroups_full_info().get(&group_id) {
+                    profile.is_loaded = true;
+                    profile.bio = full.description.clone();
+                    members = members.max(full.member_count);
+                }
+                profile.status = member_count_text(members);
+            }
+        }
+        Some(profile)
     }
 
     /// Whether a chat is in the Archive chat list.

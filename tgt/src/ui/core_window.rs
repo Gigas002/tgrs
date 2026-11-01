@@ -21,6 +21,7 @@ use crate::{
         message_actions::MessageActions,
         picker::Picker,
         pinned_messages_popup::PinnedMessagesPopup,
+        profile_popup::ProfilePopup,
         prompt_window::PromptWindow,
         search_overlay::SearchOverlay,
         sticker_picker::StickerPicker,
@@ -62,6 +63,8 @@ pub struct CoreWindow {
     focus_before_stickers: Option<ComponentName>,
     /// The pane focused when the chat actions opened, focused again after.
     focus_before_chat_actions: Option<ComponentName>,
+    /// The pane focused when the profile opened, focused again after.
+    focus_before_profile: Option<ComponentName>,
     /// The size of the message reply component.
     size_message_reply: u16,
     /// The size of the chat list component.
@@ -169,6 +172,12 @@ impl CoreWindow {
                     .new_boxed(),
             ),
             (
+                ComponentName::Profile,
+                ProfilePopup::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::Profile.to_string())
+                    .new_boxed(),
+            ),
+            (
                 ComponentName::StickerPicker,
                 StickerPicker::new(Arc::clone(&app_context))
                     .with_name(ComponentName::StickerPicker.to_string())
@@ -216,6 +225,7 @@ impl CoreWindow {
             focus_before_leader: None,
             focus_before_stickers: None,
             focus_before_chat_actions: None,
+            focus_before_profile: None,
             size_message_reply,
             small_area,
             component_focused,
@@ -457,6 +467,7 @@ impl CoreWindow {
             ComponentName::Picker => Action::HidePicker,
             ComponentName::StickerPicker => Action::HideStickerPicker,
             ComponentName::ChatActions => Action::HideChatActions,
+            ComponentName::Profile => Action::HideProfile,
             ComponentName::LeaderMenu => Action::HideLeaderMenu,
             _ => return None,
         })
@@ -742,7 +753,7 @@ impl Component for CoreWindow {
                 self.close_popup(ComponentName::Picker, Some(ComponentName::Chat))
             }
             // The chat lists act on their selected chat, other panes on the open one
-            Action::ShowChatActions | Action::SelectedChat(_) => {
+            Action::ShowChatActions | Action::SelectedChat(_) | Action::ShowProfile => {
                 if let Some(list @ (ComponentName::ChatList | ComponentName::ArchiveList)) =
                     self.component_focused
                 {
@@ -756,8 +767,38 @@ impl Component for CoreWindow {
                 let _ = action_tx.send(match (chat_id, action) {
                     (0, _) => Action::StatusMessage("Open a chat first.".into()),
                     (_, Action::SelectedChat(command)) => chat_command_action(command, chat_id),
+                    (_, Action::ShowProfile) => Action::ShowProfileFor(chat_id),
                     _ => Action::ShowChatActionsFor(chat_id, None),
                 });
+            }
+            Action::ShowMyProfile => {
+                let me = self.app_context.store().me();
+                let _ = self.app_context.action_tx().send(if me == 0 {
+                    Action::StatusMessage("Your profile isn't known yet.".into())
+                } else {
+                    // Your user ID is also the ID of your chat with yourself
+                    Action::ShowProfileFor(me)
+                });
+            }
+            Action::ShowProfileFor(chat_id) => {
+                if self.app_context.store().profile_source(chat_id).is_none() {
+                    let _ = self
+                        .app_context
+                        .action_tx()
+                        .send(Action::StatusMessage("No profile for this chat.".into()));
+                    return;
+                }
+                self.focus_before_profile = self.component_focused.filter(|c| !c.is_popup());
+                self.show_popup(ComponentName::Profile, action);
+            }
+            Action::ProfileLoaded(_) => {
+                if let Some(component) = self.components.get_mut(&ComponentName::Profile) {
+                    component.update(action);
+                }
+            }
+            Action::HideProfile => {
+                let refocus = self.focus_before_profile.take();
+                self.close_popup(ComponentName::Profile, refocus);
             }
             Action::ShowChatActionsFor(..) => {
                 self.focus_before_chat_actions = self.component_focused.filter(|c| !c.is_popup());

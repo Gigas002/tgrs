@@ -168,11 +168,12 @@ impl Component for ArchiveListWindow {
             Action::ArchiveListNext => self.step(1),
             Action::ArchiveListPrevious => self.step(-1),
             Action::ArchiveListOpen => self.confirm_selection(),
-            Action::ShowChatActions | Action::SelectedChat(_) => {
+            Action::ShowChatActions | Action::SelectedChat(_) | Action::ShowProfile => {
                 self.refresh();
                 if let Some(chat_id) = self.selected_chat_id {
                     let _ = self.app_context.action_tx().send(match action {
                         Action::SelectedChat(command) => chat_command_action(command, chat_id),
+                        Action::ShowProfile => Action::ShowProfileFor(chat_id),
                         _ => Action::ShowChatActionsFor(chat_id, None),
                     });
                 }

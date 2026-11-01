@@ -289,7 +289,7 @@ mod archive {
     use crate::model::{ChatKind, OrderedChat};
     use crate::store::{ARCHIVE_NAME, Store};
 
-    fn chat(id: i64, title: &str, unread_count: i32, muted: bool) -> Chat {
+    pub(super) fn chat(id: i64, title: &str, unread_count: i32, muted: bool) -> Chat {
         Chat {
             id,
             r#type: ChatType::Private(ChatTypePrivate { user_id: id }),
@@ -427,5 +427,198 @@ mod archive {
         store.chats().insert(3, main);
         let state = store.chat_state(3).unwrap();
         assert!(!state.is_muted && !state.is_archived && !state.is_pinned && !state.is_unread);
+    }
+}
+
+mod profile {
+    use serde_json::json;
+    use tdlib_rs::enums::{ChatType, UserStatus, UserType};
+    use tdlib_rs::types::{
+        ChatTypeSupergroup, Supergroup, SupergroupFullInfo, User, UserFullInfo, UserStatusRecently,
+        UserTypeBot,
+    };
+
+    use super::archive::chat;
+    use crate::model::{ChatKind, ProfileSource};
+    use crate::store::Store;
+
+    /// Deserializes a TDLib object from `value`, giving the top-level fields it
+    /// leaves out a zero value, so fixtures name only what a test is about.
+    fn from_json<T>(
+        mut value: serde_json::Value,
+        parse: impl Fn(serde_json::Value) -> Result<T, serde_json::Error>,
+    ) -> T {
+        const ZEROES: [&str; 6] = ["0", "false", "\"0\"", "\"\"", "[]", "{}"];
+        let mut error = match parse(value.clone()) {
+            Ok(object) => return object,
+            Err(e) => e.to_string(),
+        };
+        loop {
+            let field = error
+                .strip_prefix("missing field `")
+                .and_then(|rest| rest.split('`').next())
+                .filter(|field| value.get(*field).is_none())
+                .unwrap_or_else(|| panic!("bad fixture: {error}"))
+                .to_owned();
+            // The first zero of the field's type gets past it
+            for zero in ZEROES {
+                value[&field] = serde_json::from_str(zero).unwrap();
+                match parse(value.clone()) {
+                    Ok(object) => return object,
+                    Err(e) if e.to_string().starts_with("invalid") => continue,
+                    Err(e) => {
+                        error = e.to_string();
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    fn user(id: i64, first_name: &str, username: &str, bot: bool) -> User {
+        let mut user: User = from_json(
+            json!({
+            "id": id,
+            "first_name": first_name,
+            "last_name": "",
+            "usernames": {
+                "active_usernames": [username],
+                "disabled_usernames": [],
+                "editable_username": username,
+                "collectible_usernames": [],
+            },
+            "phone_number": "4412345",
+            "status": { "@type": "userStatusEmpty" },
+            "type": { "@type": "userTypeRegular" },
+            }),
+            serde_json::from_value,
+        );
+        user.status = UserStatus::Recently(UserStatusRecently::default());
+        if bot {
+            user.r#type = UserType::Bot(UserTypeBot::default());
+        }
+        user
+    }
+
+    fn user_full_info(bio: &str) -> UserFullInfo {
+        from_json(
+            json!({
+                "bio": { "text": bio, "entities": [] },
+                "birthdate": { "day": 10, "month": 12, "year": 0 },
+                "gift_settings": {
+                    "show_gift_button": false,
+                    "accepted_gift_types": {
+                        "unlimited_gifts": false,
+                        "limited_gifts": false,
+                        "upgraded_gifts": false,
+                        "gifts_from_channels": false,
+                        "premium_subscription": false,
+                    },
+                },
+            }),
+            serde_json::from_value,
+        )
+    }
+
+    fn supergroup(id: i64, is_channel: bool) -> Supergroup {
+        from_json(
+            json!({
+            "id": id,
+            "usernames": {
+                "active_usernames": ["rustlang"],
+                "disabled_usernames": [],
+                "editable_username": "rustlang",
+                "collectible_usernames": [],
+            },
+            "status": { "@type": "chatMemberStatusLeft" },
+            "member_count": 40,
+            "is_channel": is_channel,
+            }),
+            serde_json::from_value,
+        )
+    }
+
+    fn supergroup_full_info(description: &str) -> SupergroupFullInfo {
+        from_json(
+            json!({ "description": description, "member_count": 42 }),
+            serde_json::from_value,
+        )
+    }
+
+    #[test]
+    fn an_unknown_chat_has_no_profile_but_yours_does() {
+        let store = Store::default();
+        assert!(store.profile_source(9).is_none());
+        assert!(store.profile(9).is_none());
+
+        store.set_me(9);
+        assert_eq!(store.profile_source(9), Some(ProfileSource::User(9)));
+        store.users().insert(9, user(9, "Me", "myself", false));
+        let profile = store.profile(9).unwrap();
+        assert!(profile.is_me && !profile.is_loaded);
+        assert_eq!(profile.name, "Me");
+        assert_eq!(profile.status, "online");
+    }
+
+    #[test]
+    fn a_person_s_profile_fills_in_once_the_full_info_is_loaded() {
+        let store = Store::default();
+        store.chats().insert(5, chat(5, "Ada", 0, false));
+        store.users().insert(5, user(5, "Ada", "ada", false));
+        let profile = store.profile(5).unwrap();
+        assert_eq!(profile.kind, ChatKind::Private);
+        assert_eq!(profile.usernames, ["ada"]);
+        assert_eq!(profile.phone_number, "4412345");
+        assert_eq!(profile.status, "recently");
+        assert!(!profile.is_loaded && profile.bio.is_empty());
+
+        store
+            .users_full_info()
+            .insert(5, user_full_info("Poet of science"));
+        let profile = store.profile(5).unwrap();
+        assert!(profile.is_loaded);
+        assert_eq!(profile.bio, "Poet of science");
+        assert_eq!(profile.birthdate.as_deref(), Some("10.12"));
+    }
+
+    #[test]
+    fn a_bot_has_no_last_seen() {
+        let store = Store::default();
+        store.chats().insert(6, chat(6, "Helper", 0, false));
+        store
+            .users()
+            .insert(6, user(6, "Helper", "helper_bot", true));
+        let profile = store.profile(6).unwrap();
+        assert_eq!(profile.kind, ChatKind::Bot);
+        assert!(profile.status.is_empty());
+    }
+
+    #[test]
+    fn a_channel_shows_its_description_and_subscribers() {
+        let store = Store::default();
+        let mut channel = chat(-100, "Rust News", 0, false);
+        channel.r#type = ChatType::Supergroup(ChatTypeSupergroup {
+            supergroup_id: 77,
+            is_channel: true,
+        });
+        store.chats().insert(-100, channel);
+        store.supergroups().insert(77, supergroup(77, true));
+        assert_eq!(
+            store.profile_source(-100),
+            Some(ProfileSource::Supergroup(77))
+        );
+        let profile = store.profile(-100).unwrap();
+        assert_eq!(profile.kind, ChatKind::Channel);
+        assert_eq!(profile.name, "Rust News");
+        assert_eq!(profile.usernames, ["rustlang"]);
+        assert_eq!(profile.status, "40");
+        assert_eq!(profile.id, -100);
+
+        store
+            .supergroups_full_info()
+            .insert(77, supergroup_full_info("All about Rust"));
+        let profile = store.profile(-100).unwrap();
+        assert_eq!(profile.bio, "All about Rust");
+        assert_eq!(profile.status, "42");
     }
 }
