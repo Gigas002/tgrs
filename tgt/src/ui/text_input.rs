@@ -92,6 +92,12 @@ impl TextInput {
         self.cursor = 0;
     }
 
+    /// Replaces the text with `text`, on one line, the cursor at its end.
+    pub fn set(&mut self, text: &str) {
+        self.clear();
+        self.insert(text);
+    }
+
     /// The byte offset of the cursor.
     fn cursor_byte(&self) -> usize {
         self.text

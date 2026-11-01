@@ -2,8 +2,8 @@ use std::str::FromStr;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use libtgt::model::{
-    BlockedSender, ReportStep, StickerEntry, StickerSetEntry, TdChatList, TdMessageReplyToMessage,
-    TdMessageSender,
+    BlockedSender, ProfileChange, ProfileField, ReportStep, StickerEntry, StickerSetEntry,
+    TdChatList, TdMessageReplyToMessage, TdMessageSender,
 };
 use ratatui::layout::Rect;
 
@@ -478,6 +478,25 @@ pub enum Action {
     ProfileScrollDown,
     /// Scroll the profile popup up a line.
     ProfileScrollUp,
+
+    /// Edit your own profile: name, bio and username.
+    ShowEditProfile,
+    /// Close the profile editor without saving.
+    HideEditProfile,
+    /// Move to the next field of the profile editor.
+    EditProfileNextField,
+    /// Move to the previous field of the profile editor.
+    EditProfilePreviousField,
+    /// Save what was changed in the profile editor.
+    EditProfileConfirm,
+    /// Your profile has been loaded for the editor.
+    EditProfileLoaded,
+    /// Loading or saving your profile failed: the field to fix, if any, and why.
+    EditProfileFailed(Option<ProfileField>, String),
+    /// Save these changes to your profile, in order.
+    SaveProfile(Vec<ProfileChange>),
+    /// Every change to your profile has been saved.
+    ProfileSaved,
     /// Run a command on a chat.
     RunChatCommand(ChatCommand, i64),
     /// Keep this text as the unsent message of a chat, or of a forum topic of
@@ -719,6 +738,11 @@ impl FromStr for Action {
             "hide_profile" => Ok(Action::HideProfile),
             "profile_scroll_down" => Ok(Action::ProfileScrollDown),
             "profile_scroll_up" => Ok(Action::ProfileScrollUp),
+            "show_edit_profile" => Ok(Action::ShowEditProfile),
+            "hide_edit_profile" => Ok(Action::HideEditProfile),
+            "edit_profile_next_field" => Ok(Action::EditProfileNextField),
+            "edit_profile_previous_field" => Ok(Action::EditProfilePreviousField),
+            "edit_profile_confirm" => Ok(Action::EditProfileConfirm),
             "toggle_chat_mute" => Ok(Action::SelectedChat(ChatCommand::ToggleMute)),
             "toggle_chat_archive" => Ok(Action::SelectedChat(ChatCommand::ToggleArchive)),
             "toggle_chat_pin" => Ok(Action::SelectedChat(ChatCommand::TogglePin)),

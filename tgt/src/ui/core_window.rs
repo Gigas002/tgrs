@@ -17,6 +17,7 @@ use crate::{
         chat_window::ChatWindow,
         command_guide::CommandGuide,
         component_traits::{Component, HandleFocus},
+        edit_profile::EditProfile,
         file_upload_explorer::FileUploadExplorer,
         find_chat::FindChat,
         leader_menu::LeaderMenu,
@@ -71,6 +72,13 @@ pub struct CoreWindow {
     focus_before_profile: Option<ComponentName>,
     /// The pane focused when the username popup opened, focused again after.
     focus_before_find_chat: Option<ComponentName>,
+    /// The pane focused when the profile editor opened, focused again after.
+    focus_before_edit_profile: Option<ComponentName>,
+    /// Whether the profile editor was opened from your profile, shown
+    /// again once the edit is saved.
+    edit_profile_from_profile: bool,
+    /// The chat whose profile is shown, while it's shown.
+    profile_chat: Option<i64>,
     /// The pane focused when the report popup opened, focused again after.
     focus_before_report: Option<ComponentName>,
     /// The pane focused when the blocked list opened, focused again after.
@@ -200,6 +208,12 @@ impl CoreWindow {
                     .new_boxed(),
             ),
             (
+                ComponentName::EditProfile,
+                EditProfile::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::EditProfile.to_string())
+                    .new_boxed(),
+            ),
+            (
                 ComponentName::Profile,
                 ProfilePopup::new(Arc::clone(&app_context))
                     .with_name(ComponentName::Profile.to_string())
@@ -256,6 +270,9 @@ impl CoreWindow {
             focus_before_chat_actions: None,
             focus_before_profile: None,
             focus_before_find_chat: None,
+            focus_before_edit_profile: None,
+            edit_profile_from_profile: false,
+            profile_chat: None,
             focus_before_report: None,
             focus_before_blocked_list: None,
             size_message_reply,
@@ -503,6 +520,7 @@ impl CoreWindow {
             ComponentName::ChatActions => Action::HideChatActions,
             ComponentName::Profile => Action::HideProfile,
             ComponentName::FindChat => Action::HideFindChat,
+            ComponentName::EditProfile => Action::HideEditProfile,
             ComponentName::Report => Action::HideReport,
             ComponentName::BlockedList => Action::HideBlockedList,
             ComponentName::LeaderMenu => Action::HideLeaderMenu,
@@ -898,6 +916,7 @@ impl Component for CoreWindow {
                     return;
                 }
                 self.focus_before_profile = self.component_focused.filter(|c| !c.is_popup());
+                self.profile_chat = Some(chat_id);
                 self.show_popup(ComponentName::Profile, action);
             }
             Action::ProfileLoaded(_) => {
@@ -907,7 +926,52 @@ impl Component for CoreWindow {
             }
             Action::HideProfile => {
                 let refocus = self.focus_before_profile.take();
+                self.profile_chat = None;
                 self.close_popup(ComponentName::Profile, refocus);
+            }
+            Action::ShowEditProfile => {
+                let me = self.app_context.store().me();
+                let from_profile = self.is_popup_visible(ComponentName::Profile);
+                let refusal = if me == 0 {
+                    Some("Your profile isn't known yet.")
+                } else if from_profile && self.profile_chat != Some(me) {
+                    Some("Only your own profile can be edited.")
+                } else {
+                    None
+                };
+                if let Some(refusal) = refusal {
+                    let _ = self
+                        .app_context
+                        .action_tx()
+                        .send(Action::StatusMessage(refusal.into()));
+                    return;
+                }
+                // Closing the profile goes back to where it was opened from
+                self.focus_before_edit_profile = if from_profile {
+                    self.profile_chat = None;
+                    self.focus_before_profile.take()
+                } else {
+                    self.component_focused.filter(|c| !c.is_popup())
+                };
+                self.edit_profile_from_profile = from_profile;
+                self.show_popup(ComponentName::EditProfile, action);
+            }
+            Action::HideEditProfile | Action::ProfileSaved => {
+                let refocus = self.focus_before_edit_profile.take();
+                let from_profile = std::mem::take(&mut self.edit_profile_from_profile);
+                self.close_popup(ComponentName::EditProfile, refocus);
+                if matches!(action, Action::ProfileSaved) {
+                    let tx = self.app_context.action_tx();
+                    let _ = tx.send(Action::StatusMessage("Profile saved.".into()));
+                    if from_profile {
+                        let _ = tx.send(Action::ShowMyProfile);
+                    }
+                }
+            }
+            Action::EditProfileLoaded | Action::EditProfileFailed(..) => {
+                if let Some(component) = self.components.get_mut(&ComponentName::EditProfile) {
+                    component.update(action);
+                }
             }
             Action::ShowChatActionsFor(..) => {
                 self.focus_before_chat_actions = self.component_focused.filter(|c| !c.is_popup());

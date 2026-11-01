@@ -20,7 +20,7 @@ use std::{
 
 use libtgt::{
     client::{Client, Notification},
-    model::{ReportStep, TdMessageReplyToMessage},
+    model::{ReportStep, TdMessageReplyToMessage, profile_change_failure},
     store::Store,
     tdlib_rs::enums::ChatList,
 };
@@ -465,6 +465,14 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::HideProfile
             | Action::ProfileScrollDown
             | Action::ProfileScrollUp
+            | Action::ShowEditProfile
+            | Action::HideEditProfile
+            | Action::EditProfileNextField
+            | Action::EditProfilePreviousField
+            | Action::EditProfileConfirm
+            | Action::EditProfileLoaded
+            | Action::EditProfileFailed(..)
+            | Action::ProfileSaved
             | Action::HideMessageActions
             | Action::MessageActionsPrevious
             | Action::MessageActionsNext
@@ -741,6 +749,31 @@ async fn handle_app_actions(
                     .send(Action::ProfileLoaded(*chat_id))?,
                 Err(e) => media::status(&app_context, format!("No profile: {}", e.message)),
             },
+            Action::ShowEditProfile => {
+                let me = app_context.store().me();
+                if me != 0 {
+                    let loaded = match client.load_profile(me).await {
+                        Ok(()) => Action::EditProfileLoaded,
+                        Err(e) => Action::EditProfileFailed(
+                            None,
+                            format!("Can't load your bio: {}", e.message),
+                        ),
+                    };
+                    app_context.action_tx().send(loaded)?;
+                }
+            }
+            Action::SaveProfile(changes) => {
+                let mut result = Action::ProfileSaved;
+                // In order; the rest waits for a failed change to be fixed
+                for change in changes {
+                    if let Err(e) = client.change_profile(change).await {
+                        let (field, message) = profile_change_failure(change, &e.message);
+                        result = Action::EditProfileFailed(Some(field), message);
+                        break;
+                    }
+                }
+                app_context.action_tx().send(result)?;
+            }
             Action::SaveDraft(chat_id, topic_id, text) => {
                 if let Err(e) = client.set_draft(*chat_id, *topic_id, text).await {
                     media::status(&app_context, format!("Can't save the draft: {}", e.message));

@@ -650,6 +650,27 @@ mod profile {
     }
 
     #[test]
+    fn your_profile_edit_starts_from_your_user_and_bio() {
+        let store = Store::default();
+        assert!(store.my_profile_edit().is_none());
+        store.set_me(9);
+        let mut me = user(9, "Ada", "ada_l", false);
+        me.last_name = "Lovelace".into();
+        store.users().insert(9, me);
+        let edit = store.my_profile_edit().unwrap();
+        assert_eq!(
+            (edit.first_name.as_str(), edit.last_name.as_str()),
+            ("Ada", "Lovelace")
+        );
+        assert_eq!(edit.username, "ada_l");
+        assert!(edit.bio.is_empty() && !store.my_full_info_loaded());
+
+        store.users_full_info().insert(9, user_full_info("Poet"));
+        assert!(store.my_full_info_loaded());
+        assert_eq!(store.my_profile_edit().unwrap().bio, "Poet");
+    }
+
+    #[test]
     fn a_bot_has_no_last_seen() {
         let store = Store::default();
         store.chats().insert(6, chat(6, "Helper", 0, false));

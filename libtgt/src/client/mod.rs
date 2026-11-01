@@ -19,8 +19,8 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
 use crate::model::{
-    BlockedSender, MessageEntry, ProfileSource, ReportStep, StickerEntry, StickerSetEntry,
-    TdChatList, TdMessageReplyToMessage, TdMessageSender, TopicEntry, text_draft,
+    BlockedSender, MessageEntry, ProfileChange, ProfileSource, ReportStep, StickerEntry,
+    StickerSetEntry, TdChatList, TdMessageReplyToMessage, TdMessageSender, TopicEntry, text_draft,
 };
 use crate::store::Store;
 
@@ -608,6 +608,23 @@ impl Client {
         .await
         .map(ReportStep::from)
         .inspect_err(|e| tracing::error!("Failed to report chat {chat_id}: {e:?}"))
+    }
+
+    /// Saves one change to your own profile. TDLib then sends the updated
+    /// user or full info, which the store picks up.
+    pub async fn change_profile(&self, change: &ProfileChange) -> Result<(), TdError> {
+        let id = self.client_id;
+        match change {
+            ProfileChange::Name {
+                first_name,
+                last_name,
+            } => functions::set_name(first_name.clone(), last_name.clone(), id).await,
+            ProfileChange::Bio(bio) => functions::set_bio(bio.clone(), id).await,
+            ProfileChange::Username(username) => {
+                functions::set_username(username.clone(), id).await
+            }
+        }
+        .inspect_err(|e| tracing::warn!("Failed to change the profile ({change:?}): {e:?}"))
     }
 
     /// Loads the full info a chat's profile shows (bio, description) into the

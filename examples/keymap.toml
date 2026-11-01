@@ -288,6 +288,21 @@ keymap = [
   { keys = ["k"], command = "profile_scroll_up", description = "Scroll up"},
   { keys = ["down"], command = "profile_scroll_down", description = "Scroll down"},
   { keys = ["j"], command = "profile_scroll_down", description = "Scroll down"},
+  # Only your own profile (space m) can be edited
+  { keys = ["e"], command = "show_edit_profile", description = "Edit your profile"},
+]
+
+# The edit_profile key bindings are only usable while editing your profile
+# (e in your profile, space e elsewhere); other keys type into the field.
+[edit_profile]
+keymap = [
+  { keys = ["esc"], command = "hide_edit_profile", description = "Close without saving"},
+  { keys = ["enter"], command = "edit_profile_confirm", description = "Save the changes"},
+  { keys = ["tab"], command = "edit_profile_next_field", description = "Next field"},
+  { keys = ["down"], command = "edit_profile_next_field", description = "Next field"},
+  { keys = ["back_tab"], command = "edit_profile_previous_field", description = "Previous field"},
+  { keys = ["shift+back_tab"], command = "edit_profile_previous_field", description = "Previous field"},
+  { keys = ["up"], command = "edit_profile_previous_field", description = "Previous field"},
 ]
 
 [message_actions]
@@ -318,6 +333,7 @@ keymap = [
   { keys = ["c"], command = "show_chat_actions", description = "Actions of the open chat"},
   { keys = ["i"], command = "show_profile", description = "Profile of the open chat"},
   { keys = ["m"], command = "show_my_profile", description = "Your profile"},
+  { keys = ["e"], command = "show_edit_profile", description = "Edit your profile"},
   { keys = ["n"], command = "show_find_chat", description = "Open a chat by username"},
   { keys = ["b"], command = "show_blocked_list", description = "Blocked users"},
   { keys = ["?"], command = "show_command_guide", description = "Help: every key"},

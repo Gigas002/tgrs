@@ -16,7 +16,7 @@ use tdlib_rs::{
 
 use crate::model::{
     ChatKind, ChatListEntry, ChatState, MessageAlert, MessageEntry, OrderedChat, Profile,
-    ProfileSource, TdMessageSender, TopicEntry, draft_text, format_timestamp,
+    ProfileEdit, ProfileSource, TdMessageSender, TopicEntry, draft_text, format_timestamp,
     ids::{AtomicChatId, AtomicMessageId, ChatId, MessageId},
     profile::{birthdate_text, member_count_text, user_status_text},
 };
@@ -630,6 +630,33 @@ impl Store {
             _ => return None,
         };
         self.users().get(&user_id).cloned()
+    }
+
+    /// Your profile as the edit popup starts it: your name, the editable
+    /// username and the bio, which is empty until your full info is loaded.
+    /// None until TDLib has sent your user.
+    pub fn my_profile_edit(&self) -> Option<ProfileEdit> {
+        let me = self.me();
+        let user = self.users().get(&me).cloned()?;
+        let bio = self
+            .users_full_info()
+            .get(&me)
+            .and_then(|full| full.bio.as_ref().map(|bio| bio.text.clone()))
+            .unwrap_or_default();
+        Some(ProfileEdit {
+            first_name: user.first_name,
+            last_name: user.last_name,
+            bio,
+            username: user
+                .usernames
+                .map(|u| u.editable_username)
+                .unwrap_or_default(),
+        })
+    }
+
+    /// Whether your full info (with the bio) has been loaded.
+    pub fn my_full_info_loaded(&self) -> bool {
+        self.users_full_info().contains_key(&self.me())
     }
 
     /// Whose full info the profile of `chat_id` shows; your own for your

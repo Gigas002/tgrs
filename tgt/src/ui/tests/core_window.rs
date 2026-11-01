@@ -834,3 +834,59 @@ fn report_and_blocked_list_popups_give_the_focus_back() {
     assert_eq!(window.component_focused, Some(ComponentName::Chat));
     assert!(!window.is_popup_visible(ComponentName::BlockedList));
 }
+
+#[test]
+fn only_your_profile_is_edited_and_saving_shows_it_again() {
+    let mut window = create_test_core_window();
+    window.focus_only(Some(ComponentName::Chat));
+    window.update(Action::ShowEditProfile);
+    assert_eq!(
+        sent_actions(&window),
+        [Action::StatusMessage(
+            "Your profile isn't known yet.".into()
+        )]
+    );
+    assert!(!window.is_popup_visible(ComponentName::EditProfile));
+
+    window.app_context.store().set_me(9);
+    window.update(Action::ShowEditProfile);
+    assert_eq!(window.component_focused, Some(ComponentName::EditProfile));
+    window.update(Action::HideEditProfile);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+
+    // From your own profile: saving shows it again, with the edit
+    window.update(Action::ShowProfileFor(9));
+    window.update(Action::ShowEditProfile);
+    assert!(!window.is_popup_visible(ComponentName::Profile));
+    assert!(window.is_popup_visible(ComponentName::EditProfile));
+    sent_actions(&window);
+    window.update(Action::ProfileSaved);
+    assert!(!window.is_popup_visible(ComponentName::EditProfile));
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+    assert_eq!(
+        sent_actions(&window),
+        [
+            Action::StatusMessage("Profile saved.".into()),
+            Action::ShowMyProfile
+        ]
+    );
+}
+
+#[test]
+fn someone_else_s_profile_can_t_be_edited() {
+    let mut window = create_test_core_window();
+    window.focus_only(Some(ComponentName::Chat));
+    window.app_context.store().set_me(9);
+    // Another chat's profile, as if it were known
+    window.profile_chat = Some(5);
+    window.show_popup(ComponentName::Profile, Action::ShowProfileFor(5));
+    sent_actions(&window);
+    window.update(Action::ShowEditProfile);
+    assert_eq!(
+        sent_actions(&window),
+        [Action::StatusMessage(
+            "Only your own profile can be edited.".into()
+        )]
+    );
+    assert!(window.is_popup_visible(ComponentName::Profile));
+}

@@ -44,6 +44,7 @@ pub struct KeymapFile {
     pub chat_actions: Option<KeymapMode>,
     pub profile: Option<KeymapMode>,
     pub find_chat: Option<KeymapMode>,
+    pub edit_profile: Option<KeymapMode>,
     pub report: Option<KeymapMode>,
     pub blocked_list: Option<KeymapMode>,
     pub leader_menu: Option<KeymapMode>,

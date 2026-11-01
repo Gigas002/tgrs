@@ -934,3 +934,110 @@ mod draft {
         assert_eq!(draft_text(Some(&draft)), "");
     }
 }
+
+mod profile_edit {
+    use crate::model::{ProfileChange, ProfileEdit, ProfileField, profile_change_failure};
+
+    fn edit(first_name: &str, last_name: &str, bio: &str, username: &str) -> ProfileEdit {
+        ProfileEdit {
+            first_name: first_name.into(),
+            last_name: last_name.into(),
+            bio: bio.into(),
+            username: username.into(),
+        }
+    }
+
+    #[test]
+    fn fields_go_round_in_order() {
+        assert_eq!(ProfileField::FirstName.next(), ProfileField::LastName);
+        assert_eq!(ProfileField::Username.next(), ProfileField::FirstName);
+        assert_eq!(ProfileField::FirstName.previous(), ProfileField::Username);
+        let mut profile = ProfileEdit::default();
+        for (field, value) in ProfileField::ALL.into_iter().zip(["a", "b", "c", "d"]) {
+            profile.set(field, value);
+        }
+        assert_eq!(profile, edit("a", "b", "c", "d"));
+        assert_eq!(profile.get(ProfileField::Bio), "c");
+    }
+
+    #[test]
+    fn nothing_changed_needs_no_request() {
+        let original = edit("Ada", "Lovelace", "Poet", "ada_l");
+        assert!(original.changes(&original).is_empty());
+        // Spaces around a value and the @ of the username don't count
+        let same = edit(" Ada ", "Lovelace", "Poet\n", "@ada_l");
+        assert!(same.changes(&original).is_empty());
+    }
+
+    #[test]
+    fn changes_are_the_name_the_bio_then_the_username() {
+        let original = edit("Ada", "Lovelace", "Poet", "ada_l");
+        let changed = edit("Ada", "King", "", "countess");
+        assert_eq!(
+            changed.changes(&original),
+            [
+                ProfileChange::Name {
+                    first_name: "Ada".into(),
+                    last_name: "King".into()
+                },
+                ProfileChange::Bio(String::new()),
+                ProfileChange::Username("countess".into()),
+            ]
+        );
+        let bio_only = edit("Ada", "Lovelace", "Analyst", "ada_l");
+        assert_eq!(
+            bio_only.changes(&original),
+            [ProfileChange::Bio("Analyst".into())]
+        );
+    }
+
+    #[test]
+    fn problems_point_at_the_field_to_fix() {
+        assert_eq!(edit("Ada", "", "", "").problem(), None);
+        assert_eq!(edit("Ada", "", "", "@ada_l").problem(), None);
+        assert_eq!(
+            edit("  ", "Lovelace", "", "").problem().map(|p| p.0),
+            Some(ProfileField::FirstName)
+        );
+        let long = "x".repeat(65);
+        assert_eq!(
+            edit("Ada", &long, "", "").problem().map(|p| p.0),
+            Some(ProfileField::LastName)
+        );
+        for bad in ["ada", "1ada_l", "ada-l", "ada_l_", &"a".repeat(33)] {
+            assert_eq!(
+                edit("Ada", "", "", bad).problem().map(|p| p.0),
+                Some(ProfileField::Username),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn telegram_refusals_are_told_plainly() {
+        let username = ProfileChange::Username("ada_l".into());
+        assert_eq!(
+            profile_change_failure(&username, "USERNAME_OCCUPIED"),
+            (ProfileField::Username, "@ada_l is taken".into())
+        );
+        assert_eq!(
+            profile_change_failure(&ProfileChange::Bio("…".into()), "ABOUT_TOO_LONG"),
+            (ProfileField::Bio, "The bio is too long".into())
+        );
+        let name = ProfileChange::Name {
+            first_name: "Ada".into(),
+            last_name: "!".into(),
+        };
+        assert_eq!(
+            profile_change_failure(&name, "LASTNAME_INVALID").0,
+            ProfileField::LastName
+        );
+        assert_eq!(
+            profile_change_failure(&name, "Request aborted"),
+            (
+                ProfileField::FirstName,
+                "Can't save the name: Request aborted".into()
+            )
+        );
+    }
+}

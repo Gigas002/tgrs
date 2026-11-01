@@ -64,6 +64,7 @@ const SECTIONS: &[(ComponentName, &str)] = &[
     (ComponentName::ChatActions, "chat_actions"),
     (ComponentName::Profile, "profile"),
     (ComponentName::FindChat, "find_chat"),
+    (ComponentName::EditProfile, "edit_profile"),
     (ComponentName::Report, "report"),
     (ComponentName::BlockedList, "blocked_list"),
     (ComponentName::LeaderMenu, "leader_menu"),
@@ -86,6 +87,7 @@ fn section(file: &KeymapFile, component: ComponentName) -> Option<&KeymapMode> {
         ComponentName::ChatActions => file.chat_actions.as_ref(),
         ComponentName::Profile => file.profile.as_ref(),
         ComponentName::FindChat => file.find_chat.as_ref(),
+        ComponentName::EditProfile => file.edit_profile.as_ref(),
         ComponentName::Report => file.report.as_ref(),
         ComponentName::BlockedList => file.blocked_list.as_ref(),
         ComponentName::LeaderMenu => file.leader_menu.as_ref(),
@@ -123,6 +125,7 @@ impl Keymap {
                 ComponentName::Prompt
                     | ComponentName::SearchOverlay
                     | ComponentName::FindChat
+                    | ComponentName::EditProfile
                     | ComponentName::Report
             ) {
                 // These take printable keys as text, so inherited plain keys

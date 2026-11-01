@@ -8,6 +8,7 @@ pub mod message;
 pub mod moderation;
 pub mod ordered_chat;
 pub mod profile;
+pub mod profile_edit;
 pub mod sticker;
 pub mod td_enums;
 pub mod topic;
@@ -27,6 +28,7 @@ pub use message::{
 pub use moderation::{BlockedSender, ReportOption, ReportStep};
 pub use ordered_chat::OrderedChat;
 pub use profile::{Profile, ProfileSource};
+pub use profile_edit::{ProfileChange, ProfileEdit, ProfileField, profile_change_failure};
 pub use sticker::{StickerEntry, StickerSetEntry};
 pub use td_enums::{TdChatList, TdMessageReplyTo, TdMessageReplyToMessage, TdMessageSender};
 pub use topic::TopicEntry;
