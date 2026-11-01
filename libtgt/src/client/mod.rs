@@ -21,10 +21,10 @@ use tokio::task::JoinHandle;
 use crate::model::notification_settings::MUTE_FOREVER;
 use crate::model::{
     BlockedSender, ChatSettings, MessageEntry, NotificationOption, NotificationScope,
-    NotificationSettings, NotificationTarget, ProfileChange, ProfileSource, ReportStep,
-    ScopeSettings, SessionEntry, StickerEntry, StickerSetEntry, StorageUsage, TdChatList,
-    TdMessageReplyToMessage, TdMessageSender, TopicEntry, apply_chat_option, apply_scope_option,
-    session_entries, text_draft,
+    NotificationSettings, NotificationTarget, PrivacyRules, PrivacySetting, PrivacySettings,
+    ProfileChange, ProfileSource, ReportStep, ScopeSettings, SessionEntry, StickerEntry,
+    StickerSetEntry, StorageUsage, TdChatList, TdMessageReplyToMessage, TdMessageSender,
+    TopicEntry, apply_chat_option, apply_scope_option, session_entries, text_draft,
 };
 use crate::store::Store;
 
@@ -470,6 +470,66 @@ impl Client {
                         tracing::error!("Failed to set notification settings of {chat_id}: {e:?}")
                     })
             }
+        }
+    }
+
+    /// Who sees what of yours, with the read time setting.
+    pub async fn privacy_settings(&self) -> Result<PrivacySettings, TdError> {
+        let mut rules = Vec::with_capacity(PrivacySetting::ALL.len());
+        for setting in PrivacySetting::ALL {
+            let enums::UserPrivacySettingRules::UserPrivacySettingRules(td) =
+                functions::get_user_privacy_setting_rules(setting.into(), self.client_id)
+                    .await
+                    .inspect_err(|e| {
+                        tracing::error!("Failed to get privacy of {setting:?}: {e:?}")
+                    })?;
+            rules.push((setting, PrivacyRules::new(&td)));
+        }
+        let enums::ReadDatePrivacySettings::ReadDatePrivacySettings(read_date) =
+            functions::get_read_date_privacy_settings(self.client_id)
+                .await
+                .inspect_err(|e| tracing::error!("Failed to get read date privacy: {e:?}"))?;
+        Ok(PrivacySettings {
+            rules,
+            show_read_date: read_date.show_read_date,
+        })
+    }
+
+    /// Saves who sees `setting`.
+    pub async fn set_privacy_rules(
+        &self,
+        setting: PrivacySetting,
+        rules: &PrivacyRules,
+    ) -> Result<(), TdError> {
+        functions::set_user_privacy_setting_rules(setting.into(), rules.to_td(), self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to set privacy of {setting:?}: {e:?}"))
+    }
+
+    /// Shows others when you read their messages, or hides it.
+    pub async fn set_show_read_date(&self, show: bool) -> Result<(), TdError> {
+        functions::set_read_date_privacy_settings(
+            tdlib_rs::types::ReadDatePrivacySettings {
+                show_read_date: show,
+            },
+            self.client_id,
+        )
+        .await
+        .inspect_err(|e| tracing::error!("Failed to set read date privacy: {e:?}"))
+    }
+
+    /// Tells the chat, or one of its forum topics, that you're typing;
+    /// Telegram shows it for about 5 seconds.
+    pub async fn send_typing(&self, chat_id: i64, topic: Option<MessageTopic>) {
+        if let Err(e) = functions::send_chat_action(
+            chat_id,
+            topic,
+            Some(enums::ChatAction::Typing),
+            self.client_id,
+        )
+        .await
+        {
+            tracing::debug!("Failed to send typing to {chat_id}: {e:?}");
         }
     }
 

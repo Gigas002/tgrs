@@ -73,6 +73,7 @@ pub struct Settings {
     pub credentials: CredentialStore,
     pub notifications: Notifications,
     pub media: Media,
+    pub privacy: Privacy,
     pub command: Command,
 }
 
@@ -149,6 +150,15 @@ impl QuietHours {
             minute >= self.start || minute < self.end
         }
     }
+}
+
+/// `[privacy]`, resolved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Privacy {
+    /// Show you online while tgt runs; else others see your last seen time.
+    pub appear_online: bool,
+    /// Tell chats when you're typing a message.
+    pub send_typing: bool,
 }
 
 /// `[media]`, resolved.
@@ -309,6 +319,10 @@ impl Settings {
             credentials: file.credentials.store.unwrap_or_default(),
             notifications: resolve_notifications(&file.notifications)?,
             media: Media::resolve(&file.media),
+            privacy: Privacy {
+                appear_online: file.privacy.appear_online.unwrap_or(true),
+                send_typing: file.privacy.send_typing.unwrap_or(true),
+            },
             command: cli.command,
         })
     }

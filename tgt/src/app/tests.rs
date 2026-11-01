@@ -378,3 +378,18 @@ fn shift_k_and_shift_up_move_pinned_chats() {
         assert_eq!(bound(list, KeyCode::Down, KeyModifiers::SHIFT), down);
     }
 }
+
+#[test]
+fn typing_is_told_every_few_seconds_per_chat() {
+    let app_context = test_app_context();
+    let now = std::time::Instant::now();
+    assert!(app_context.should_send_typing(1, None, now));
+    assert!(!app_context.should_send_typing(1, None, now + Duration::from_secs(1)));
+    // Another chat or topic right away
+    assert!(app_context.should_send_typing(2, None, now + Duration::from_secs(1)));
+    assert!(app_context.should_send_typing(2, Some(5), now + Duration::from_secs(1)));
+    assert!(app_context.should_send_typing(2, Some(5), now + context::TYPING_INTERVAL * 2));
+    // Sending a message ends it, so the next key tells again
+    app_context.reset_typing();
+    assert!(app_context.should_send_typing(2, Some(5), now + context::TYPING_INTERVAL * 2));
+}

@@ -15,9 +15,9 @@ use tdlib_rs::{
 };
 
 use crate::model::{
-    ChatKind, ChatListEntry, ChatState, Media, MessageAlert, MessageEntry, OrderedChat, Profile,
-    ProfileEdit, ProfileSource, TdMessageSender, TopicEntry, Transfer, TransferPurpose,
-    TransferState, draft_text, format_timestamp,
+    ActivityKind, ChatActivity, ChatKind, ChatListEntry, ChatState, Media, MessageAlert,
+    MessageEntry, OrderedChat, Profile, ProfileEdit, ProfileSource, TdMessageSender, TopicEntry,
+    Transfer, TransferPurpose, TransferState, draft_text, format_timestamp,
     ids::{AtomicChatId, AtomicMessageId, ChatId, MessageId},
     profile::{birthdate_text, member_count_text, user_status_text},
 };
@@ -40,6 +40,8 @@ pub struct Store {
     transfers: Mutex<HashMap<i32, Transfer>>,
     /// Counts started downloads, to list newer first.
     transfers_started: AtomicU64,
+    /// What others are doing in each chat, latest first.
+    activities: Mutex<HashMap<i64, Vec<ChatActivity>>>,
     users: Mutex<HashMap<i64, User>>,
     basic_groups: Mutex<HashMap<i64, BasicGroup>>,
     supergroups: Mutex<HashMap<i64, Supergroup>>,
@@ -488,6 +490,67 @@ impl Store {
             .iter()
             .find(|topic| topic.topic_id == topic_id)
             .cloned()
+    }
+
+    /// Someone started an action in a chat, or stopped it (`kind` None).
+    /// True when the open chat's is affected.
+    pub fn set_chat_activity(
+        &self,
+        chat_id: i64,
+        sender: TdMessageSender,
+        topic: Option<MessageTopic>,
+        kind: Option<ActivityKind>,
+        now: std::time::Instant,
+    ) -> bool {
+        let mut activities = self.activities.lock().unwrap();
+        let entries = activities.entry(chat_id).or_default();
+        entries.retain(|a| a.until > now && !(a.sender == sender && a.topic == topic));
+        if let Some(kind) = kind {
+            entries.insert(
+                0,
+                ChatActivity {
+                    sender,
+                    topic,
+                    kind,
+                    until: now + crate::model::ACTIVITY_TIMEOUT,
+                },
+            );
+        }
+        if entries.is_empty() {
+            activities.remove(&chat_id);
+        }
+        chat_id == self.open_chat_id_i64()
+    }
+
+    /// What others are doing in the open chat (or topic) at `now`, e.g.
+    /// `Ferris is typing…`.
+    pub fn open_chat_activity(&self, now: std::time::Instant) -> Option<String> {
+        let chat_id = self.open_chat_id_i64();
+        let shown: Vec<ChatActivity> = self
+            .activities
+            .lock()
+            .unwrap()
+            .get(&chat_id)?
+            .iter()
+            .filter(|a| a.until > now && a.sender != TdMessageSender::User(self.me()))
+            .cloned()
+            .collect();
+        let names: Vec<(String, ActivityKind)> = shown
+            .iter()
+            .filter(|a| self.shows_message_topic(a.topic.as_ref()))
+            .map(|a| {
+                let name = self
+                    .sender_name(a.sender)
+                    .unwrap_or_else(|| "Someone".to_owned());
+                let first = name.split_whitespace().next().unwrap_or(&name).to_owned();
+                (first, a.kind)
+            })
+            .collect();
+        let named = !matches!(
+            self.chat_state(chat_id).map(|state| state.kind),
+            Some(ChatKind::Private | ChatKind::Secret | ChatKind::Bot)
+        );
+        crate::model::activity_text(&names, named)
     }
 
     /// The open topic, to search or list its messages.
@@ -945,6 +1008,7 @@ impl Default for Store {
         Self {
             transfers: Mutex::default(),
             transfers_started: AtomicU64::new(0),
+            activities: Mutex::default(),
             users: Mutex::default(),
             basic_groups: Mutex::default(),
             supergroups: Mutex::default(),

@@ -2,9 +2,10 @@ use std::str::FromStr;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use libtgt::model::{
-    BlockedSender, NotificationOption, NotificationSettings, NotificationTarget, ProfileChange,
-    ProfileField, ReportStep, SessionEntry, StickerEntry, StickerSetEntry, StorageUsage,
-    TdChatList, TdMessageReplyToMessage, TdMessageSender, TransferPurpose,
+    BlockedSender, NotificationOption, NotificationSettings, NotificationTarget, PrivacyRules,
+    PrivacySetting, PrivacySettings, ProfileChange, ProfileField, ReportStep, SessionEntry,
+    StickerEntry, StickerSetEntry, StorageUsage, TdChatList, TdMessageReplyToMessage,
+    TdMessageSender, TransferPurpose,
 };
 use ratatui::layout::Rect;
 
@@ -521,6 +522,32 @@ pub enum Action {
     /// Save a notification option in Telegram; None for a chat's default.
     SetNotificationOption(NotificationTarget, NotificationOption, Option<bool>),
 
+    /// Show your privacy settings.
+    ShowPrivacy,
+    /// Close the privacy settings.
+    HidePrivacy,
+    /// Your privacy settings, to show.
+    PrivacyLoaded(PrivacySettings),
+    /// Highlight the next setting.
+    PrivacyNext,
+    /// Highlight the previous setting.
+    PrivacyPrevious,
+    /// Move the highlighted setting to its next audience.
+    PrivacyCycle,
+    /// Always share the highlighted setting with the open chat's person.
+    PrivacyAlways,
+    /// Never share the highlighted setting with the open chat's person.
+    PrivacyNever,
+    /// The open chat's person follows the highlighted setting's audience again.
+    PrivacyFollow,
+    /// Save who sees a setting.
+    SetPrivacyRules(PrivacySetting, PrivacyRules),
+    /// Show others when you read their messages, or hide it.
+    SetShowReadDate(bool),
+
+    /// You typed in the prompt: tell the open chat (every few seconds).
+    Typing,
+
     /// Show how much disk space Telegram takes.
     ShowStorage,
     /// Close the storage popup.
@@ -879,6 +906,14 @@ impl FromStr for Action {
             "notification_settings_next" => Ok(Action::NotificationSettingsNext),
             "notification_settings_previous" => Ok(Action::NotificationSettingsPrevious),
             "notification_settings_toggle" => Ok(Action::NotificationSettingsToggle),
+            "show_privacy" => Ok(Action::ShowPrivacy),
+            "hide_privacy" => Ok(Action::HidePrivacy),
+            "privacy_next" => Ok(Action::PrivacyNext),
+            "privacy_previous" => Ok(Action::PrivacyPrevious),
+            "privacy_cycle" => Ok(Action::PrivacyCycle),
+            "privacy_always" => Ok(Action::PrivacyAlways),
+            "privacy_never" => Ok(Action::PrivacyNever),
+            "privacy_follow" => Ok(Action::PrivacyFollow),
             "show_storage" => Ok(Action::ShowStorage),
             "hide_storage" => Ok(Action::HideStorage),
             "storage_next" => Ok(Action::StorageNext),

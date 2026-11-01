@@ -1,5 +1,6 @@
 //! Client-side data model: identifiers, messages and chat list rows.
 
+pub mod activity;
 pub mod alert;
 pub mod chat;
 pub mod draft;
@@ -8,6 +9,7 @@ pub mod message;
 pub mod moderation;
 pub mod notification_settings;
 pub mod ordered_chat;
+pub mod privacy;
 pub mod profile;
 pub mod profile_edit;
 pub mod session;
@@ -21,6 +23,7 @@ pub mod username;
 #[cfg(test)]
 mod tests;
 
+pub use activity::{ACTIVITY_TIMEOUT, ActivityKind, ChatActivity, activity_text};
 pub use alert::MessageAlert;
 pub use chat::{ChatKind, ChatListEntry, ChatState, PinMoveError, move_pinned};
 pub use draft::{draft_text, text_draft};
@@ -35,6 +38,7 @@ pub use notification_settings::{
     ScopeSettings, apply_chat_option, apply_scope_option,
 };
 pub use ordered_chat::OrderedChat;
+pub use privacy::{Audience, Exception, PrivacyRules, PrivacySetting, PrivacySettings};
 pub use profile::{Profile, ProfileSource};
 pub use profile_edit::{ProfileChange, ProfileEdit, ProfileField, profile_change_failure};
 pub use session::{DeviceKind, SessionEntry, SignInAlert, session_entries};

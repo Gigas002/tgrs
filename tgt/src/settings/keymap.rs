@@ -72,6 +72,7 @@ const SECTIONS: &[(ComponentName, &str)] = &[
     (ComponentName::Downloads, "downloads"),
     (ComponentName::Storage, "storage"),
     (ComponentName::NotificationSettings, "notification_settings"),
+    (ComponentName::Privacy, "privacy"),
     (ComponentName::LeaderMenu, "leader_menu"),
 ];
 
@@ -100,6 +101,7 @@ fn section(file: &KeymapFile, component: ComponentName) -> Option<&KeymapMode> {
         ComponentName::Downloads => file.downloads.as_ref(),
         ComponentName::Storage => file.storage.as_ref(),
         ComponentName::NotificationSettings => file.notification_settings.as_ref(),
+        ComponentName::Privacy => file.privacy.as_ref(),
         ComponentName::LeaderMenu => file.leader_menu.as_ref(),
         _ => file.core_window.as_ref(),
     }

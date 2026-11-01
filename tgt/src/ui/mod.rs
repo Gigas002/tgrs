@@ -32,6 +32,7 @@ pub mod pinned_messages_popup;
 pub mod popup_list;
 #[cfg(feature = "media-preview")]
 pub mod preview;
+pub mod privacy;
 pub mod profile_popup;
 pub mod prompt_window;
 pub mod reply_message;

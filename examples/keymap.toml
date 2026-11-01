@@ -310,6 +310,21 @@ keymap = [
 
 # The sessions key bindings are only usable in the list of your active
 # sessions (space d). Logging out asks for the same key a second time.
+[privacy]
+keymap = [
+  { keys = ["esc"], command = "hide_privacy", description = "Close the privacy settings"},
+  { keys = ["q"], command = "hide_privacy", description = "Close the privacy settings"},
+  { keys = ["enter"], command = "privacy_cycle", description = "Change who sees it"},
+  { keys = ["space"], command = "privacy_cycle", description = "Change who sees it"},
+  { keys = ["a"], command = "privacy_always", description = "Always share it with the open chat's person"},
+  { keys = ["n"], command = "privacy_never", description = "Never share it with the open chat's person"},
+  { keys = ["r"], command = "privacy_follow", description = "The open chat's person follows the audience"},
+  { keys = ["up"], command = "privacy_previous", description = "Previous"},
+  { keys = ["k"], command = "privacy_previous", description = "Previous"},
+  { keys = ["down"], command = "privacy_next", description = "Next"},
+  { keys = ["j"], command = "privacy_next", description = "Next"},
+]
+
 [notification_settings]
 keymap = [
   { keys = ["esc"], command = "hide_notification_settings", description = "Close the notification settings"},
@@ -411,6 +426,7 @@ keymap = [
   { keys = ["t"], command = "show_downloads", description = "Downloads (transfers)"},
   { keys = ["S"], command = "show_storage", description = "Storage usage and cache"},
   { keys = ["N"], command = "show_notification_settings", description = "Notification settings"},
+  { keys = ["P"], command = "show_privacy", description = "Privacy settings"},
   { keys = ["n"], command = "show_find_chat", description = "Open a chat by username"},
   { keys = ["b"], command = "show_blocked_list", description = "Blocked users"},
   { keys = ["?"], command = "show_command_guide", description = "Help: every key"},

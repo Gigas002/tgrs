@@ -647,3 +647,20 @@ mod attachments {
         );
     }
 }
+
+#[test]
+fn typing_is_told_for_new_messages_but_not_edits() {
+    let mut window = create_test_prompt_window();
+    let (tx, mut rx) = unbounded_channel();
+    window.register_action_handler(tx).unwrap();
+    let key = |c| Action::Key(KeyCode::Char(c), Modifiers::from(KeyModifiers::empty()));
+    window.update(key('h'));
+    let sent: Vec<Action> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+    assert!(sent.contains(&Action::Typing), "{sent:?}");
+
+    window.update(Action::EditMessage(2, "text".to_string()));
+    let _: Vec<Action> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+    window.update(key('s'));
+    let sent: Vec<Action> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+    assert!(!sent.contains(&Action::Typing), "{sent:?}");
+}

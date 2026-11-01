@@ -101,6 +101,13 @@
 # Which chats notify, with previews, mentions and pinned messages, are
 # Telegram's own settings: leader N changes them for every device.
 
+[privacy]
+# Show you online while tgt runs. When off, others see your last seen time,
+# as your privacy settings allow (leader P changes those).
+# appear_online = true
+# Tell chats when you're typing a message.
+# send_typing = true
+
 [media]
 # Load the images shown under photos, videos and stickers in the chat without
 # being asked. When off, only previews already downloaded are shown; opening

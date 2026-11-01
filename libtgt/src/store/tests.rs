@@ -543,7 +543,7 @@ mod profile {
         }
     }
 
-    fn user(id: i64, first_name: &str, username: &str, bot: bool) -> User {
+    pub(super) fn user(id: i64, first_name: &str, username: &str, bot: bool) -> User {
         let mut user: User = from_json(
             json!({
             "id": id,
@@ -808,5 +808,111 @@ mod transfers {
         let mut ids: Vec<i32> = store.transfers().into_iter().map(|t| t.file_id).collect();
         ids.sort();
         assert_eq!(ids, [1, 2]);
+    }
+}
+
+mod activity {
+    use std::time::{Duration, Instant};
+
+    use tdlib_rs::enums::ChatType;
+    use tdlib_rs::types::ChatTypeBasicGroup;
+
+    use super::archive::chat;
+    use super::profile::user;
+    use crate::model::{ActivityKind, TdMessageSender};
+    use crate::store::Store;
+
+    /// A group chat 1 with Ferris (2) and Ada (3), open, and a private chat 4.
+    fn store() -> Store {
+        let store = Store::default();
+        store.set_me(9);
+        let mut group = chat(1, "Rust", 0, false);
+        group.r#type = ChatType::BasicGroup(ChatTypeBasicGroup { basic_group_id: 1 });
+        store.chats().insert(1, group);
+        store.chats().insert(4, chat(4, "Ferris", 0, false));
+        store.users().insert(2, user(2, "Ferris", "ferris", false));
+        store.users().insert(3, user(3, "Ada", "ada", false));
+        store.users().insert(4, user(4, "Ferris", "ferris", false));
+        store.set_open_chat_id_i64(1);
+        store
+    }
+
+    #[test]
+    fn group_activity_names_who_is_typing() {
+        let store = store();
+        let now = Instant::now();
+        assert_eq!(store.open_chat_activity(now), None);
+        let changed = store.set_chat_activity(
+            1,
+            TdMessageSender::User(2),
+            None,
+            Some(ActivityKind::Typing),
+            now,
+        );
+        assert!(changed);
+        assert_eq!(
+            store.open_chat_activity(now).as_deref(),
+            Some("Ferris is typing…")
+        );
+        store.set_chat_activity(
+            1,
+            TdMessageSender::User(3),
+            None,
+            Some(ActivityKind::Typing),
+            now,
+        );
+        assert_eq!(
+            store.open_chat_activity(now).as_deref(),
+            Some("Ada and Ferris are typing…")
+        );
+        // Cancelled
+        store.set_chat_activity(1, TdMessageSender::User(3), None, None, now);
+        assert_eq!(
+            store.open_chat_activity(now).as_deref(),
+            Some("Ferris is typing…")
+        );
+    }
+
+    #[test]
+    fn activity_runs_out_unless_repeated() {
+        let store = store();
+        let now = Instant::now();
+        store.set_chat_activity(
+            1,
+            TdMessageSender::User(2),
+            None,
+            Some(ActivityKind::Typing),
+            now,
+        );
+        assert_eq!(store.open_chat_activity(now + Duration::from_secs(7)), None);
+    }
+
+    #[test]
+    fn private_chats_and_yourself() {
+        let store = store();
+        let now = Instant::now();
+        // Your own typing on another device isn't shown
+        store.set_chat_activity(
+            1,
+            TdMessageSender::User(9),
+            None,
+            Some(ActivityKind::Typing),
+            now,
+        );
+        assert_eq!(store.open_chat_activity(now), None);
+        // Other chats don't change what's shown
+        let changed = store.set_chat_activity(
+            4,
+            TdMessageSender::User(4),
+            None,
+            Some(ActivityKind::RecordingVoice),
+            now,
+        );
+        assert!(!changed);
+        store.set_open_chat_id_i64(4);
+        assert_eq!(
+            store.open_chat_activity(now).as_deref(),
+            Some("recording a voice message…")
+        );
     }
 }

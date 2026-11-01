@@ -38,6 +38,7 @@ pub struct FileConfig {
     pub credentials: CredentialsFile,
     pub notifications: NotificationsFile,
     pub media: MediaFile,
+    pub privacy: PrivacyFile,
 }
 
 /// `[app]`: terminal and UI behavior.
@@ -112,6 +113,14 @@ pub struct NotificationsFile {
     pub quiet_hours: Option<String>,
     pub open_on_click: Option<bool>,
     pub unread_in_title: Option<bool>,
+}
+
+/// `[privacy]`: what others see of you while tgt runs.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct PrivacyFile {
+    pub appear_online: Option<bool>,
+    pub send_typing: Option<bool>,
 }
 
 /// `[media]`: automatic downloads and the local file cache.

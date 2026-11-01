@@ -7,7 +7,7 @@ use tdlib_rs::enums::{AuthorizationState, ChatList, NotificationType, Update};
 use tdlib_rs::types::{Chat, ChatPosition};
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::model::{MessageAlert, MessageEntry, OrderedChat, SignInAlert};
+use crate::model::{ActivityKind, MessageAlert, MessageEntry, OrderedChat, SignInAlert};
 use crate::store::Store;
 
 /// What changed in the [`Store`], for the UI to react to.
@@ -31,6 +31,8 @@ pub enum Notification {
     NewSignIn(SignInAlert),
     /// A followed download progressed or finished.
     TransferChanged(i32),
+    /// Someone in the open chat started or stopped typing, recording, ...
+    OpenChatActivityChanged,
     /// The number of unread messages in unmuted chats of the main chat list.
     UnreadCountChanged(i32),
 }
@@ -417,6 +419,18 @@ async fn apply(
                         store.message_alert(&new.message, new.show_preview, notification.is_silent);
                     let _ = notify.send(Notification::NewMessage(alert));
                 }
+            }
+        }
+        Update::ChatAction(update) => {
+            let open = store.set_chat_activity(
+                update.chat_id,
+                (&update.sender_id).into(),
+                update.topic_id,
+                ActivityKind::of(&update.action),
+                std::time::Instant::now(),
+            );
+            if open {
+                let _ = notify.send(Notification::OpenChatActivityChanged);
             }
         }
         Update::UnreadMessageCount(update) if update.chat_list == ChatList::Main => {

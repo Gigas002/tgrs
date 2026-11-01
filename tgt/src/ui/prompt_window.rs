@@ -1097,6 +1097,12 @@ impl Component for PromptWindow {
                 ) => {
                     self.input.unselect_all();
                     self.input.insert(c);
+                    // Not for edits, which Telegram doesn't announce
+                    if matches!(self.input.mode, Mode::Normal | Mode::Reply(_))
+                        && let Some(tx) = self.action_tx.as_ref()
+                    {
+                        let _ = tx.send(Action::Typing);
+                    }
                 }
 
                 (KeyCode::Backspace, ..) => {

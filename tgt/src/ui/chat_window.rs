@@ -401,6 +401,15 @@ impl ChatWindow {
             ));
             spans.push(Span::raw(topic.name));
         }
+        // Like Telegram, what they're doing takes the status' place
+        if let Some(activity) = store.open_chat_activity(std::time::Instant::now()) {
+            spans.push(Span::styled(
+                format!(" · {activity}"),
+                theme.style(HighlightGroup::Shortcut),
+            ));
+            spans.push(Span::raw(" "));
+            return Line::from(spans);
+        }
         let status = store.open_chat_user_status();
         if !status.trim().is_empty() {
             spans.push(Span::styled(

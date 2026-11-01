@@ -130,7 +130,11 @@ async fn run_tui(
     let mut tui = Tui::new(Arc::clone(&app_context));
     let mut tui_backend = TuiBackend::new(Arc::clone(&app_context))?;
 
-    client.online().await;
+    if app_context.privacy().appear_online {
+        client.online().await;
+    } else {
+        client.offline().await;
+    }
     client.disable_animated_emoji(true).await;
 
     tui_backend.enter()?;
@@ -256,6 +260,24 @@ fn forward_status(
     }
 }
 
+/// Tells a privacy change failed and shows what Telegram has; quiet when saved.
+async fn privacy_saved(
+    app_context: &Arc<AppContext>,
+    client: &Client,
+    what: &str,
+    result: Result<(), libtgt::tdlib_rs::types::Error>,
+) -> Result<(), AppError> {
+    if let Err(e) = result {
+        media::status(app_context, format!("Can't change {what}: {}", e.message));
+        if let Ok(settings) = client.privacy_settings().await {
+            app_context
+                .action_tx()
+                .send(Action::PrivacyLoaded(settings))?;
+        }
+    }
+    Ok(())
+}
+
 /// The status bar warning about a new sign-in.
 fn sign_in_message(alert: &SignInAlert) -> String {
     format!("{}. Not you? Review sessions with space d.", alert.text())
@@ -279,7 +301,9 @@ fn handle_notification(
         Notification::OpenChatMessageChanged(_) => app_context.mark_dirty(),
         Notification::OpenChatPinsChanged => action_tx.send(Action::LoadPinnedMessages)?,
         Notification::OpenChatHistoryInvalidated => action_tx.send(Action::GetChatHistory)?,
-        Notification::OpenChatTopicsChanged => app_context.mark_dirty(),
+        Notification::OpenChatTopicsChanged | Notification::OpenChatActivityChanged => {
+            app_context.mark_dirty()
+        }
         // The open chat's messages are on screen already
         Notification::NewMessage(alert)
             if alert.chat_id != app_context.store().open_chat_id_i64() =>
@@ -530,6 +554,15 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::NotificationSettingsNext
             | Action::NotificationSettingsPrevious
             | Action::NotificationSettingsToggle
+            | Action::ShowPrivacy
+            | Action::HidePrivacy
+            | Action::PrivacyLoaded(_)
+            | Action::PrivacyNext
+            | Action::PrivacyPrevious
+            | Action::PrivacyCycle
+            | Action::PrivacyAlways
+            | Action::PrivacyNever
+            | Action::PrivacyFollow
             | Action::ShowStorage
             | Action::HideStorage
             | Action::StorageLoaded(_)
@@ -771,7 +804,22 @@ async fn handle_app_actions(
                 app_context.mark_dirty();
                 client.load_chats((*chat_list).into(), *limit).await;
             }
+            Action::Typing => {
+                let store = app_context.store();
+                let chat_id = store.open_chat_id_i64();
+                if app_context.privacy().send_typing
+                    && chat_id != 0
+                    && app_context.should_send_typing(
+                        chat_id,
+                        store.open_topic_id(),
+                        std::time::Instant::now(),
+                    )
+                {
+                    client.send_typing(chat_id, store.open_send_topic()).await;
+                }
+            }
             Action::SendMessage(message, reply_to) => {
+                app_context.reset_typing();
                 let _ = client
                     .send_message(
                         message.to_string(),
@@ -874,6 +922,23 @@ async fn handle_app_actions(
                             .send(Action::NotificationSettingsLoaded(settings))?;
                     }
                 }
+            }
+            Action::ShowPrivacy => match client.privacy_settings().await {
+                Ok(settings) => app_context
+                    .action_tx()
+                    .send(Action::PrivacyLoaded(settings))?,
+                Err(e) => {
+                    media::status(&app_context, format!("No privacy settings: {}", e.message));
+                    app_context.action_tx().send(Action::HidePrivacy)?;
+                }
+            },
+            Action::SetPrivacyRules(setting, rules) => {
+                let result = client.set_privacy_rules(*setting, rules).await;
+                privacy_saved(&app_context, client, setting.label(), result).await?;
+            }
+            Action::SetShowReadDate(show) => {
+                let result = client.set_show_read_date(*show).await;
+                privacy_saved(&app_context, client, "Read time", result).await?;
             }
             Action::ShowStorage => match client.storage_usage().await {
                 Ok(usage) => app_context.action_tx().send(Action::StorageLoaded(usage))?,

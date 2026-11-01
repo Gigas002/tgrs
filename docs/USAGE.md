@@ -48,6 +48,7 @@ Like [concord](https://github.com/chojs23/concord): `left`/`right` move between 
 | `t`     | [Downloads](#downloads).                     |
 | `S`     | [Storage and cache](#storage-and-cache).     |
 | `N`     | [Notification settings](#notifications).     |
+| `P`     | [Privacy settings](#privacy).                |
 | `n`     | Open a chat by username.                     |
 | `b`     | [Blocked users](#blocking-and-reporting).    |
 | `?`     | List every key.                              |
@@ -186,6 +187,24 @@ unread_in_title = false            # "tgt (3)" in the terminal's title
 ```
 
 Clicking needs a notification server that supports actions, and the window title needs a terminal that lets programs set it. tgt can't bring its terminal to the front, so it opens the chat in the background.
+
+### Privacy
+
+Leader `P` lists your privacy settings, saved by Telegram for every device: who sees your last seen time, phone number, profile photo, bio, birthday and the link to your account in forwarded messages, and who can call you, invite you to groups or find you by your number. `enter` (or `space`) moves the highlighted setting to its next audience: Everybody, My contacts, Nobody. People and groups made exceptions in other apps are kept and counted, e.g. `My contacts (+2, −1)`.
+
+With a private chat open, `a` always shares the highlighted setting with that person, `n` never does and `r` makes them follow the audience again.
+
+The last row is **Read time**: whether people see when you read their messages in private chats. Hiding it hides theirs from you too, unless you have Telegram Premium.
+
+The open chat's title shows what others are doing in it instead of their status: `typing…`, `Ferris is typing…`, `Ada is sending a file…`. In a forum, only the open topic's are shown.
+
+`[privacy]` in `config.toml` sets what tgt tells others:
+
+```toml
+[privacy]
+appear_online = true   # false: you stay offline, and others see your last seen time
+send_typing = true     # tell chats when you type a message (not when editing)
+```
 
 ### Storage and cache
 

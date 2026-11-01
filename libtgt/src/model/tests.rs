@@ -1388,3 +1388,119 @@ mod notification_settings {
         assert!(!NotificationScope::Channels.options().contains(&Mentions));
     }
 }
+
+mod privacy {
+    use crate::model::privacy::*;
+    use tdlib_rs::enums::UserPrivacySettingRule as Rule;
+    use tdlib_rs::types::{
+        UserPrivacySettingRuleAllowUsers, UserPrivacySettingRuleRestrictUsers,
+        UserPrivacySettingRules,
+    };
+
+    fn rules(rules: Vec<Rule>) -> PrivacyRules {
+        PrivacyRules::new(&UserPrivacySettingRules { rules })
+    }
+
+    #[test]
+    fn the_audience_comes_from_the_broadest_rule() {
+        assert_eq!(rules(vec![Rule::AllowAll]).audience, Audience::Everybody);
+        assert_eq!(
+            rules(vec![Rule::AllowContacts, Rule::RestrictAll]).audience,
+            Audience::Contacts
+        );
+        assert_eq!(rules(vec![Rule::RestrictAll]).audience, Audience::Nobody);
+        assert_eq!(rules(Vec::new()).audience, Audience::Nobody);
+    }
+
+    #[test]
+    fn exceptions_go_before_the_audience_and_other_rules_are_kept() {
+        let parsed = rules(vec![
+            Rule::AllowPremiumUsers,
+            Rule::AllowUsers(UserPrivacySettingRuleAllowUsers { user_ids: vec![5] }),
+            Rule::RestrictUsers(UserPrivacySettingRuleRestrictUsers { user_ids: vec![6] }),
+            Rule::AllowContacts,
+        ]);
+        assert_eq!(parsed.always_users, [5]);
+        assert_eq!(parsed.never_users, [6]);
+        assert_eq!(parsed.summary(), "My contacts (+1, −1)");
+        assert_eq!(
+            parsed.to_td().rules,
+            [
+                Rule::RestrictUsers(UserPrivacySettingRuleRestrictUsers { user_ids: vec![6] }),
+                Rule::AllowUsers(UserPrivacySettingRuleAllowUsers { user_ids: vec![5] }),
+                Rule::AllowPremiumUsers,
+                Rule::AllowContacts,
+            ]
+        );
+    }
+
+    #[test]
+    fn a_person_is_one_exception_at_most() {
+        let mut parsed = rules(vec![Rule::AllowAll]);
+        assert_eq!(parsed.exception(5), None);
+        parsed.set_exception(5, Some(Exception::Always));
+        parsed.set_exception(5, Some(Exception::Never));
+        assert_eq!(parsed.exception(5), Some(Exception::Never));
+        assert!(parsed.always_users.is_empty());
+        parsed.set_exception(5, None);
+        assert_eq!(parsed.exception(5), None);
+        assert_eq!(parsed.summary(), "Everybody");
+    }
+
+    #[test]
+    fn audiences_cycle_through_what_the_setting_takes() {
+        let all = PrivacySetting::LastSeen.audiences();
+        assert_eq!(Audience::Everybody.next(all), Audience::Contacts);
+        assert_eq!(Audience::Nobody.next(all), Audience::Everybody);
+        let phone = PrivacySetting::FindByPhoneNumber.audiences();
+        assert_eq!(Audience::Contacts.next(phone), Audience::Everybody);
+        assert!(!PrivacySetting::FindByPhoneNumber.has_exceptions());
+    }
+}
+
+mod activity {
+    use crate::model::activity::*;
+    use tdlib_rs::enums::ChatAction;
+    use tdlib_rs::types::ChatActionUploadingDocument;
+
+    #[test]
+    fn actions_are_told_apart() {
+        assert_eq!(ActivityKind::of(&ChatAction::Cancel), None);
+        assert_eq!(
+            ActivityKind::of(&ChatAction::UploadingDocument(
+                ChatActionUploadingDocument { progress: 10 }
+            )),
+            Some(ActivityKind::SendingFile)
+        );
+        assert_eq!(
+            ActivityKind::of(&ChatAction::ChoosingSticker),
+            Some(ActivityKind::ChoosingSticker)
+        );
+    }
+
+    #[test]
+    fn text_names_people_in_groups_only() {
+        let typing = |name: &str| (name.to_owned(), ActivityKind::Typing);
+        assert_eq!(activity_text(&[], true), None);
+        assert_eq!(
+            activity_text(&[typing("Ferris")], false).as_deref(),
+            Some("typing…")
+        );
+        assert_eq!(
+            activity_text(&[("Ada".into(), ActivityKind::SendingFile)], true).as_deref(),
+            Some("Ada is sending a file…")
+        );
+        assert_eq!(
+            activity_text(
+                &[typing("Ada"), ("Bo".into(), ActivityKind::ChoosingSticker)],
+                true
+            )
+            .as_deref(),
+            Some("Ada and Bo are busy…")
+        );
+        assert_eq!(
+            activity_text(&[typing("Ada"), typing("Bo"), typing("Cy")], true).as_deref(),
+            Some("Ada and 2 others are busy…")
+        );
+    }
+}

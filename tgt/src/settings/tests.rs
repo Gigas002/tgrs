@@ -585,3 +585,18 @@ fn quiet_hours_within_a_day() {
     assert!(!hours.contains(13 * 60));
     assert!(!hours.contains(0));
 }
+
+#[test]
+fn privacy_defaults_and_values() {
+    let defaults = Env::new().resolve(CliOverrides::default()).unwrap().privacy;
+    assert!(defaults.appear_online);
+    assert!(defaults.send_typing);
+    let env = Env::new();
+    env.write_config(
+        "config.toml",
+        "[privacy]\nappear_online = false\nsend_typing = false\n",
+    );
+    let privacy = env.resolve(CliOverrides::default()).unwrap().privacy;
+    assert!(!privacy.appear_online);
+    assert!(!privacy.send_typing);
+}

@@ -9,7 +9,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
     app::action::Action,
-    settings::{App, Dirs, HighlightGroup, Keymap, Media, Notifications, Settings, Theme},
+    settings::{App, Dirs, HighlightGroup, Keymap, Media, Notifications, Privacy, Settings, Theme},
     ui::component_name::ComponentName,
 };
 
@@ -23,6 +23,9 @@ macro_rules! theme_style_generate {
     };
 }
 
+/// How often typing is repeated while it goes on; Telegram shows it for 5 seconds.
+pub const TYPING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(4);
+
 /// State shared between the run loop and the UI components.
 #[derive(Debug)]
 pub struct AppContext {
@@ -30,6 +33,9 @@ pub struct AppContext {
     keymap: Keymap,
     notifications: Notifications,
     media: Media,
+    privacy: Privacy,
+    /// The chat, topic and time typing was last sent, to repeat it only every few seconds.
+    last_typing: Mutex<Option<(i64, Option<i32>, std::time::Instant)>>,
     dirs: Dirs,
     theme: Theme,
     /// Actions from components and background tasks to the run loop.
@@ -55,6 +61,8 @@ impl AppContext {
             keymap: settings.keymap.clone(),
             notifications: settings.notifications.clone(),
             media: settings.media,
+            privacy: settings.privacy,
+            last_typing: Mutex::new(None),
             dirs: settings.dirs.clone(),
             theme: settings.theme.clone(),
             action_tx,
@@ -81,6 +89,36 @@ impl AppContext {
 
     pub fn media(&self) -> Media {
         self.media
+    }
+
+    pub fn privacy(&self) -> Privacy {
+        self.privacy
+    }
+
+    /// Whether typing in `chat_id` (and `topic_id`) should be told now:
+    /// once every [`TYPING_INTERVAL`], or right away in another chat.
+    pub fn should_send_typing(
+        &self,
+        chat_id: i64,
+        topic_id: Option<i32>,
+        now: std::time::Instant,
+    ) -> bool {
+        let mut last = self.last_typing.lock().unwrap();
+        let due = match *last {
+            Some((chat, topic, at)) => {
+                chat != chat_id || topic != topic_id || now.duration_since(at) >= TYPING_INTERVAL
+            }
+            None => true,
+        };
+        if due {
+            *last = Some((chat_id, topic_id, now));
+        }
+        due
+    }
+
+    /// Typing is told again after a message is sent.
+    pub fn reset_typing(&self) {
+        *self.last_typing.lock().unwrap() = None;
     }
 
     pub fn dirs(&self) -> &Dirs {

@@ -976,3 +976,13 @@ fn the_notification_settings_give_the_focus_back() {
     window.update(Action::HideNotificationSettings);
     assert_eq!(window.component_focused, Some(ComponentName::Chat));
 }
+
+#[test]
+fn the_privacy_settings_give_the_focus_back() {
+    let mut window = create_test_core_window();
+    window.focus_only(Some(ComponentName::Chat));
+    window.update(Action::ShowPrivacy);
+    assert_eq!(window.component_focused, Some(ComponentName::Privacy));
+    window.update(Action::HidePrivacy);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+}
