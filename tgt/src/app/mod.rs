@@ -503,6 +503,7 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::HideProfile
             | Action::ProfileScrollDown
             | Action::ProfileScrollUp
+            | Action::PromptPasteImage
             | Action::ShowEditProfile
             | Action::HideEditProfile
             | Action::EditProfileNextField

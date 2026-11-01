@@ -5,7 +5,7 @@ use crate::{
     settings::HighlightGroup,
     ui::component_name::ComponentName,
     ui::component_traits::{Component, HandleFocus},
-    ui::pane,
+    ui::{attachment, pane},
 };
 use arboard::Clipboard;
 use crossterm::event::KeyCode;
@@ -16,7 +16,11 @@ use ratatui::{
     text::{Line, Span},
     widgets::Paragraph,
 };
-use std::{io, sync::Arc};
+use std::{
+    io,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio::sync::mpsc::UnboundedSender;
 use unicode_width::UnicodeWidthChar;
 
@@ -641,6 +645,19 @@ pub struct PromptWindow {
     draft_target: Option<DraftTarget>,
     /// The draft as last loaded or saved, to tell whether it was edited.
     saved_draft: String,
+    /// Files dropped or pasted into the prompt, sent with the next message.
+    attachments: Vec<PathBuf>,
+}
+
+/// A path as text that pastes back as the same file: quoted when it has
+/// spaces or quotes.
+fn quote_path(path: &Path) -> String {
+    let text = path.display().to_string();
+    if text.contains(|c: char| c.is_whitespace() || c == '\'' || c == '"' || c == '\\') {
+        format!("'{}'", text.replace('\'', r"'\''"))
+    } else {
+        text
+    }
 }
 
 /// A chat, and a forum topic of it (none for the General topic), that has
@@ -680,6 +697,7 @@ impl PromptWindow {
             input,
             draft_target: None,
             saved_draft: String::new(),
+            attachments: Vec::new(),
         }
     }
 
@@ -713,10 +731,18 @@ impl PromptWindow {
         self.saved_draft = text;
     }
 
-    /// Sends a picked file with the text as its caption, as a reply when
-    /// replying, and clears the text. While editing or searching, the text
-    /// isn't a caption and stays.
-    fn send_file(&mut self, path: String) {
+    /// Whether files can be attached now: not while editing or searching.
+    fn can_attach(&self) -> bool {
+        matches!(self.input.mode, Mode::Normal | Mode::Reply(_))
+    }
+
+    /// Sends files, the first with the text as its caption and as a reply
+    /// when replying, and clears the text. While editing or searching, the
+    /// text isn't a caption and stays.
+    fn send_files(&mut self, paths: Vec<PathBuf>) {
+        let Some((first, rest)) = paths.split_first() else {
+            return;
+        };
         let (caption, reply_to) = match self.input.mode {
             Mode::Normal => (self.input.text_to_string(), None),
             Mode::Reply(message_id) => (
@@ -735,7 +761,15 @@ impl PromptWindow {
             self.input.set_prompt_size_to_one_focused();
         }
         if let Some(tx) = self.action_tx.as_ref() {
-            let _ = tx.send(Action::SendFile(path, caption.trim().to_owned(), reply_to));
+            let path = |p: &PathBuf| p.display().to_string();
+            let _ = tx.send(Action::SendFile(
+                path(first),
+                caption.trim().to_owned(),
+                reply_to,
+            ));
+            for file in rest {
+                let _ = tx.send(Action::SendFile(path(file), String::new(), None));
+            }
         }
         // The caption was the draft: it's sent now
         self.save_draft();
@@ -767,6 +801,8 @@ impl PromptWindow {
                 .map(|(chat_id, topic_id)| self.app_context.store().draft(chat_id, topic_id))
                 .unwrap_or_default();
             self.input.mode = Mode::Normal;
+            // Files attached for the old chat aren't sent to the new one
+            self.attachments.clear();
             let draft = self.saved_draft.clone();
             self.input.set_text(&draft);
             self.input.move_cursor_to_text_end();
@@ -886,6 +922,11 @@ impl Component for PromptWindow {
 
     fn update(&mut self, action: Action) {
         match action {
+            Action::PromptSendMessage if !self.attachments.is_empty() && self.can_attach() => {
+                self.input.unselect_all();
+                let files = std::mem::take(&mut self.attachments);
+                self.send_files(files);
+            }
             Action::PromptSendMessage => {
                 self.input.unselect_all();
                 let editing = matches!(self.input.mode, Mode::Edit(_));
@@ -900,6 +941,16 @@ impl Component for PromptWindow {
                 self.input.unselect_all();
             }
             Action::Key(key_code, modifiers) => match (key_code, modifiers) {
+                // Esc turns attached files back into the text that was pasted
+                (KeyCode::Esc, ..) if !self.attachments.is_empty() => {
+                    let paths = std::mem::take(&mut self.attachments);
+                    let text = paths
+                        .iter()
+                        .map(|path| quote_path(path))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    self.input.paste(text);
+                }
                 (KeyCode::Esc, ..) => {
                     // ESC cancels reply or edit mode and returns focus to chat:
                     // a reply keeps its text as the draft, an edit brings the
@@ -1120,12 +1171,25 @@ impl Component for PromptWindow {
             },
             Action::Paste(text) => {
                 self.input.unselect_all();
-                self.input.paste(text);
+                match attachment::dropped_files(&text) {
+                    Some(paths) if self.can_attach() => self.attachments.extend(paths),
+                    _ => self.input.paste(text),
+                }
+            }
+            Action::PromptPasteImage if self.can_attach() => {
+                match attachment::save_clipboard_image() {
+                    Ok(path) => self.attachments.push(path),
+                    Err(message) => {
+                        if let Some(tx) = self.action_tx.as_ref() {
+                            let _ = tx.send(Action::StatusMessage(message));
+                        }
+                    }
+                }
             }
             Action::EditMessage(message_id, message) => {
                 self.input.edit_message(message_id, message);
             }
-            Action::UploadFile(path) => self.send_file(path),
+            Action::UploadFile(path) => self.send_files(vec![PathBuf::from(path)]),
             // A sticker answered the message; the text stays
             Action::HideChatWindowReply if matches!(self.input.mode, Mode::Reply(_)) => {
                 self.input.mode = Mode::Normal;
@@ -1208,6 +1272,16 @@ impl Component for PromptWindow {
                     (None, _) => "Message".into(),
                 }
             }
+        };
+
+        // Attached files come first: they go with the next message
+        let title = if self.attachments.is_empty() || !self.can_attach() {
+            title
+        } else {
+            format!(
+                "📎 {} · enter sends, esc makes it text · {title}",
+                attachment::names(&self.attachments)
+            )
         };
 
         let counter_style = if character_count > MESSAGE_MAX_CHARS {

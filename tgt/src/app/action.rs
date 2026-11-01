@@ -675,6 +675,8 @@ pub enum Action {
     /// A file was picked to upload: the prompt sends it with its text as
     /// the caption.
     UploadFile(String),
+    /// Attach the image on the clipboard to the prompt.
+    PromptPasteImage,
     /// Send this file with this caption (none if empty), maybe as a reply.
     SendFile(String, String, Option<TdMessageReplyToMessage>),
 }
@@ -826,6 +828,7 @@ impl FromStr for Action {
             "hide_command_guide" => Ok(Action::HideCommandGuide),
             "prompt_send_message" => Ok(Action::PromptSendMessage),
             "prompt_copy" => Ok(Action::PromptCopy),
+            "prompt_paste_image" => Ok(Action::PromptPasteImage),
             "close_search_overlay" => Ok(Action::CloseSearchOverlay),
             "show_search_overlay" => Ok(Action::ShowSearchOverlay),
             "search_overlay_submit" => Ok(Action::SearchOverlaySubmit),

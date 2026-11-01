@@ -146,6 +146,8 @@ Reactions are shown under their messages, yours highlighted, and pinned messages
 
 To send a file, write its caption in the prompt (or leave it empty), then press `alt+u` (leader `u`) and pick the file: it's sent with the prompt's text as its caption, as a reply if you were replying, and the prompt is cleared. While you're editing a message, the text stays and the file goes without a caption. Files are sent as documents, so photos keep their full quality. `e` on one of your media messages edits its caption; send it empty to remove the caption. Stickers and round videos have none. If Telegram refuses an upload or an edit, the status bar says why.
 
+You can also drop files on the terminal window: most terminals paste the paths of dropped files, and a paste that is only paths of existing files (quoted, with escaped spaces or as `file://` URIs) attaches them to the prompt instead of typing them. `alt+v` attaches the image on the clipboard, e.g. a screenshot, saved as a PNG (this needs the `media-preview` feature). The prompt's title lists what's attached: `enter` sends the files, the first with the prompt's text as its caption, and `esc` turns them back into the pasted text, for when you meant to paste a path. Files aren't attached while editing a message, and switching chats drops them. Dropping needs `app.paste_support`, which is on by default.
+
 `tgt` doesn't play media itself. With `media-preview`, images (and the thumbnails of videos, GIFs and files) are previewed under their messages. Files are fetched from Telegram first when needed; progress and errors are shown in the status bar.
 
 - Downloads never overwrite: `file.zip` becomes `file (1).zip`.

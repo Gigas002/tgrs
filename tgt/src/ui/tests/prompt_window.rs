@@ -488,3 +488,121 @@ mod captions {
         );
     }
 }
+
+mod attachments {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn prompt() -> (PromptWindow, tokio::sync::mpsc::UnboundedReceiver<Action>) {
+        let mut window = create_test_prompt_window();
+        let (tx, rx) = unbounded_channel();
+        window.register_action_handler(tx).unwrap();
+        (window, rx)
+    }
+
+    fn sent_files(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Action>) -> Vec<Action> {
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .filter(|action| matches!(action, Action::SendFile(..)))
+            .collect()
+    }
+
+    fn file(dir: &tempfile::TempDir, name: &str) -> PathBuf {
+        let path = dir.path().join(name);
+        std::fs::write(&path, b"x").unwrap();
+        path
+    }
+
+    fn esc() -> Action {
+        Action::Key(KeyCode::Esc, Modifiers::from(KeyModifiers::empty()))
+    }
+
+    #[test]
+    fn dropped_files_are_attached_and_sent_with_the_caption() {
+        let dir = tempfile::tempdir().unwrap();
+        let (a, b) = (file(&dir, "a.jpg"), file(&dir, "b.pdf"));
+        let (mut window, mut rx) = prompt();
+        window.update(Action::Paste(format!("{} {}", a.display(), b.display())));
+        assert_eq!(typed(&window), "", "not typed");
+        assert_eq!(window.attachments, [a.clone(), b.clone()]);
+        window.update(Action::Paste("look".into()));
+        assert_eq!(typed(&window), "look");
+
+        window.update(Action::PromptSendMessage);
+        assert_eq!(
+            sent_files(&mut rx),
+            [
+                Action::SendFile(a.display().to_string(), "look".into(), None),
+                Action::SendFile(b.display().to_string(), String::new(), None),
+            ]
+        );
+        assert!(window.attachments.is_empty());
+        assert_eq!(typed(&window), "");
+    }
+
+    #[test]
+    fn esc_turns_attached_files_back_into_text() {
+        let dir = tempfile::tempdir().unwrap();
+        let spaced = file(&dir, "my photo.png");
+        let (mut window, mut rx) = prompt();
+        window.update(Action::Paste(format!("'{}'", spaced.display())));
+        assert_eq!(window.attachments.len(), 1);
+        window.update(esc());
+        assert!(window.attachments.is_empty());
+        assert_eq!(typed(&window), format!("'{}'", spaced.display()));
+        // Pasting that text again attaches the same file
+        assert_eq!(
+            crate::ui::attachment::dropped_files(&typed(&window)),
+            Some(vec![spaced])
+        );
+        window.update(Action::PromptSendMessage);
+        assert!(sent_files(&mut rx).is_empty());
+    }
+
+    #[test]
+    fn nothing_is_attached_while_editing() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = file(&dir, "a.jpg");
+        let (mut window, _rx) = prompt();
+        window.update(Action::EditMessage(10, String::new()));
+        window.update(Action::Paste(a.display().to_string()));
+        assert!(window.attachments.is_empty());
+        assert_eq!(typed(&window), a.display().to_string());
+    }
+
+    #[test]
+    fn the_title_names_the_attached_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = file(&dir, "a.jpg");
+        let (mut window, _rx) = prompt();
+        window.focus();
+        window.update(Action::Paste(a.display().to_string()));
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 4)).unwrap();
+        terminal
+            .draw(|frame| window.draw(frame, frame.area()).unwrap())
+            .unwrap();
+        let screen: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(screen.contains("a.jpg"), "{screen}");
+        assert!(screen.contains("enter sends"), "{screen}");
+    }
+
+    #[cfg(not(feature = "media-preview"))]
+    #[test]
+    fn pasting_an_image_needs_media_preview() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::PromptPasteImage);
+        assert!(window.attachments.is_empty());
+        assert!(
+            std::iter::from_fn(|| rx.try_recv().ok()).any(|action| matches!(
+                action,
+                Action::StatusMessage(ref m) if m.contains("media-preview")
+            ))
+        );
+    }
+}

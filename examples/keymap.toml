@@ -203,6 +203,8 @@ keymap = [
   { keys = ["enter"], command = "prompt_send_message", description = "Send the message"},
   # Copy the selected text (overrides core_window try_quit when prompt focused)
   { keys = ["ctrl+c"], command = "prompt_copy", description = "Copy the selected text"},
+  # Attach the image on the clipboard (needs the media-preview feature)
+  { keys = ["alt+v"], command = "prompt_paste_image", description = "Paste an image from the clipboard"},
   # Open message search overlay (same as Alt+R in chat section)
   { keys = ["alt+r"], command = "chat_window_search", description = "Open message search overlay"},
 ]
