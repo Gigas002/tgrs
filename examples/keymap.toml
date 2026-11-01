@@ -276,6 +276,22 @@ keymap = [
   { keys = ["j"], command = "blocked_list_next", description = "Next"},
 ]
 
+# The sessions key bindings are only usable in the list of your active
+# sessions (space d). Logging out asks for the same key a second time.
+[sessions]
+keymap = [
+  { keys = ["esc"], command = "hide_sessions", description = "Close the session list"},
+  { keys = ["q"], command = "hide_sessions", description = "Close the session list"},
+  { keys = ["D"], command = "sessions_terminate", description = "Log the session out (press twice)"},
+  { keys = ["delete"], command = "sessions_terminate", description = "Log the session out (press twice)"},
+  { keys = ["T"], command = "sessions_terminate_others", description = "Log out all other sessions (press twice)"},
+  { keys = ["c"], command = "sessions_confirm", description = "Confirm a new sign-in as yours"},
+  { keys = ["up"], command = "sessions_previous", description = "Previous"},
+  { keys = ["k"], command = "sessions_previous", description = "Previous"},
+  { keys = ["down"], command = "sessions_next", description = "Next"},
+  { keys = ["j"], command = "sessions_next", description = "Next"},
+]
+
 # The profile key bindings are only usable while a profile is shown: i in the
 # chat list and the archive (the selected chat), space i (the open chat) or
 # space m (your own).
@@ -334,6 +350,7 @@ keymap = [
   { keys = ["i"], command = "show_profile", description = "Profile of the open chat"},
   { keys = ["m"], command = "show_my_profile", description = "Your profile"},
   { keys = ["e"], command = "show_edit_profile", description = "Edit your profile"},
+  { keys = ["d"], command = "show_sessions", description = "Active sessions (devices)"},
   { keys = ["n"], command = "show_find_chat", description = "Open a chat by username"},
   { keys = ["b"], command = "show_blocked_list", description = "Blocked users"},
   { keys = ["?"], command = "show_command_guide", description = "Help: every key"},

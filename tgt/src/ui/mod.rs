@@ -33,6 +33,7 @@ pub mod prompt_window;
 pub mod reply_message;
 pub mod report;
 pub mod search_overlay;
+pub mod sessions;
 pub mod status_bar;
 pub mod sticker_picker;
 pub mod terminal;

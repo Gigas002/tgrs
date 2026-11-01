@@ -67,6 +67,7 @@ const SECTIONS: &[(ComponentName, &str)] = &[
     (ComponentName::EditProfile, "edit_profile"),
     (ComponentName::Report, "report"),
     (ComponentName::BlockedList, "blocked_list"),
+    (ComponentName::Sessions, "sessions"),
     (ComponentName::LeaderMenu, "leader_menu"),
 ];
 
@@ -90,6 +91,7 @@ fn section(file: &KeymapFile, component: ComponentName) -> Option<&KeymapMode> {
         ComponentName::EditProfile => file.edit_profile.as_ref(),
         ComponentName::Report => file.report.as_ref(),
         ComponentName::BlockedList => file.blocked_list.as_ref(),
+        ComponentName::Sessions => file.sessions.as_ref(),
         ComponentName::LeaderMenu => file.leader_menu.as_ref(),
         _ => file.core_window.as_ref(),
     }

@@ -43,6 +43,8 @@ Like [concord](https://github.com/chojs23/concord): `left`/`right` move between 
 | `c`     | Actions of the open chat.                    |
 | `i`     | Profile of the open chat.                    |
 | `m`     | Your own profile.                            |
+| `e`     | [Edit your profile](#editing-your-profile).  |
+| `d`     | [Active sessions](#active-sessions).         |
 | `n`     | Open a chat by username.                     |
 | `b`     | [Blocked users](#blocking-and-reporting).    |
 | `?`     | List every key.                              |
@@ -77,12 +79,22 @@ In the chat list and the archive, these keys act on the selected chat (leader `c
 
 ### Profiles
 
-`i` in the chat list or the archive shows the selected chat's profile, leader `i` the open chat's and leader `m` your own. It is read only:
+`i` in the chat list or the archive shows the selected chat's profile, leader `i` the open chat's and leader `m` your own:
 
 - a person or bot: name, usernames, phone number, bio, birthday, last seen and ID;
 - a group or channel: usernames, description and member count.
 
-The bio or description is loaded from Telegram when the profile opens. `j`/`k` scroll a long profile; `esc`, `q` or `i` close it.
+The bio or description is loaded from Telegram when the profile opens. `j`/`k` scroll a long profile; `esc`, `q` or `i` close it. In your own profile, `e` [edits it](#editing-your-profile).
+
+### Editing your profile
+
+Leader `e` (or `e` in your own profile) edits your first and last name, bio and username. `tab`/`shift+tab` (or `down`/`up`, or a click) move between the fields, `enter` saves what changed and `esc` closes without saving. The fields can be edited once your bio has loaded. The first name can't be empty, and a username has 5 to 32 Latin letters, digits and underscores, starting with a letter; leave the username empty to remove it. Only your editable username can be changed, not collectible ones. If Telegram refuses a change, for example a taken username or a bio that's too long, the popup says why and moves to that field. When you opened the editor from your profile, saving shows your profile again.
+
+### Active sessions
+
+Leader `d` lists the devices and apps logged in to your account, in Telegram's order with tgt's own session first: each shows the app and its version, the device and system, where it logged in from and when it was last active. `j`/`k` move, `D` (or `delete`) logs the highlighted session out and `T` logs out every session but tgt's; both ask for the same key a second time, as the popup's title says. tgt's own session is ended with `tgt logout` instead. A new sign-in that hasn't been confirmed yet is marked `(new, unconfirmed)`: `c` confirms it as yours, or log it out if it isn't.
+
+When someone logs in to your account and the login is still unconfirmed, the status bar warns about it, naming the device and place, e.g. `New sign-in on Pixel 8 from Berlin, Germany. Not you? Review sessions with space d.`
 
 ### Blocking and reporting
 

@@ -7,7 +7,7 @@ use tdlib_rs::enums::{AuthorizationState, ChatList, NotificationType, Update};
 use tdlib_rs::types::{Chat, ChatPosition};
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::model::{MessageAlert, MessageEntry, OrderedChat};
+use crate::model::{MessageAlert, MessageEntry, OrderedChat, SignInAlert};
 use crate::store::Store;
 
 /// What changed in the [`Store`], for the UI to react to.
@@ -27,6 +27,8 @@ pub enum Notification {
     OpenChatTopicsChanged,
     /// A message to notify the user about (see [`super::Client::enable_notifications`]).
     NewMessage(MessageAlert),
+    /// Someone logged in to your account and the session isn't confirmed yet.
+    NewSignIn(SignInAlert),
 }
 
 /// Minimum gap between two [`Notification::ChatListChanged`] (~1 frame at 60fps).
@@ -118,6 +120,15 @@ async fn apply(
         }
         Update::User(update) => {
             store.users().insert(update.user.id, update.user);
+        }
+        Update::UnconfirmedSession(update) => {
+            if let Some(alert) = update
+                .session
+                .as_ref()
+                .and_then(SignInAlert::from_unconfirmed)
+            {
+                let _ = notify.send(Notification::NewSignIn(alert));
+            }
         }
         Update::UserStatus(update) => {
             if let Some(user) = store.users().get_mut(&update.user_id) {

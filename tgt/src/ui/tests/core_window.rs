@@ -890,3 +890,14 @@ fn someone_else_s_profile_can_t_be_edited() {
     );
     assert!(window.is_popup_visible(ComponentName::Profile));
 }
+
+#[test]
+fn the_session_list_gives_the_focus_back() {
+    let mut window = create_test_core_window();
+    window.focus_only(Some(ComponentName::Chat));
+    window.update(Action::ShowSessions);
+    assert_eq!(window.component_focused, Some(ComponentName::Sessions));
+    window.update(Action::HideSessions);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+    assert!(!window.is_popup_visible(ComponentName::Sessions));
+}

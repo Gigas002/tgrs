@@ -351,9 +351,7 @@ impl Component for StickerPicker {
                     return Ok(Some(Action::HideStickerPicker));
                 }
                 if self.last_tabs.is_some_and(|tabs| {
-                    mouse.row == tabs.y
-                        && mouse.column >= tabs.x
-                        && mouse.column < tabs.right()
+                    mouse.row == tabs.y && mouse.column >= tabs.x && mouse.column < tabs.right()
                 }) {
                     if let Some((_, _, index)) = self
                         .last_tab_ranges
@@ -374,11 +372,9 @@ impl Component for StickerPicker {
                 {
                     return Ok(None);
                 }
-                let col =
-                    usize::from(mouse.column - self.last_grid_left) / usize::from(CELL_WIDTH);
+                let col = usize::from(mouse.column - self.last_grid_left) / usize::from(CELL_WIDTH);
                 let row = usize::from(mouse.row - grid.y) / usize::from(CELL_HEIGHT);
-                if col >= self.columns
-                    || row >= usize::from(grid.height) / usize::from(CELL_HEIGHT)
+                if col >= self.columns || row >= usize::from(grid.height) / usize::from(CELL_HEIGHT)
                 {
                     return Ok(None);
                 }

@@ -1041,3 +1041,106 @@ mod profile_edit {
         );
     }
 }
+
+mod session {
+    use tdlib_rs::enums::{SessionDeviceType, SessionType};
+    use tdlib_rs::types::{
+        Session, SessionTypeConnectedBot, SessionTypeDevice, UnconfirmedSession,
+    };
+
+    use crate::model::{DeviceKind, SessionEntry, SignInAlert, session_entries};
+
+    fn session(id: i64, app: &str, device_type: SessionDeviceType, last_active: i32) -> Session {
+        Session {
+            id,
+            is_current: false,
+            is_password_pending: false,
+            is_unconfirmed: false,
+            can_accept_secret_chats: false,
+            can_accept_calls: false,
+            device_type,
+            api_id: 1,
+            application_name: app.into(),
+            application_version: "5.6".into(),
+            is_official_application: true,
+            device_model: "Pixel 8".into(),
+            platform: "Android".into(),
+            system_version: "14".into(),
+            log_in_date: 0,
+            last_active_date: last_active,
+            ip_address: "203.0.113.5".into(),
+            location: "Berlin, Germany".into(),
+        }
+    }
+
+    #[test]
+    fn sessions_keep_telegram_s_order() {
+        let mut current = session(1, "tgt", SessionDeviceType::Linux, 10);
+        current.is_current = true;
+        let entries = session_entries(&[
+            current,
+            session(3, "Recent", SessionDeviceType::Android, 200),
+            session(2, "Old", SessionDeviceType::Windows, 100),
+        ]);
+        let ids: Vec<i64> = entries.iter().map(|e| e.id).collect();
+        assert_eq!(ids, [1, 3, 2]);
+        assert_eq!(entries[0].last_active, "online");
+    }
+
+    #[test]
+    fn a_session_reads_as_app_device_place_and_time() {
+        let entry = SessionEntry::from(&session(
+            3,
+            "Telegram Android",
+            SessionDeviceType::Android,
+            0,
+        ));
+        assert_eq!(entry.application, "Telegram Android 5.6");
+        assert_eq!(entry.device, "Pixel 8 · Android 14");
+        assert_eq!(entry.device_kind, DeviceKind::Phone);
+        assert!(
+            entry
+                .summary()
+                .starts_with("Telegram Android 5.6 · Pixel 8 · Android 14 · Berlin, Germany · ")
+        );
+
+        let mut bare = session(5, "", SessionDeviceType::Unknown, 0);
+        bare.application_version.clear();
+        bare.device_model.clear();
+        bare.platform.clear();
+        bare.system_version = " ".into();
+        bare.location.clear();
+        bare.is_current = true;
+        let entry = SessionEntry::from(&bare);
+        assert_eq!(entry.summary(), "online (this app)");
+        assert_eq!(entry.device_kind, DeviceKind::Computer);
+
+        let mut new = session(6, "Web", SessionDeviceType::Chrome, 0);
+        new.is_unconfirmed = true;
+        let entry = SessionEntry::from(&new);
+        assert_eq!(entry.device_kind, DeviceKind::Browser);
+        assert!(entry.summary().ends_with(" (new, unconfirmed)"));
+    }
+
+    #[test]
+    fn a_new_sign_in_names_the_device_and_place_it_knows() {
+        let mut unconfirmed = UnconfirmedSession {
+            r#type: SessionType::Device(SessionTypeDevice { session_id: 7 }),
+            date: 0,
+            device_model: "Pixel 8".into(),
+            location: "Berlin, Germany".into(),
+        };
+        assert_eq!(
+            SignInAlert::from_unconfirmed(&unconfirmed).unwrap().text(),
+            "New sign-in on Pixel 8 from Berlin, Germany"
+        );
+        // A connected business bot isn't a sign-in
+        unconfirmed.r#type = SessionType::ConnectedBot(SessionTypeConnectedBot { bot_user_id: 3 });
+        assert!(SignInAlert::from_unconfirmed(&unconfirmed).is_none());
+        let unknown = SignInAlert {
+            device_model: String::new(),
+            location: String::new(),
+        };
+        assert_eq!(unknown.text(), "New sign-in on a new device");
+    }
+}

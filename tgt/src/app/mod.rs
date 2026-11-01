@@ -20,7 +20,7 @@ use std::{
 
 use libtgt::{
     client::{Client, Notification},
-    model::{ReportStep, TdMessageReplyToMessage, profile_change_failure},
+    model::{ReportStep, SignInAlert, TdMessageReplyToMessage, profile_change_failure},
     store::Store,
     tdlib_rs::enums::ChatList,
 };
@@ -224,6 +224,11 @@ fn reaction_picker(app_context: &AppContext, message_id: i64, available: Vec<Str
     })
 }
 
+/// The status bar warning about a new sign-in.
+fn sign_in_message(alert: &SignInAlert) -> String {
+    format!("{}. Not you? Review sessions with space d.", alert.text())
+}
+
 /// Turns a store change into the actions the UI reacts to.
 fn handle_notification(
     app_context: &AppContext,
@@ -250,6 +255,9 @@ fn handle_notification(
             notifier::show(alert, app_context.notifications().show_preview);
         }
         Notification::NewMessage(_) => {}
+        Notification::NewSignIn(alert) => {
+            action_tx.send(Action::StatusMessage(sign_in_message(&alert)))?
+        }
     }
     Ok(())
 }
@@ -456,6 +464,14 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::BlockedListNext
             | Action::BlockedListPrevious
             | Action::BlockedListUnblock
+            | Action::ShowSessions
+            | Action::HideSessions
+            | Action::SessionsLoaded(_)
+            | Action::SessionsNext
+            | Action::SessionsPrevious
+            | Action::SessionsTerminate
+            | Action::SessionsTerminateOthers
+            | Action::SessionsConfirm
             | Action::HideFindChat
             | Action::FindChatConfirm
             | Action::FindChatFailed(_)
@@ -731,6 +747,44 @@ async fn handle_app_actions(
                         media::status(&app_context, format!("Can't unblock {name}: {}", e.message));
                         // Show them again
                         app_context.action_tx().send(Action::ShowBlockedList)?;
+                    }
+                }
+            }
+            Action::ShowSessions => match client.active_sessions().await {
+                Ok(sessions) => app_context
+                    .action_tx()
+                    .send(Action::SessionsLoaded(sessions))?,
+                Err(e) => {
+                    media::status(&app_context, format!("No sessions: {}", e.message));
+                    app_context.action_tx().send(Action::HideSessions)?;
+                }
+            },
+            Action::TerminateSession(session_id, name) => {
+                match client.terminate_session(*session_id).await {
+                    Ok(()) => media::status(&app_context, format!("{name}: logged out")),
+                    Err(e) => {
+                        media::status(&app_context, format!("Can't log out {name}: {}", e.message));
+                        // Show what's still logged in
+                        app_context.action_tx().send(Action::ShowSessions)?;
+                    }
+                }
+            }
+            Action::TerminateOtherSessions => match client.terminate_other_sessions().await {
+                Ok(()) => media::status(&app_context, "Every other session logged out".to_owned()),
+                Err(e) => {
+                    media::status(
+                        &app_context,
+                        format!("Can't log out other sessions: {}", e.message),
+                    );
+                    app_context.action_tx().send(Action::ShowSessions)?;
+                }
+            },
+            Action::ConfirmSession(session_id, name) => {
+                match client.confirm_session(*session_id).await {
+                    Ok(()) => media::status(&app_context, format!("{name}: confirmed")),
+                    Err(e) => {
+                        media::status(&app_context, format!("Can't confirm {name}: {}", e.message));
+                        app_context.action_tx().send(Action::ShowSessions)?;
                     }
                 }
             }

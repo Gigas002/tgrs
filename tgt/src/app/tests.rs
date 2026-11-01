@@ -104,6 +104,24 @@ fn notifications_map_to_actions() {
     );
 }
 
+#[test]
+fn a_new_sign_in_is_told_in_the_status_bar() {
+    let ctx = test_app_context();
+    let alert = libtgt::model::SignInAlert {
+        device_model: "Pixel 8".into(),
+        location: "Berlin, Germany".into(),
+    };
+    handle_notification(&ctx, Notification::NewSignIn(alert)).unwrap();
+    let mut rx = ctx.action_rx();
+    assert_eq!(
+        rx.try_recv().ok(),
+        Some(Action::StatusMessage(
+            "New sign-in on Pixel 8 from Berlin, Germany. Not you? Review sessions with space d."
+                .into()
+        ))
+    );
+}
+
 mod masked_input {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 

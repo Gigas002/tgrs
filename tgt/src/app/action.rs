@@ -2,8 +2,8 @@ use std::str::FromStr;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use libtgt::model::{
-    BlockedSender, ProfileChange, ProfileField, ReportStep, StickerEntry, StickerSetEntry,
-    TdChatList, TdMessageReplyToMessage, TdMessageSender,
+    BlockedSender, ProfileChange, ProfileField, ReportStep, SessionEntry, StickerEntry,
+    StickerSetEntry, TdChatList, TdMessageReplyToMessage, TdMessageSender,
 };
 use ratatui::layout::Rect;
 
@@ -451,6 +451,29 @@ pub enum Action {
     /// Take someone off your block list.
     UnblockSender(TdMessageSender),
 
+    /// List your active sessions.
+    ShowSessions,
+    /// Close the session list.
+    HideSessions,
+    /// Your active sessions, this app's first.
+    SessionsLoaded(Vec<SessionEntry>),
+    /// Highlight the next session.
+    SessionsNext,
+    /// Highlight the previous session.
+    SessionsPrevious,
+    /// Log the highlighted session out (on the second press).
+    SessionsTerminate,
+    /// Log every other session out (on the second press).
+    SessionsTerminateOthers,
+    /// Confirm the highlighted new sign-in as yours.
+    SessionsConfirm,
+    /// Log this session out; the app's name, to tell about it.
+    TerminateSession(i64, String),
+    /// Log every session but this app's out.
+    TerminateOtherSessions,
+    /// Confirm this new sign-in as yours; the app's name, to tell about it.
+    ConfirmSession(i64, String),
+
     /// Ask for a username and open its chat.
     ShowFindChat,
     /// Close the popup asking for a username.
@@ -739,6 +762,13 @@ impl FromStr for Action {
             "profile_scroll_down" => Ok(Action::ProfileScrollDown),
             "profile_scroll_up" => Ok(Action::ProfileScrollUp),
             "show_edit_profile" => Ok(Action::ShowEditProfile),
+            "show_sessions" => Ok(Action::ShowSessions),
+            "hide_sessions" => Ok(Action::HideSessions),
+            "sessions_next" => Ok(Action::SessionsNext),
+            "sessions_previous" => Ok(Action::SessionsPrevious),
+            "sessions_terminate" => Ok(Action::SessionsTerminate),
+            "sessions_terminate_others" => Ok(Action::SessionsTerminateOthers),
+            "sessions_confirm" => Ok(Action::SessionsConfirm),
             "hide_edit_profile" => Ok(Action::HideEditProfile),
             "edit_profile_next_field" => Ok(Action::EditProfileNextField),
             "edit_profile_previous_field" => Ok(Action::EditProfilePreviousField),

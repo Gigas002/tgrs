@@ -19,8 +19,9 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
 use crate::model::{
-    BlockedSender, MessageEntry, ProfileChange, ProfileSource, ReportStep, StickerEntry,
-    StickerSetEntry, TdChatList, TdMessageReplyToMessage, TdMessageSender, TopicEntry, text_draft,
+    BlockedSender, MessageEntry, ProfileChange, ProfileSource, ReportStep, SessionEntry,
+    StickerEntry, StickerSetEntry, TdChatList, TdMessageReplyToMessage, TdMessageSender,
+    TopicEntry, session_entries, text_draft,
 };
 use crate::store::Store;
 
@@ -608,6 +609,35 @@ impl Client {
         .await
         .map(ReportStep::from)
         .inspect_err(|e| tracing::error!("Failed to report chat {chat_id}: {e:?}"))
+    }
+
+    /// Your active sessions, in the order to show them (this app's first).
+    pub async fn active_sessions(&self) -> Result<Vec<SessionEntry>, TdError> {
+        let enums::Sessions::Sessions(sessions) = functions::get_active_sessions(self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to get active sessions: {e:?}"))?;
+        Ok(session_entries(&sessions.sessions))
+    }
+
+    /// Logs another device or app out of your account.
+    pub async fn terminate_session(&self, session_id: i64) -> Result<(), TdError> {
+        functions::terminate_session(session_id, self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to terminate session {session_id}: {e:?}"))
+    }
+
+    /// Logs every other device and app out of your account.
+    pub async fn terminate_other_sessions(&self) -> Result<(), TdError> {
+        functions::terminate_all_other_sessions(self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to terminate other sessions: {e:?}"))
+    }
+
+    /// Confirms a new login as yours.
+    pub async fn confirm_session(&self, session_id: i64) -> Result<(), TdError> {
+        functions::confirm_session(session_id, self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to confirm session {session_id}: {e:?}"))
     }
 
     /// Saves one change to your own profile. TDLib then sends the updated
