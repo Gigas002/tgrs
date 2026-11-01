@@ -33,14 +33,17 @@ pub enum MessageCommand {
     DeleteForMe,
     /// Report the message to Telegram's moderators.
     Report,
+    /// Forward the message to another chat.
+    Forward,
 }
 
 impl MessageCommand {
     /// Every command, in the order of the message actions menu.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Copy,
         Self::React,
         Self::Reply,
+        Self::Forward,
         Self::DeleteForEveryone,
         Self::Edit,
         Self::OpenLink,
@@ -68,6 +71,7 @@ impl MessageCommand {
             Self::CopyLink => "copy message link",
             Self::DeleteForMe => "delete for me",
             Self::Report => "report message",
+            Self::Forward => "forward message",
         }
     }
 }
@@ -107,6 +111,18 @@ impl ChatCommand {
     pub fn needs_confirmation(self) -> bool {
         self == Self::Remove
     }
+}
+
+/// Messages to forward and where to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForwardRequest {
+    pub to_chat_id: i64,
+    /// To tell where they went.
+    pub to_chat_name: String,
+    pub from_chat_id: i64,
+    pub message_ids: Vec<i64>,
+    /// Send copies without the original author.
+    pub send_copy: bool,
 }
 
 /// One step of reporting a chat or messages in it, sent to Telegram.
@@ -451,6 +467,21 @@ pub enum Action {
     /// Take someone off your block list.
     UnblockSender(TdMessageSender),
 
+    /// Pick a chat to forward these messages of this chat to.
+    ShowForward(i64, Vec<i64>),
+    /// Close the forward popup without forwarding.
+    HideForward,
+    /// Highlight the next chat to forward to.
+    ForwardNext,
+    /// Highlight the previous chat to forward to.
+    ForwardPrevious,
+    /// Toggle forwarding without the original author.
+    ForwardToggleCopy,
+    /// Forward to the highlighted chat.
+    ForwardConfirm,
+    /// Forward messages.
+    ForwardMessages(ForwardRequest),
+
     /// List your active sessions.
     ShowSessions,
     /// Close the session list.
@@ -744,6 +775,12 @@ impl FromStr for Action {
             "toggle_chat_block" => Ok(Action::SelectedChat(ChatCommand::ToggleBlock)),
             "report_chat" => Ok(Action::SelectedChat(ChatCommand::Report)),
             "report_message" => Ok(Action::SelectedMessage(MessageCommand::Report)),
+            "forward_message" => Ok(Action::SelectedMessage(MessageCommand::Forward)),
+            "hide_forward" => Ok(Action::HideForward),
+            "forward_next" => Ok(Action::ForwardNext),
+            "forward_previous" => Ok(Action::ForwardPrevious),
+            "forward_toggle_copy" => Ok(Action::ForwardToggleCopy),
+            "forward_confirm" => Ok(Action::ForwardConfirm),
             "hide_report" => Ok(Action::HideReport),
             "report_next" => Ok(Action::ReportNext),
             "report_previous" => Ok(Action::ReportPrevious),

@@ -901,3 +901,14 @@ fn the_session_list_gives_the_focus_back() {
     assert_eq!(window.component_focused, Some(ComponentName::Chat));
     assert!(!window.is_popup_visible(ComponentName::Sessions));
 }
+
+#[test]
+fn the_forward_popup_gives_the_focus_back() {
+    let mut window = create_test_core_window();
+    window.focus_only(Some(ComponentName::Chat));
+    window.update(Action::ShowForward(1, vec![7]));
+    assert_eq!(window.component_focused, Some(ComponentName::Forward));
+    window.update(Action::HideForward);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+    assert!(!window.is_popup_visible(ComponentName::Forward));
+}

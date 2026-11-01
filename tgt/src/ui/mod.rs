@@ -19,6 +19,7 @@ pub mod core_window;
 pub mod edit_profile;
 pub mod file_upload_explorer;
 pub mod find_chat;
+pub mod forward;
 pub mod leader_menu;
 pub mod message;
 pub mod message_actions;

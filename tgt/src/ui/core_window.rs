@@ -20,6 +20,7 @@ use crate::{
         edit_profile::EditProfile,
         file_upload_explorer::FileUploadExplorer,
         find_chat::FindChat,
+        forward::Forward,
         leader_menu::LeaderMenu,
         message_actions::MessageActions,
         picker::Picker,
@@ -86,6 +87,8 @@ pub struct CoreWindow {
     focus_before_blocked_list: Option<ComponentName>,
     /// The pane focused when the session list opened, focused again after.
     focus_before_sessions: Option<ComponentName>,
+    /// The pane focused when the forward popup opened, focused again after.
+    focus_before_forward: Option<ComponentName>,
     /// The size of the message reply component.
     size_message_reply: u16,
     /// The size of the chat list component.
@@ -199,6 +202,12 @@ impl CoreWindow {
                     .new_boxed(),
             ),
             (
+                ComponentName::Forward,
+                Forward::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::Forward.to_string())
+                    .new_boxed(),
+            ),
+            (
                 ComponentName::Sessions,
                 Sessions::new(Arc::clone(&app_context))
                     .with_name(ComponentName::Sessions.to_string())
@@ -285,6 +294,7 @@ impl CoreWindow {
             focus_before_report: None,
             focus_before_blocked_list: None,
             focus_before_sessions: None,
+            focus_before_forward: None,
             size_message_reply,
             small_area,
             component_focused,
@@ -534,6 +544,7 @@ impl CoreWindow {
             ComponentName::Report => Action::HideReport,
             ComponentName::BlockedList => Action::HideBlockedList,
             ComponentName::Sessions => Action::HideSessions,
+            ComponentName::Forward => Action::HideForward,
             ComponentName::LeaderMenu => Action::HideLeaderMenu,
             _ => return None,
         })
@@ -882,6 +893,14 @@ impl Component for CoreWindow {
                 if let Some(component) = self.components.get_mut(&ComponentName::BlockedList) {
                     component.update(action);
                 }
+            }
+            Action::ShowForward(..) => {
+                self.focus_before_forward = self.component_focused.filter(|c| !c.is_popup());
+                self.show_popup(ComponentName::Forward, action);
+            }
+            Action::HideForward => {
+                let refocus = self.focus_before_forward.take();
+                self.close_popup(ComponentName::Forward, refocus);
             }
             Action::ShowSessions => {
                 self.focus_before_sessions = self.component_focused.filter(|c| !c.is_popup());

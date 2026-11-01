@@ -29,7 +29,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
     app::{
-        action::{Action, ChatCommand, PickerKind, ReactionChoice},
+        action::{Action, ChatCommand, ForwardRequest, PickerKind, ReactionChoice},
         auth::StdinAuthenticator,
         context::AppContext,
         error::AppError,
@@ -222,6 +222,22 @@ fn reaction_picker(app_context: &AppContext, message_id: i64, available: Vec<Str
         message_id,
         reactions,
     })
+}
+
+/// What to tell after forwarding `count` messages as `request` asked.
+fn forward_status(
+    request: &ForwardRequest,
+    count: usize,
+    result: Result<usize, libtgt::tdlib_rs::types::Error>,
+) -> String {
+    let to = &request.to_chat_name;
+    match result {
+        Ok(0) if count == 1 => format!("Forwarded to {to}"),
+        Ok(0) => format!("Forwarded {count} messages to {to}"),
+        Ok(failed) if failed == count => format!("Can't forward to {to}"),
+        Ok(failed) => format!("Forwarded {} of {count} messages to {to}", count - failed),
+        Err(e) => format!("Can't forward to {to}: {}", e.message),
+    }
 }
 
 /// The status bar warning about a new sign-in.
@@ -464,6 +480,12 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::BlockedListNext
             | Action::BlockedListPrevious
             | Action::BlockedListUnblock
+            | Action::ShowForward(..)
+            | Action::HideForward
+            | Action::ForwardNext
+            | Action::ForwardPrevious
+            | Action::ForwardToggleCopy
+            | Action::ForwardConfirm
             | Action::ShowSessions
             | Action::HideSessions
             | Action::SessionsLoaded(_)
@@ -749,6 +771,18 @@ async fn handle_app_actions(
                         app_context.action_tx().send(Action::ShowBlockedList)?;
                     }
                 }
+            }
+            Action::ForwardMessages(request) => {
+                let count = request.message_ids.len();
+                let result = client
+                    .forward_messages(
+                        request.to_chat_id,
+                        request.from_chat_id,
+                        request.message_ids.clone(),
+                        request.send_copy,
+                    )
+                    .await;
+                media::status(&app_context, forward_status(request, count, result));
             }
             Action::ShowSessions => match client.active_sessions().await {
                 Ok(sessions) => app_context

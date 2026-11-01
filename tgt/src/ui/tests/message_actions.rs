@@ -223,3 +223,17 @@ fn concord_keys_react_and_reply() {
         );
     }
 }
+
+#[test]
+fn protected_messages_can_t_be_forwarded() {
+    let mut protected = create_mock_message(2, "secret");
+    protected.set_can_be_forwarded(false);
+    let (mut menu, _rx) = menu_with(vec![create_mock_message(1, "hello"), protected]);
+    menu.update(Action::ShowMessageActionsFor(1));
+    assert_eq!(disabled(&menu, MessageCommand::Forward), None);
+    menu.update(Action::ShowMessageActionsFor(2));
+    assert_eq!(
+        disabled(&menu, MessageCommand::Forward),
+        Some("protected content")
+    );
+}

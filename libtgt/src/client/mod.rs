@@ -611,6 +611,34 @@ impl Client {
         .inspect_err(|e| tracing::error!("Failed to report chat {chat_id}: {e:?}"))
     }
 
+    /// Forwards messages of `from_chat_id` to `chat_id` (to a forum's
+    /// General topic). With `send_copy`, they're sent as new messages
+    /// without the original author. Returns how many TDLib couldn't forward.
+    pub async fn forward_messages(
+        &self,
+        chat_id: i64,
+        from_chat_id: i64,
+        mut message_ids: Vec<i64>,
+        send_copy: bool,
+    ) -> Result<usize, TdError> {
+        // TDLib wants them in increasing order
+        message_ids.sort_unstable();
+        message_ids.dedup();
+        let enums::Messages::Messages(sent) = functions::forward_messages(
+            chat_id,
+            None,
+            from_chat_id,
+            message_ids,
+            None,
+            send_copy,
+            false,
+            self.client_id,
+        )
+        .await
+        .inspect_err(|e| tracing::error!("Failed to forward to {chat_id}: {e:?}"))?;
+        Ok(sent.messages.iter().filter(|m| m.is_none()).count())
+    }
+
     /// Your active sessions, in the order to show them (this app's first).
     pub async fn active_sessions(&self) -> Result<Vec<SessionEntry>, TdError> {
         let enums::Sessions::Sessions(sessions) = functions::get_active_sessions(self.client_id)

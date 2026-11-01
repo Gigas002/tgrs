@@ -67,6 +67,9 @@ impl MessageActions {
                     MessageCommand::Edit if !mine => Some("not your message"),
                     MessageCommand::Edit if message.media().is_some() => Some("media message"),
                     MessageCommand::Report if mine => Some("your message"),
+                    MessageCommand::Forward if !message.can_be_forwarded() => {
+                        Some("protected content")
+                    }
                     MessageCommand::DeleteForEveryone | MessageCommand::DeleteForMe if !mine => {
                         Some("not your message")
                     }

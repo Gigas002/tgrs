@@ -279,6 +279,15 @@ impl ChatWindow {
                 let chat_id = self.app_context.store().open_chat_id().as_i64();
                 self.send(Action::ShowReport(chat_id, vec![message_id]));
             }
+            MessageCommand::Forward if !entry.can_be_forwarded() => {
+                self.send(Action::StatusMessage(
+                    "This chat doesn't allow forwarding its messages.".into(),
+                ));
+            }
+            MessageCommand::Forward => {
+                let chat_id = self.app_context.store().open_chat_id().as_i64();
+                self.send(Action::ShowForward(chat_id, vec![message_id]));
+            }
         }
     }
 

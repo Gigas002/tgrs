@@ -68,6 +68,7 @@ const SECTIONS: &[(ComponentName, &str)] = &[
     (ComponentName::Report, "report"),
     (ComponentName::BlockedList, "blocked_list"),
     (ComponentName::Sessions, "sessions"),
+    (ComponentName::Forward, "forward"),
     (ComponentName::LeaderMenu, "leader_menu"),
 ];
 
@@ -92,6 +93,7 @@ fn section(file: &KeymapFile, component: ComponentName) -> Option<&KeymapMode> {
         ComponentName::Report => file.report.as_ref(),
         ComponentName::BlockedList => file.blocked_list.as_ref(),
         ComponentName::Sessions => file.sessions.as_ref(),
+        ComponentName::Forward => file.forward.as_ref(),
         ComponentName::LeaderMenu => file.leader_menu.as_ref(),
         _ => file.core_window.as_ref(),
     }
@@ -128,6 +130,7 @@ impl Keymap {
                     | ComponentName::SearchOverlay
                     | ComponentName::FindChat
                     | ComponentName::EditProfile
+                    | ComponentName::Forward
                     | ComponentName::Report
             ) {
                 // These take printable keys as text, so inherited plain keys

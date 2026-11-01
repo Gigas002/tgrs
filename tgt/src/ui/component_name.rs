@@ -50,13 +50,15 @@ pub enum ComponentName {
     BlockedList,
     /// Your active sessions.
     Sessions,
+    /// Picks a chat to forward messages to.
+    Forward,
     /// The leader menu (Space), like concord's.
     LeaderMenu,
 }
 
 impl ComponentName {
     /// Every component, in a fixed order.
-    pub const ALL: [Self; 24] = [
+    pub const ALL: [Self; 25] = [
         Self::CoreWindow,
         Self::ChatList,
         Self::ArchiveList,
@@ -80,11 +82,12 @@ impl ComponentName {
         Self::Report,
         Self::BlockedList,
         Self::Sessions,
+        Self::Forward,
         Self::LeaderMenu,
     ];
 
     /// The popups (modal overlays); only one is shown at a time.
-    pub const POPUPS: [Self; 15] = [
+    pub const POPUPS: [Self; 16] = [
         Self::CommandGuide,
         Self::SearchOverlay,
         Self::MessageActions,
@@ -99,6 +102,7 @@ impl ComponentName {
         Self::Report,
         Self::BlockedList,
         Self::Sessions,
+        Self::Forward,
         Self::LeaderMenu,
     ];
 
@@ -135,6 +139,7 @@ impl Display for ComponentName {
             ComponentName::Report => write!(f, "Report"),
             ComponentName::BlockedList => write!(f, "Blocked List"),
             ComponentName::Sessions => write!(f, "Sessions"),
+            ComponentName::Forward => write!(f, "Forward"),
             ComponentName::LeaderMenu => write!(f, "Leader Menu"),
         }
     }

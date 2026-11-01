@@ -134,8 +134,13 @@ Select a message in the chat (`up`/`down`) and press a key, or `enter` for the a
 | `P` | Pin or unpin the message for everyone.                                                             |
 | `L` | Copy the message's link (supergroups and channels).                                                |
 | `!` | Report the message to Telegram's moderators (not your own).                                        |
+| `f` | [Forward](#forwarding) the message to another chat.                                                |
 
 Reactions are shown under their messages, yours highlighted, and pinned messages get a 📌.
+
+### Forwarding
+
+`f` on a selected message (or "forward message" in its actions menu) asks where to send it: type part of a chat's name to narrow your chats and archived chats down, best match first, move with `up`/`down` (or `ctrl+p`/`ctrl+n`, or a click) and press `enter` to forward. `tab` toggles **without the original author**, which sends a copy as your own message instead of a "Forwarded from" one. Forwarding to a forum goes to its General topic. Messages from chats that protect their content can't be forwarded, and the menu dims the action for them. The status bar says where the message went, or why Telegram refused, e.g. when you can't write in that chat.
 
 ### Media and files
 

@@ -48,6 +48,7 @@ pub struct KeymapFile {
     pub report: Option<KeymapMode>,
     pub blocked_list: Option<KeymapMode>,
     pub sessions: Option<KeymapMode>,
+    pub forward: Option<KeymapMode>,
     pub leader_menu: Option<KeymapMode>,
 }
 

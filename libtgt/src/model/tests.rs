@@ -112,6 +112,15 @@ mod message {
         }
     }
 
+    #[test]
+    fn protected_content_can_t_be_forwarded() {
+        let mut message = message_with_entities("hi", vec![]);
+        message.can_be_saved = false;
+        assert!(!MessageEntry::from(&message).can_be_forwarded());
+        message.can_be_saved = true;
+        assert!(MessageEntry::from(&message).can_be_forwarded());
+    }
+
     /// No duplicate or overlapping spans: output must equal the original text.
     #[test]
     fn format_message_content_single_entity_no_duplicate() {

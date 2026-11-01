@@ -176,6 +176,7 @@ keymap = [
   { keys = ["L"], command = "copy_message_link", description = "Copy the message link"},
   # Report the selected message to Telegram's moderators
   { keys = ["!"], command = "report_message", description = "Report the selected message"},
+  { keys = ["f"], command = "forward_message", description = "Forward the selected message"},
   # Open the actions menu of the selected message
   { keys = ["enter"], command = "show_message_actions", description = "Open message actions"},
   # Open the media (photo, video, GIF, audio, voice, file, ...) in its default application, e.g. mpv
@@ -274,6 +275,19 @@ keymap = [
   { keys = ["k"], command = "blocked_list_previous", description = "Previous"},
   { keys = ["down"], command = "blocked_list_next", description = "Next"},
   { keys = ["j"], command = "blocked_list_next", description = "Next"},
+]
+
+# The forward key bindings are only usable while picking the chat to forward
+# a message to (f in the chat); other keys type to find the chat.
+[forward]
+keymap = [
+  { keys = ["esc"], command = "hide_forward", description = "Close without forwarding"},
+  { keys = ["enter"], command = "forward_confirm", description = "Forward to the highlighted chat"},
+  { keys = ["down"], command = "forward_next", description = "Next chat"},
+  { keys = ["ctrl+n"], command = "forward_next", description = "Next chat"},
+  { keys = ["up"], command = "forward_previous", description = "Previous chat"},
+  { keys = ["ctrl+p"], command = "forward_previous", description = "Previous chat"},
+  { keys = ["tab"], command = "forward_toggle_copy", description = "Toggle forwarding without the author"},
 ]
 
 # The sessions key bindings are only usable in the list of your active

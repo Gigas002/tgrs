@@ -387,6 +387,8 @@ pub struct MessageEntry {
     is_edited: bool,
     is_pinned: bool,
     reactions: Vec<Reaction>,
+    /// False for protected content, which can't be forwarded or saved.
+    can_be_forwarded: bool,
 }
 
 impl MessageEntry {
@@ -402,6 +404,7 @@ impl MessageEntry {
             is_edited: false,
             is_pinned: false,
             reactions: Vec::new(),
+            can_be_forwarded: true,
         }
     }
 
@@ -430,6 +433,7 @@ impl MessageEntry {
             is_edited: false,
             is_pinned: false,
             reactions: Vec::new(),
+            can_be_forwarded: true,
         }
     }
 
@@ -475,6 +479,16 @@ impl MessageEntry {
             .map(|line| line.iter().map(|s| s.text.as_str()).collect::<String>())
             .collect::<Vec<String>>()
             .join("\n")
+    }
+
+    /// Whether the message can be forwarded; protected content can't.
+    pub fn can_be_forwarded(&self) -> bool {
+        self.can_be_forwarded
+    }
+
+    /// Marks the message as protected content or not, e.g. for tests.
+    pub fn set_can_be_forwarded(&mut self, can_be_forwarded: bool) {
+        self.can_be_forwarded = can_be_forwarded;
     }
 
     pub fn is_pinned(&self) -> bool {
@@ -572,6 +586,7 @@ impl From<&tdlib_rs::types::Message> for MessageEntry {
             is_edited: message.edit_date != 0,
             is_pinned: message.is_pinned,
             reactions: reactions(message.interaction_info.as_ref()),
+            can_be_forwarded: message.can_be_saved,
         }
     }
 }

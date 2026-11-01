@@ -122,6 +122,40 @@ fn a_new_sign_in_is_told_in_the_status_bar() {
     );
 }
 
+#[test]
+fn forwarding_tells_where_and_how_many() {
+    use crate::app::action::ForwardRequest;
+    use libtgt::tdlib_rs::types::Error;
+    let request = |count: usize| ForwardRequest {
+        to_chat_id: 2,
+        to_chat_name: "Ada".into(),
+        from_chat_id: 1,
+        message_ids: (1..=count as i64).collect(),
+        send_copy: false,
+    };
+    assert_eq!(forward_status(&request(1), 1, Ok(0)), "Forwarded to Ada");
+    assert_eq!(
+        forward_status(&request(3), 3, Ok(0)),
+        "Forwarded 3 messages to Ada"
+    );
+    assert_eq!(
+        forward_status(&request(3), 3, Ok(1)),
+        "Forwarded 2 of 3 messages to Ada"
+    );
+    assert_eq!(
+        forward_status(&request(1), 1, Ok(1)),
+        "Can't forward to Ada"
+    );
+    let error = Error {
+        code: 400,
+        message: "CHAT_WRITE_FORBIDDEN".into(),
+    };
+    assert_eq!(
+        forward_status(&request(1), 1, Err(error)),
+        "Can't forward to Ada: CHAT_WRITE_FORBIDDEN"
+    );
+}
+
 mod masked_input {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
