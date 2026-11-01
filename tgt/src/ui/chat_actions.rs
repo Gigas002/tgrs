@@ -70,6 +70,8 @@ pub fn command_label(command: ChatCommand, state: &ChatState) -> &'static str {
         ChatCommand::ToggleBlock if state.is_blocked => "unblock",
         ChatCommand::ToggleBlock => "block",
         ChatCommand::Report => "report",
+        ChatCommand::ClearHistory => "clear history",
+        ChatCommand::ClearHistoryForEveryone => "clear history for everyone",
         ChatCommand::Remove => match state.kind {
             ChatKind::Channel => "leave channel",
             ChatKind::Group => "leave group",
@@ -92,6 +94,8 @@ pub fn done_label(command: ChatCommand, state: &ChatState) -> &'static str {
         ChatCommand::ToggleBlock if state.is_blocked => "unblocked",
         ChatCommand::ToggleBlock => "blocked",
         ChatCommand::Report => "reported",
+        ChatCommand::ClearHistory => "history cleared",
+        ChatCommand::ClearHistoryForEveryone => "history cleared for everyone",
         ChatCommand::Remove if state.is_left() => "left",
         ChatCommand::Remove => "deleted",
     }
@@ -156,6 +160,18 @@ impl ChatActions {
                         Some("saved messages")
                     }
                     ChatCommand::ToggleBlock if !state.is_blockable() => Some("not a person"),
+                    ChatCommand::ClearHistory if !state.can_clear_history => {
+                        Some("not allowed here")
+                    }
+                    ChatCommand::ClearHistoryForEveryone
+                        if !state.can_clear_history_for_everyone =>
+                    {
+                        Some(if state.can_clear_history {
+                            "only for you here"
+                        } else {
+                            "not allowed here"
+                        })
+                    }
                     _ => None,
                 },
             })

@@ -87,6 +87,10 @@ pub struct ChatState {
     pub last_message_id: i64,
     /// The other party of a private or secret chat is on your block list.
     pub is_blocked: bool,
+    /// Its messages can be deleted, at least for you.
+    pub can_clear_history: bool,
+    /// Its messages can be deleted for everyone in it too.
+    pub can_clear_history_for_everyone: bool,
 }
 
 impl ChatState {

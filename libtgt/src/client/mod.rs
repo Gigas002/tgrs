@@ -633,6 +633,18 @@ impl Client {
             .inspect_err(|e| tracing::error!("Failed to delete chat {chat_id}: {e:?}"))
     }
 
+    /// Deletes every message of a chat, keeping it in the chat list: for
+    /// you, or for everyone in it.
+    pub async fn clear_chat_history(
+        &self,
+        chat_id: i64,
+        for_everyone: bool,
+    ) -> Result<(), TdError> {
+        functions::delete_chat_history(chat_id, false, for_everyone, self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to clear the history of {chat_id}: {e:?}"))
+    }
+
     /// The chat of a public username (without `@`): a person's, bot's,
     /// group's or channel's. It's added to the store if TDLib hadn't sent it.
     pub async fn search_public_chat(&self, username: &str) -> Result<i64, TdError> {

@@ -95,23 +95,32 @@ pub enum ChatCommand {
     ToggleBlock,
     /// Report the chat to Telegram's moderators.
     Report,
+    /// Delete every message for you, keeping the chat; asks to confirm.
+    ClearHistory,
+    /// Delete every message for everyone in the chat; asks to confirm.
+    ClearHistoryForEveryone,
 }
 
 impl ChatCommand {
     /// Every command, in the order of the chat actions menu.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 9] = [
         Self::ToggleMute,
         Self::ToggleArchive,
         Self::TogglePin,
         Self::ToggleRead,
         Self::ToggleBlock,
         Self::Report,
+        Self::ClearHistory,
+        Self::ClearHistoryForEveryone,
         Self::Remove,
     ];
 
-    /// Whether the command runs only once confirmed.
+    /// Whether the command runs only once confirmed: those deleting messages.
     pub fn needs_confirmation(self) -> bool {
-        self == Self::Remove
+        matches!(
+            self,
+            Self::Remove | Self::ClearHistory | Self::ClearHistoryForEveryone
+        )
     }
 }
 
@@ -938,6 +947,10 @@ impl FromStr for Action {
             "toggle_chat_pin" => Ok(Action::SelectedChat(ChatCommand::TogglePin)),
             "toggle_chat_read" => Ok(Action::SelectedChat(ChatCommand::ToggleRead)),
             "leave_chat" => Ok(Action::SelectedChat(ChatCommand::Remove)),
+            "clear_chat_history" => Ok(Action::SelectedChat(ChatCommand::ClearHistory)),
+            "clear_chat_history_for_everyone" => {
+                Ok(Action::SelectedChat(ChatCommand::ClearHistoryForEveryone))
+            }
             "hide_message_actions" => Ok(Action::HideMessageActions),
             "message_actions_confirm" => Ok(Action::MessageActionsConfirm),
             "message_actions_previous" => Ok(Action::MessageActionsPrevious),

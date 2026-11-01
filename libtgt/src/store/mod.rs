@@ -705,6 +705,9 @@ impl Store {
             is_unread: chat.unread_count > 0 || chat.is_marked_as_unread,
             last_message_id: chat.last_message.as_ref().map_or(0, |m| m.id),
             is_blocked: chat.block_list == Some(BlockList::Main),
+            can_clear_history: chat.can_be_deleted_only_for_self
+                || chat.can_be_deleted_for_all_users,
+            can_clear_history_for_everyone: chat.can_be_deleted_for_all_users,
         })
     }
 

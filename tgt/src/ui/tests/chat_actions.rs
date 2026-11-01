@@ -46,6 +46,8 @@ fn labels_follow_the_chat_state() {
             "mark as unread",
             "block",
             "report",
+            "clear history",
+            "clear history for everyone",
             "leave group"
         ]
     );
@@ -67,6 +69,8 @@ fn labels_follow_the_chat_state() {
             "mark as read",
             "unblock",
             "report",
+            "clear history",
+            "clear history for everyone",
             "delete chat"
         ]
     );
@@ -227,5 +231,76 @@ fn reporting_opens_the_report_popup_instead_of_running() {
     assert_eq!(
         sent(&mut rx),
         [Action::HideChatActions, Action::ShowReport(7, Vec::new())]
+    );
+}
+
+#[test]
+fn clearing_history_runs_only_when_confirmed() {
+    let (mut menu, mut rx) = menu_for(ChatState {
+        can_clear_history: true,
+        can_clear_history_for_everyone: true,
+        ..group()
+    });
+    for command in [
+        ChatCommand::ClearHistory,
+        ChatCommand::ClearHistoryForEveryone,
+    ] {
+        select(&mut menu, command);
+        menu.update(Action::ChatActionsConfirm);
+        assert!(sent(&mut rx).is_empty());
+        assert_eq!(menu.armed, Some(command));
+        menu.update(Action::ChatActionsConfirm);
+        assert_eq!(
+            sent(&mut rx),
+            [Action::HideChatActions, Action::RunChatCommand(command, 7)]
+        );
+        menu.armed = None;
+    }
+    assert_eq!(
+        chat_command_action(ChatCommand::ClearHistory, 7),
+        Action::ShowChatActionsFor(7, Some(ChatCommand::ClearHistory))
+    );
+}
+
+#[test]
+fn clearing_history_says_when_it_isnt_allowed() {
+    let reason = |state: ChatState, command| {
+        ChatActions::items_for(&state)
+            .into_iter()
+            .find(|item| item.command == command)
+            .unwrap()
+            .disabled
+    };
+    // A channel you don't run
+    assert_eq!(
+        reason(group(), ChatCommand::ClearHistory),
+        Some("not allowed here")
+    );
+    assert_eq!(
+        reason(group(), ChatCommand::ClearHistoryForEveryone),
+        Some("not allowed here")
+    );
+    let only_mine = ChatState {
+        can_clear_history: true,
+        ..group()
+    };
+    assert_eq!(reason(only_mine.clone(), ChatCommand::ClearHistory), None);
+    assert_eq!(
+        reason(only_mine, ChatCommand::ClearHistoryForEveryone),
+        Some("only for you here")
+    );
+
+    let (mut menu, mut rx) = menu_for(group());
+    select(&mut menu, ChatCommand::ClearHistory);
+    menu.update(Action::ChatActionsConfirm);
+    assert_eq!(
+        sent(&mut rx),
+        [Action::StatusMessage(
+            "Can't clear history: not allowed here.".into()
+        )]
+    );
+    assert_eq!(
+        done_label(ChatCommand::ClearHistoryForEveryone, &group()),
+        "history cleared for everyone"
     );
 }

@@ -689,6 +689,8 @@ async fn run_chat_command(
                 .send(Action::ShowReport(chat_id, Vec::new()));
             return;
         }
+        ChatCommand::ClearHistory => client.clear_chat_history(chat_id, false).await,
+        ChatCommand::ClearHistoryForEveryone => client.clear_chat_history(chat_id, true).await,
         ChatCommand::Remove if state.is_left() => client.leave_chat(chat_id).await,
         ChatCommand::Remove => client.delete_chat(chat_id).await,
     };

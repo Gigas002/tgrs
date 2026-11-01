@@ -79,6 +79,7 @@ keymap = [
   { keys = ["P"], command = "toggle_chat_pin", description = "Pin or unpin the chat"},
   { keys = ["u"], command = "toggle_chat_read", description = "Mark the chat as read or unread"},
   { keys = ["D"], command = "leave_chat", description = "Leave or delete the chat (press twice)"},
+  { keys = ["X"], command = "clear_chat_history", description = "Clear the chat's history for you (press twice)"},
   { keys = ["B"], command = "toggle_chat_block", description = "Block or unblock the person"},
   # Move the selected pinned chat up or down among the pinned chats
   { keys = ["K"], command = "move_chat_up", description = "Move the pinned chat up"},
@@ -111,6 +112,7 @@ keymap = [
   { keys = ["P"], command = "toggle_chat_pin", description = "Pin or unpin the chat"},
   { keys = ["u"], command = "toggle_chat_read", description = "Mark the chat as read or unread"},
   { keys = ["D"], command = "leave_chat", description = "Leave or delete the chat (press twice)"},
+  { keys = ["X"], command = "clear_chat_history", description = "Clear the chat's history for you (press twice)"},
   { keys = ["B"], command = "toggle_chat_block", description = "Block or unblock the person"},
   # Move the selected pinned chat up or down among the pinned chats
   { keys = ["K"], command = "move_chat_up", description = "Move the pinned chat up"},

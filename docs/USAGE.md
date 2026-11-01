@@ -78,8 +78,11 @@ In the chat list and the archive, these keys act on the selected chat (leader `c
 | `B` | Block or unblock the person or bot of a private chat.                                          |
 | `!` | [Report](#blocking-and-reporting) the chat.                                                    |
 | `D` | Leave a group or channel, or delete any other chat; press `D` again or `enter` to confirm.     |
+| `X` | Clear the chat's history for you, keeping the chat; press `X` again or `enter` to confirm.      |
 | `i` | Show the chat's [profile](#profiles).                                                          |
 | `n` | [Open a chat by username](#opening-a-chat-by-username).                                        |
+
+The actions list (`a`) also has **clear history for everyone**, which deletes the messages for everyone in the chat, where Telegram allows it (private chats, and groups you run); it asks for confirmation too, and has no key unless you bind `clear_chat_history_for_everyone`. Actions that don't apply to the chat are shown dimmed with the reason.
 
 ### Profiles
 
