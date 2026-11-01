@@ -1,7 +1,10 @@
 use std::str::FromStr;
 
 use crossterm::event::{KeyCode, KeyModifiers};
-use libtgt::model::{StickerEntry, StickerSetEntry, TdChatList, TdMessageReplyToMessage};
+use libtgt::model::{
+    BlockedSender, ReportStep, StickerEntry, StickerSetEntry, TdChatList, TdMessageReplyToMessage,
+    TdMessageSender,
+};
 use ratatui::layout::Rect;
 
 use crate::{app::error::AppError, ui::component_name::ComponentName};
@@ -28,11 +31,13 @@ pub enum MessageCommand {
     /// Copy the message's link (supergroups and channels).
     CopyLink,
     DeleteForMe,
+    /// Report the message to Telegram's moderators.
+    Report,
 }
 
 impl MessageCommand {
     /// Every command, in the order of the message actions menu.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::Copy,
         Self::React,
         Self::Reply,
@@ -45,6 +50,7 @@ impl MessageCommand {
         Self::TogglePin,
         Self::CopyLink,
         Self::DeleteForMe,
+        Self::Report,
     ];
 
     pub fn label(self) -> &'static str {
@@ -61,6 +67,7 @@ impl MessageCommand {
             Self::TogglePin => "pin message",
             Self::CopyLink => "copy message link",
             Self::DeleteForMe => "delete for me",
+            Self::Report => "report message",
         }
     }
 }
@@ -78,15 +85,21 @@ pub enum ChatCommand {
     ToggleRead,
     /// Leave a group or channel, delete any other chat; asks to confirm.
     Remove,
+    /// Block the person or bot of a private chat, or unblock them.
+    ToggleBlock,
+    /// Report the chat to Telegram's moderators.
+    Report,
 }
 
 impl ChatCommand {
     /// Every command, in the order of the chat actions menu.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 7] = [
         Self::ToggleMute,
         Self::ToggleArchive,
         Self::TogglePin,
         Self::ToggleRead,
+        Self::ToggleBlock,
+        Self::Report,
         Self::Remove,
     ];
 
@@ -94,6 +107,18 @@ impl ChatCommand {
     pub fn needs_confirmation(self) -> bool {
         self == Self::Remove
     }
+}
+
+/// One step of reporting a chat or messages in it, sent to Telegram.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReportRequest {
+    pub chat_id: i64,
+    /// The messages reported; empty to report the whole chat.
+    pub message_ids: Vec<i64>,
+    /// The reason picked; empty to start.
+    pub option_id: String,
+    /// A comment, when asked for one.
+    pub text: String,
 }
 
 /// A list to pick one entry from, shown in the picker popup.
@@ -394,6 +419,38 @@ pub enum Action {
     /// Run a command on the selected chat in a chat list, or the open chat.
     SelectedChat(ChatCommand),
 
+    /// Report a chat, or these messages of it, step by step.
+    ShowReport(i64, Vec<i64>),
+    /// Close the report popup, reporting nothing more.
+    HideReport,
+    /// Highlight the next reason in the report popup.
+    ReportNext,
+    /// Highlight the previous reason in the report popup.
+    ReportPrevious,
+    /// Pick the highlighted reason, or send the comment.
+    ReportConfirm,
+    /// Send a step of a report to Telegram.
+    SendReport(ReportRequest),
+    /// Telegram's answer to a report step.
+    ReportStepped(ReportStep),
+    /// A report step failed; why.
+    ReportFailed(String),
+
+    /// Show the people and chats you've blocked, loading them.
+    ShowBlockedList,
+    /// Close the blocked list.
+    HideBlockedList,
+    /// The people and chats you've blocked.
+    BlockedListLoaded(Vec<BlockedSender>),
+    /// Highlight the next entry of the blocked list.
+    BlockedListNext,
+    /// Highlight the previous entry of the blocked list.
+    BlockedListPrevious,
+    /// Unblock the highlighted entry of the blocked list.
+    BlockedListUnblock,
+    /// Take someone off your block list.
+    UnblockSender(TdMessageSender),
+
     /// Ask for a username and open its chat.
     ShowFindChat,
     /// Close the popup asking for a username.
@@ -632,6 +689,18 @@ impl FromStr for Action {
             "chat_actions_next" => Ok(Action::ChatActionsNext),
             "chat_actions_previous" => Ok(Action::ChatActionsPrevious),
             "chat_actions_confirm" => Ok(Action::ChatActionsConfirm),
+            "toggle_chat_block" => Ok(Action::SelectedChat(ChatCommand::ToggleBlock)),
+            "report_chat" => Ok(Action::SelectedChat(ChatCommand::Report)),
+            "report_message" => Ok(Action::SelectedMessage(MessageCommand::Report)),
+            "hide_report" => Ok(Action::HideReport),
+            "report_next" => Ok(Action::ReportNext),
+            "report_previous" => Ok(Action::ReportPrevious),
+            "report_confirm" => Ok(Action::ReportConfirm),
+            "show_blocked_list" => Ok(Action::ShowBlockedList),
+            "hide_blocked_list" => Ok(Action::HideBlockedList),
+            "blocked_list_next" => Ok(Action::BlockedListNext),
+            "blocked_list_previous" => Ok(Action::BlockedListPrevious),
+            "blocked_list_unblock" => Ok(Action::BlockedListUnblock),
             "show_find_chat" => Ok(Action::ShowFindChat),
             "hide_find_chat" => Ok(Action::HideFindChat),
             "find_chat_confirm" => Ok(Action::FindChatConfirm),

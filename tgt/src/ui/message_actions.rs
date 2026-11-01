@@ -66,6 +66,7 @@ impl MessageActions {
                     MessageCommand::Copy if !has_text => Some("no text"),
                     MessageCommand::Edit if !mine => Some("not your message"),
                     MessageCommand::Edit if message.media().is_some() => Some("media message"),
+                    MessageCommand::Report if mine => Some("your message"),
                     MessageCommand::DeleteForEveryone | MessageCommand::DeleteForMe if !mine => {
                         Some("not your message")
                     }

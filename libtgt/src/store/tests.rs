@@ -281,7 +281,7 @@ mod topics {
 }
 
 mod archive {
-    use tdlib_rs::enums::{ChatAvailableReactions, ChatList, ChatType};
+    use tdlib_rs::enums::{BlockList, ChatAvailableReactions, ChatList, ChatType};
     use tdlib_rs::types::{
         Chat, ChatAvailableReactionsAll, ChatNotificationSettings, ChatPosition, ChatTypePrivate,
     };
@@ -427,6 +427,13 @@ mod archive {
         store.chats().insert(3, main);
         let state = store.chat_state(3).unwrap();
         assert!(!state.is_muted && !state.is_archived && !state.is_pinned && !state.is_unread);
+        assert!(!state.is_blocked && state.is_blockable());
+
+        store.chats().get_mut(&3).unwrap().block_list = Some(BlockList::Main);
+        assert!(store.chat_state(3).unwrap().is_blocked);
+        // Blocked from seeing your stories only isn't blocked
+        store.chats().get_mut(&3).unwrap().block_list = Some(BlockList::Stories);
+        assert!(!store.chat_state(3).unwrap().is_blocked);
     }
 }
 

@@ -830,3 +830,59 @@ mod username {
         assert!(parse_username(&"a".repeat(32)).is_some());
     }
 }
+
+mod moderation {
+    use tdlib_rs::enums::{MessageSender, ReportChatResult};
+    use tdlib_rs::types::{
+        MessageSenderUser, ReportChatResultOptionRequired, ReportChatResultTextRequired,
+        ReportOption as TdReportOption,
+    };
+
+    use crate::model::{ReportOption, ReportStep, TdMessageSender};
+
+    #[test]
+    fn telegram_s_answers_become_report_steps() {
+        assert_eq!(ReportStep::from(ReportChatResult::Ok), ReportStep::Done);
+        assert_eq!(
+            ReportStep::from(ReportChatResult::MessagesRequired),
+            ReportStep::NeedsMessages
+        );
+        let options = ReportChatResult::OptionRequired(ReportChatResultOptionRequired {
+            title: "Why?".to_owned(),
+            options: vec![TdReportOption {
+                id: "c3BhbQ==".to_owned(),
+                text: "Spam".to_owned(),
+            }],
+        });
+        assert_eq!(
+            ReportStep::from(options),
+            ReportStep::ChooseOption {
+                title: "Why?".to_owned(),
+                options: vec![ReportOption {
+                    id: "c3BhbQ==".to_owned(),
+                    text: "Spam".to_owned(),
+                }],
+            }
+        );
+        let text = ReportChatResult::TextRequired(ReportChatResultTextRequired {
+            option_id: "x".to_owned(),
+            is_optional: true,
+        });
+        assert_eq!(
+            ReportStep::from(text),
+            ReportStep::WriteText {
+                option_id: "x".to_owned(),
+                optional: true,
+            }
+        );
+    }
+
+    #[test]
+    fn senders_convert_both_ways() {
+        let user = MessageSender::User(MessageSenderUser { user_id: 5 });
+        assert_eq!(TdMessageSender::from(&user), TdMessageSender::User(5));
+        assert_eq!(MessageSender::from(TdMessageSender::User(5)), user);
+        let chat = MessageSender::from(TdMessageSender::Chat(-9));
+        assert_eq!(TdMessageSender::from(&chat), TdMessageSender::Chat(-9));
+    }
+}

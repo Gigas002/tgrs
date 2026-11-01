@@ -20,7 +20,7 @@ use std::{
 
 use libtgt::{
     client::{Client, Notification},
-    model::TdMessageReplyToMessage,
+    model::{ReportStep, TdMessageReplyToMessage},
     store::Store,
     tdlib_rs::enums::ChatList,
 };
@@ -442,6 +442,19 @@ fn action_changes_ui(action: &Action) -> bool {
             | Action::ChatActionsPrevious
             | Action::ChatActionsConfirm
             | Action::ShowFindChat
+            | Action::ShowReport(..)
+            | Action::HideReport
+            | Action::ReportNext
+            | Action::ReportPrevious
+            | Action::ReportConfirm
+            | Action::ReportStepped(_)
+            | Action::ReportFailed(_)
+            | Action::ShowBlockedList
+            | Action::HideBlockedList
+            | Action::BlockedListLoaded(_)
+            | Action::BlockedListNext
+            | Action::BlockedListPrevious
+            | Action::BlockedListUnblock
             | Action::HideFindChat
             | Action::FindChatConfirm
             | Action::FindChatFailed(_)
@@ -534,6 +547,14 @@ async fn run_chat_command(
             client
                 .set_chat_read(chat_id, state.is_unread, state.last_message_id)
                 .await
+        }
+        ChatCommand::ToggleBlock => client.set_chat_blocked(chat_id, !state.is_blocked).await,
+        // Reported step by step in its own popup
+        ChatCommand::Report => {
+            let _ = app_context
+                .action_tx()
+                .send(Action::ShowReport(chat_id, Vec::new()));
+            return;
         }
         ChatCommand::Remove if state.is_left() => client.leave_chat(chat_id).await,
         ChatCommand::Remove => client.delete_chat(chat_id).await,
@@ -661,6 +682,48 @@ async fn handle_app_actions(
                     )
                     .await;
                 app_context.action_tx().send(Action::HideChatWindowReply)?;
+            }
+            Action::SendReport(request) => {
+                let answer = match client
+                    .report_chat(
+                        request.chat_id,
+                        &request.option_id,
+                        request.message_ids.clone(),
+                        &request.text,
+                    )
+                    .await
+                {
+                    Ok(ReportStep::Done) => {
+                        media::status(&app_context, "Reported. Thank you.".to_owned());
+                        Action::HideReport
+                    }
+                    Ok(step) => Action::ReportStepped(step),
+                    Err(e) => Action::ReportFailed(format!("Can't report: {}", e.message)),
+                };
+                app_context.action_tx().send(answer)?;
+            }
+            Action::ShowBlockedList => match client.blocked_senders().await {
+                Ok(blocked) => app_context
+                    .action_tx()
+                    .send(Action::BlockedListLoaded(blocked))?,
+                Err(e) => {
+                    media::status(&app_context, format!("No blocked list: {}", e.message));
+                    app_context.action_tx().send(Action::HideBlockedList)?;
+                }
+            },
+            Action::UnblockSender(sender) => {
+                let name = app_context
+                    .store()
+                    .sender_name(*sender)
+                    .unwrap_or_else(|| "Someone".to_owned());
+                match client.set_sender_blocked(*sender, false).await {
+                    Ok(()) => media::status(&app_context, format!("{name}: unblocked")),
+                    Err(e) => {
+                        media::status(&app_context, format!("Can't unblock {name}: {}", e.message));
+                        // Show them again
+                        app_context.action_tx().send(Action::ShowBlockedList)?;
+                    }
+                }
             }
             Action::FindChat(username) => {
                 let found = match client.search_public_chat(username).await {

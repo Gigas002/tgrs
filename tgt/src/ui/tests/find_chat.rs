@@ -1,5 +1,6 @@
 use super::*;
-use crate::ui::tests::create_test_app_context;
+use crate::{app::action::Modifiers, ui::tests::create_test_app_context};
+use crossterm::event::KeyCode;
 use crossterm::event::KeyModifiers;
 use ratatui::{Terminal, backend::TestBackend};
 use tokio::sync::mpsc;
@@ -50,20 +51,20 @@ fn typing_edits_the_input_at_the_cursor() {
     popup.update(key(KeyCode::Left));
     popup.update(key(KeyCode::Left));
     type_text(&mut popup, "u");
-    assert_eq!(popup.input, "durov");
+    assert_eq!(popup.input.text(), "durov");
     popup.update(key(KeyCode::Delete));
-    assert_eq!(popup.input, "duov");
+    assert_eq!(popup.input.text(), "duov");
     type_text(&mut popup, "r");
     popup.update(key(KeyCode::End));
     type_text(&mut popup, "!");
     popup.update(key(KeyCode::Backspace));
-    assert_eq!(popup.input, "durov");
+    assert_eq!(popup.input.text(), "durov");
     popup.update(key(KeyCode::Home));
     popup.update(key(KeyCode::Backspace));
-    assert_eq!(popup.input, "durov", "nothing before the start");
+    assert_eq!(popup.input.text(), "durov", "nothing before the start");
 
     popup.update(Action::Paste("\n@x".into()));
-    assert_eq!(popup.input, "@xdurov", "a paste stays on one line");
+    assert_eq!(popup.input.text(), "@xdurov", "a paste stays on one line");
     popup.update(Action::Key(
         KeyCode::Char('u'),
         Modifiers::from(KeyModifiers::CONTROL),
@@ -73,7 +74,7 @@ fn typing_edits_the_input_at_the_cursor() {
         KeyCode::Char('u'),
         Modifiers::from(KeyModifiers::CONTROL),
     ));
-    assert_eq!(popup.input, "");
+    assert_eq!(popup.input.text(), "");
 }
 
 #[test]
@@ -88,7 +89,7 @@ fn enter_looks_up_a_valid_username_once() {
 
     // Typing waits for the answer
     type_text(&mut popup, "x");
-    assert_eq!(popup.input, "https://t.me/durov");
+    assert_eq!(popup.input.text(), "https://t.me/durov");
 }
 
 #[test]
@@ -128,8 +129,7 @@ fn showing_it_again_starts_empty() {
     type_text(&mut popup, "durov");
     popup.update(Action::FindChatFailed("No".into()));
     popup.update(Action::ShowFindChat);
-    assert_eq!(popup.input, "");
-    assert_eq!(popup.cursor, 0);
+    assert_eq!(popup.input.text(), "");
     assert_eq!(popup.status, Status::Hint);
 }
 

@@ -79,6 +79,8 @@ keymap = [
   { keys = ["P"], command = "toggle_chat_pin", description = "Pin or unpin the chat"},
   { keys = ["u"], command = "toggle_chat_read", description = "Mark the chat as read or unread"},
   { keys = ["D"], command = "leave_chat", description = "Leave or delete the chat (press twice)"},
+  { keys = ["B"], command = "toggle_chat_block", description = "Block or unblock the person"},
+  { keys = ["!"], command = "report_chat", description = "Report the chat"},
   # The profile of the selected chat: a person's bio and usernames, a group's description
   { keys = ["i"], command = "show_profile", description = "Show the chat's profile"},
   # Open a chat by its public username, e.g. @durov or a t.me link
@@ -104,6 +106,8 @@ keymap = [
   { keys = ["P"], command = "toggle_chat_pin", description = "Pin or unpin the chat"},
   { keys = ["u"], command = "toggle_chat_read", description = "Mark the chat as read or unread"},
   { keys = ["D"], command = "leave_chat", description = "Leave or delete the chat (press twice)"},
+  { keys = ["B"], command = "toggle_chat_block", description = "Block or unblock the person"},
+  { keys = ["!"], command = "report_chat", description = "Report the chat"},
   # The profile of the selected chat: a person's bio and usernames, a group's description
   { keys = ["i"], command = "show_profile", description = "Show the chat's profile"},
   # Open a chat by its public username, e.g. @durov or a t.me link
@@ -160,6 +164,8 @@ keymap = [
   { keys = ["P"], command = "toggle_message_pin", description = "Pin or unpin the selected message"},
   # Copy the link of the selected message (supergroups and channels)
   { keys = ["L"], command = "copy_message_link", description = "Copy the message link"},
+  # Report the selected message to Telegram's moderators
+  { keys = ["!"], command = "report_message", description = "Report the selected message"},
   # Open the actions menu of the selected message
   { keys = ["enter"], command = "show_message_actions", description = "Open message actions"},
   # Open the media (photo, video, GIF, audio, voice, file, ...) in its default application, e.g. mpv
@@ -235,6 +241,31 @@ keymap = [
   { keys = ["enter"], command = "find_chat_confirm", description = "Open the chat of the username"},
 ]
 
+# The report key bindings are only usable while reporting a chat (! in the
+# chat list) or a message (! in the chat): pick a reason (1-9 pick directly,
+# j/k move), then write details if Telegram asks; other keys type.
+[report]
+keymap = [
+  { keys = ["esc"], command = "hide_report", description = "Stop reporting"},
+  { keys = ["enter"], command = "report_confirm", description = "Pick the reason or send the details"},
+  { keys = ["up"], command = "report_previous", description = "Previous reason"},
+  { keys = ["down"], command = "report_next", description = "Next reason"},
+]
+
+# The blocked_list key bindings are only usable in the list of blocked users
+# (space b).
+[blocked_list]
+keymap = [
+  { keys = ["esc"], command = "hide_blocked_list", description = "Close the blocked list"},
+  { keys = ["q"], command = "hide_blocked_list", description = "Close the blocked list"},
+  { keys = ["u"], command = "blocked_list_unblock", description = "Unblock"},
+  { keys = ["enter"], command = "blocked_list_unblock", description = "Unblock"},
+  { keys = ["up"], command = "blocked_list_previous", description = "Previous"},
+  { keys = ["k"], command = "blocked_list_previous", description = "Previous"},
+  { keys = ["down"], command = "blocked_list_next", description = "Next"},
+  { keys = ["j"], command = "blocked_list_next", description = "Next"},
+]
+
 # The profile key bindings are only usable while a profile is shown: i in the
 # chat list and the archive (the selected chat), space i (the open chat) or
 # space m (your own).
@@ -278,6 +309,7 @@ keymap = [
   { keys = ["i"], command = "show_profile", description = "Profile of the open chat"},
   { keys = ["m"], command = "show_my_profile", description = "Your profile"},
   { keys = ["n"], command = "show_find_chat", description = "Open a chat by username"},
+  { keys = ["b"], command = "show_blocked_list", description = "Blocked users"},
   { keys = ["?"], command = "show_command_guide", description = "Help: every key"},
 ]
 

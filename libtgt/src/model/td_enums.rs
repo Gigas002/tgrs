@@ -1,6 +1,9 @@
 use std::hash::Hash;
 
-use tdlib_rs::{enums::ChatList, types::ChatListFolder};
+use tdlib_rs::{
+    enums::{ChatList, MessageSender},
+    types::{ChatListFolder, MessageSenderChat, MessageSenderUser},
+};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum TdMessageSender {
@@ -93,6 +96,24 @@ impl From<TdChatList> for ChatList {
             TdChatList::Folder(folder_id) => ChatList::Folder(ChatListFolder {
                 chat_folder_id: folder_id,
             }),
+        }
+    }
+}
+
+impl From<&MessageSender> for TdMessageSender {
+    fn from(sender: &MessageSender) -> Self {
+        match sender {
+            MessageSender::User(user) => Self::User(user.user_id),
+            MessageSender::Chat(chat) => Self::Chat(chat.chat_id),
+        }
+    }
+}
+
+impl From<TdMessageSender> for MessageSender {
+    fn from(sender: TdMessageSender) -> Self {
+        match sender {
+            TdMessageSender::User(user_id) => Self::User(MessageSenderUser { user_id }),
+            TdMessageSender::Chat(chat_id) => Self::Chat(MessageSenderChat { chat_id }),
         }
     }
 }

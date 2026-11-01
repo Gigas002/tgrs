@@ -5,9 +5,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use tdlib_rs::enums::{
-    self, AuthorizationState, ChatList, ForumTopics, FoundChatMessages, InputMessageContent,
-    InputMessageReplyTo, LogStream, MessageTopic, Messages, OptionValue, ReactionType,
-    SearchMessagesFilter, StickerSets, StickerType, User,
+    self, AuthorizationState, BlockList, ChatList, ForumTopics, FoundChatMessages,
+    InputMessageContent, InputMessageReplyTo, LogStream, MessageTopic, Messages, OptionValue,
+    ReactionType, SearchMessagesFilter, StickerSets, StickerType, User,
 };
 use tdlib_rs::functions;
 use tdlib_rs::types::{
@@ -19,8 +19,8 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
 use crate::model::{
-    MessageEntry, ProfileSource, StickerEntry, StickerSetEntry, TdChatList,
-    TdMessageReplyToMessage, TopicEntry,
+    BlockedSender, MessageEntry, ProfileSource, ReportStep, StickerEntry, StickerSetEntry,
+    TdChatList, TdMessageReplyToMessage, TdMessageSender, TopicEntry,
 };
 use crate::store::Store;
 
@@ -44,6 +44,8 @@ const HISTORY_BATCH: i32 = 50;
 const MUTE_FOREVER: i32 = i32::MAX;
 /// Topics per `getForumTopics` request (TDLib's maximum).
 const TOPICS_BATCH: i32 = 100;
+/// Blocked users and chats per `getBlockedMessageSenders` request (TDLib's maximum).
+const BLOCKED_BATCH: i32 = 100;
 /// Topics loaded for a forum at most.
 const MAX_TOPICS: usize = 1000;
 /// Chats with notifications shown at once; any positive value enables them.
@@ -473,6 +475,104 @@ impl Client {
         let chat_id = chat.id;
         self.store.chats().entry(chat_id).or_insert(chat);
         Ok(chat_id)
+    }
+
+    /// Puts someone on your block list, or takes them off it.
+    pub async fn set_sender_blocked(
+        &self,
+        sender: TdMessageSender,
+        blocked: bool,
+    ) -> Result<(), TdError> {
+        let block_list = blocked.then_some(BlockList::Main);
+        functions::set_message_sender_block_list(sender.into(), block_list, self.client_id)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to block {sender:?}: {e:?}"))
+    }
+
+    /// Blocks or unblocks the person or bot of a private or secret chat.
+    pub async fn set_chat_blocked(&self, chat_id: i64, blocked: bool) -> Result<(), TdError> {
+        match self.store.profile_source(chat_id) {
+            Some(ProfileSource::User(user_id)) => {
+                self.set_sender_blocked(TdMessageSender::User(user_id), blocked)
+                    .await
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// Everyone on your block list, newest first, with their names.
+    pub async fn blocked_senders(&self) -> Result<Vec<BlockedSender>, TdError> {
+        let mut senders = Vec::new();
+        loop {
+            let enums::MessageSenders::MessageSenders(page) =
+                functions::get_blocked_message_senders(
+                    BlockList::Main,
+                    senders.len() as i32,
+                    BLOCKED_BATCH,
+                    self.client_id,
+                )
+                .await
+                .inspect_err(|e| tracing::error!("Failed to list blocked senders: {e:?}"))?;
+            let done = page.senders.is_empty();
+            senders.extend(page.senders.iter().map(TdMessageSender::from));
+            if done || senders.len() >= page.total_count as usize {
+                break;
+            }
+        }
+        let mut blocked = Vec::with_capacity(senders.len());
+        for sender in senders {
+            blocked.push(BlockedSender {
+                sender,
+                name: self.sender_name(sender).await,
+            });
+        }
+        Ok(blocked)
+    }
+
+    /// A user's or chat's name, asking TDLib for ones not known yet.
+    async fn sender_name(&self, sender: TdMessageSender) -> String {
+        match sender {
+            TdMessageSender::User(user_id) if !self.store.users().contains_key(&user_id) => {
+                if let Ok(User::User(user)) = functions::get_user(user_id, self.client_id).await {
+                    self.store.users().insert(user_id, user);
+                }
+            }
+            TdMessageSender::Chat(chat_id) if !self.store.chats().contains_key(&chat_id) => {
+                if let Ok(enums::Chat::Chat(chat)) =
+                    functions::get_chat(chat_id, self.client_id).await
+                {
+                    self.store.chats().entry(chat_id).or_insert(chat);
+                }
+            }
+            _ => {}
+        }
+        self.store
+            .sender_name(sender)
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| match sender {
+                TdMessageSender::User(id) | TdMessageSender::Chat(id) => format!("#{id}"),
+            })
+    }
+
+    /// Takes a step reporting a chat, or `message_ids` in it: an empty
+    /// `option_id` starts, then each answers the step before.
+    pub async fn report_chat(
+        &self,
+        chat_id: i64,
+        option_id: &str,
+        message_ids: Vec<i64>,
+        text: &str,
+    ) -> Result<ReportStep, TdError> {
+        functions::report_chat(
+            chat_id,
+            option_id.to_owned(),
+            message_ids,
+            text.to_owned(),
+            self.client_id,
+        )
+        .await
+        .map(ReportStep::from)
+        .inspect_err(|e| tracing::error!("Failed to report chat {chat_id}: {e:?}"))
     }
 
     /// Loads the full info a chat's profile shows (bio, description) into the

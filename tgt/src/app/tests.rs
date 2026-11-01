@@ -274,3 +274,29 @@ fn space_opens_the_leader_menu_except_where_text_is_typed() {
         assert_eq!(binding(component), None, "{component}");
     }
 }
+
+#[test]
+fn shifted_symbols_like_bang_match_their_bindings() {
+    use crate::app::action::{ChatCommand, MessageCommand};
+    use crate::app::event::{Event, normalize_key};
+    use crate::ui::component_name::ComponentName;
+    use crossterm::event::{KeyCode, KeyModifiers};
+    // Terminals report `!` as Shift+!
+    let (code, modifiers) = normalize_key(KeyCode::Char('!'), KeyModifiers::SHIFT);
+    let pressed = Event::Key(code, modifiers);
+    assert_eq!("!".parse::<Event>().unwrap(), pressed);
+
+    let keymap = test_app_context().keymap_config().clone();
+    let bound = |component| match keymap.get_map_of(Some(component)).get(&pressed) {
+        Some(ActionBinding::Single { action, .. }) => Some(action.clone()),
+        _ => None,
+    };
+    assert_eq!(
+        bound(ComponentName::ChatList),
+        Some(Action::SelectedChat(ChatCommand::Report))
+    );
+    assert_eq!(
+        bound(ComponentName::Chat),
+        Some(Action::SelectedMessage(MessageCommand::Report))
+    );
+}

@@ -2,7 +2,7 @@
 
 A simple TUI for Telegram
 
-## Usage
+## Installation
 
 ### Requirements
 
@@ -19,7 +19,7 @@ A simple TUI for Telegram
 
 For example, on Arch Linux: `sudo pacman -S tdlib pkgconf xdg-utils dbus gnome-keyring`.
 
-### Features
+### Build features
 
 Build features can be combined (e.g. `cargo build --release --no-default-features --features media-preview` for previews without the keychain).
 
@@ -30,82 +30,17 @@ Build features can be combined (e.g. `cargo build --release --no-default-feature
 | `media-preview` | Image previews in the chat: photos, static stickers and the thumbnails of videos, GIFs, video messages and files.                                            |
 | `notifications` | Desktop notifications for new messages, following each chat's Telegram notification settings. See `[notifications]` in `config.toml`.                       |
 
-### Navigation
+## Quick start
 
-Like concord: `left`/`right` move between the chat list, the chat and the prompt, `up`/`down` select inside a pane, and `i` in the chat starts writing (`esc` goes back to the chat). `alt+right`/`alt+left` make the focused pane wider or narrower, `alt+up`/`alt+down` taller or shorter. `alt+1`/`alt+2`/`alt+3` focus the chat list, chat and prompt directly.
-
-Groups with topics (forums) open into a topic list, a pane right of the chat list: `enter` on a topic shows its messages in the chat, and messages you send go to that topic. The topic list resizes like the other panes, `alt+t` focuses it and `alt+m` hides or shows it.
-
-Archived chats are behind the `📦 Archived chats` row at the top of the chat list, which names them and counts the unread ones: `enter` on it opens the archive, a pane right of the chat list, and `enter` there opens an archived chat. Opening a chat from the chat list closes the archive again; `alt+a` focuses it and `alt+b` hides or shows it.
-
-In the chat list and the archive, `a` opens the actions of the selected chat, and each has its own key: `m` mutes or unmutes, `A` archives or unarchives, `P` pins or unpins, `u` marks as read or unread and `D` leaves a group or channel or deletes any other chat, after a second `D` or `enter` to confirm. `i` shows the selected chat's profile: a person's name, usernames, phone number, bio and birthday, or a group's or channel's description and member count. `n` opens any chat by its public username: type `@name`, `name` or paste a `t.me/name` link, and `enter` opens it even if it isn't in your chat list yet.
-
-`space` opens the leader menu, which lists what comes next: `1` hides or shows the chat list, `2` the topic list, `3` the archive, `a` opens the actions of the selected message, `space` searches chats, `/` searches messages, `p` shows pinned messages, `u` uploads a file, `s` sends a sticker, `c` opens the actions of the open chat, `i` shows its profile, `m` shows your own profile, `n` opens a chat by username and `?` lists every key. Its entries are the `[leader_menu]` section of `keymap.toml`.
-
-### Messages
-
-In the prompt, Enter sends; Alt+Enter or Ctrl+J start a new line (also Shift+Enter in terminals with the kitty keyboard protocol, e.g. kitty, foot, WezTerm, Ghostty).
-
-`alt+s` opens the sticker picker: your recent stickers and installed sets as tabs (`tab`/`shift+tab`) over a grid of stickers (arrows or `h`/`j`/`k`/`l`), drawn as images with the `media-preview` feature and as their emoji otherwise. `enter` sends the selected one, as a reply when you're replying.
-
-Select a message in the chat (`up`/`down`) and press a key, or `Enter` for the actions menu, which lists every action with its key and dims the ones that don't apply. The keys follow [concord](https://github.com/chojs23/concord)'s:
-
-| Key | Action                                                                                         |
-| --- | ---------------------------------------------------------------------------------------------- |
-| `y` | Copy the text.                                                                                 |
-| `r` | React: pick an emoji the chat allows; picking one of yours removes it. `1`-`9`, `0` pick directly. |
-| `R` | Reply.                                                                                         |
-| `e` | Edit your message.                                                                             |
-| `d` | Delete your message for everyone (`D`: only for you).                                          |
-| `o` | Open a link of the message in the browser, picked from a list when there are several.         |
-| `x` | Open the media (photo, video, GIF, audio, voice message, sticker or file) via `xdg-open`.     |
-| `s` | Download the media or file (archives, documents, ...) to `app.download_dir`.                   |
-| `g` | Go to the message it replies to.                                                               |
-| `P` | Pin or unpin the message for everyone.                                                         |
-| `L` | Copy the message's link (supergroups and channels).                                            |
-
-Reactions are shown under their messages, yours highlighted, and pinned messages get a 📌.
-
-`tgt` doesn't play media itself. With `media-preview`, images (and the thumbnails of videos, GIFs and files) are previewed under their messages. Files are fetched from Telegram first when needed; progress and errors are shown in the status bar. Downloads never overwrite: `file.zip` becomes `file (1).zip`. Programs and scripts (`.sh`, `.desktop`, `.AppImage`, `.jar`, ...) are never opened, only downloaded. Only web, e-mail, phone and `tg:` links are opened; others, like `file:` links, are refused.
-
-### Configuration
-
-`tgt` works without any config file: defaults are bundled in the binary. Files are looked up in XDG directories:
-
-| What                                       | Location                                                                       |
-| ------------------------------------------ | ------------------------------------------------------------------------------ |
-| `config.toml`, `keymap.toml`, `theme.toml` | `$XDG_CONFIG_HOME/tgt` (`~/.config/tgt`), or `--config-dir` / `TGT_CONFIG_DIR` |
-| TDLib database                             | `$XDG_DATA_HOME/tgt/tdlib` (`~/.local/share/tgt/tdlib`)                        |
-| Logs, TDLib log                            | `$XDG_STATE_HOME/tgt` (`~/.local/state/tgt`)                                   |
-| TDLib database key                         | the system keychain, service `tgt` (see `[credentials]`)                       |
-| Downloads                                  | `app.download_dir`, default `$XDG_DOWNLOAD_DIR` or `~/Downloads`               |
-
-Settings are resolved as `CLI > environment > config.toml > defaults`. They are only changed by editing the files: `tgt` never writes to them and has no settings UI. `API_ID` and `API_HASH` override the Telegram credentials. User keybindings are merged over the defaults: binding a command replaces its default keys, and every other default stays.
-
-| Command      | Description                                             |
-| ------------ | ------------------------------------------------------- |
-| `tgt`        | Open the TUI (logs in on the terminal first if needed). |
-| `tgt logout` | Log out of Telegram and remove the database key.        |
-
-Global options: `--config-dir`, `--log-dir`, `--log-level`, `-v`/`-q`.
-
-Chats are only read and messages only sent from the TUI: there is no command-line or scripting interface to the account.
-
-### Theme
-
-`tgt` follows your terminal's colors: text uses the terminal's default foreground and background, accents use its ANSI palette, and secondary text is dimmed rather than given a fixed color. To change a color, add a `theme.toml` with Highlight Groups, like Vim's:
-
-```toml
-[highlight.FocusBorder]
-foreground = "light_magenta"
-
-[highlight.SelectedRow]
-background = "#303030"
-
-[ui.border]
-default = "rounded"
+```sh
+cargo build --release
+./target/release/tgt
 ```
 
-A group inherits the fields it doesn't set from the group it links to, so changing `Muted` changes timestamps, hints and previews together. [`examples/theme.toml`](examples/theme.toml) lists every group with its default. Invalid entries are skipped with a warning.
+The first run logs in on the terminal (phone number, code and, if set, your two-step verification password), then opens the TUI. Move between panes with `left`/`right`, open a chat with `enter`, and press `space` for the leader menu or `alt+f1` to list every key. `tgt logout` logs out again.
 
-To customize, copy the files you want to change from [`examples/`](examples/) into the config directory; missing files keep their defaults. To reset or uninstall, remove the directories above yourself, and the database key with `secret-tool clear service tgt`.
+## Documentation
+
+- [Usage](docs/USAGE.md): navigation, chats, messages, media, configuration, keybindings and themes.
+- [Architecture](docs/ARCHITECTURE.md): how the code is organized.
+- [Feature matrix](docs/TELEGRAM_FEATURE_MATRIX.md): what Telegram features `tgt` supports.

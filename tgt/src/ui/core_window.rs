@@ -11,6 +11,7 @@ use crate::{
     },
     ui::{
         archive_list_window::ArchiveListWindow,
+        blocked_list::BlockedList,
         chat_actions::{ChatActions, chat_command_action},
         chat_list_window::{ChatListWindow, open_chat},
         chat_window::ChatWindow,
@@ -24,6 +25,7 @@ use crate::{
         pinned_messages_popup::PinnedMessagesPopup,
         profile_popup::ProfilePopup,
         prompt_window::PromptWindow,
+        report::Report,
         search_overlay::SearchOverlay,
         sticker_picker::StickerPicker,
         topic_list_window::TopicListWindow,
@@ -69,6 +71,10 @@ pub struct CoreWindow {
     focus_before_profile: Option<ComponentName>,
     /// The pane focused when the username popup opened, focused again after.
     focus_before_find_chat: Option<ComponentName>,
+    /// The pane focused when the report popup opened, focused again after.
+    focus_before_report: Option<ComponentName>,
+    /// The pane focused when the blocked list opened, focused again after.
+    focus_before_blocked_list: Option<ComponentName>,
     /// The size of the message reply component.
     size_message_reply: u16,
     /// The size of the chat list component.
@@ -176,6 +182,18 @@ impl CoreWindow {
                     .new_boxed(),
             ),
             (
+                ComponentName::Report,
+                Report::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::Report.to_string())
+                    .new_boxed(),
+            ),
+            (
+                ComponentName::BlockedList,
+                BlockedList::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::BlockedList.to_string())
+                    .new_boxed(),
+            ),
+            (
                 ComponentName::FindChat,
                 FindChat::new(Arc::clone(&app_context))
                     .with_name(ComponentName::FindChat.to_string())
@@ -238,6 +256,8 @@ impl CoreWindow {
             focus_before_chat_actions: None,
             focus_before_profile: None,
             focus_before_find_chat: None,
+            focus_before_report: None,
+            focus_before_blocked_list: None,
             size_message_reply,
             small_area,
             component_focused,
@@ -483,6 +503,8 @@ impl CoreWindow {
             ComponentName::ChatActions => Action::HideChatActions,
             ComponentName::Profile => Action::HideProfile,
             ComponentName::FindChat => Action::HideFindChat,
+            ComponentName::Report => Action::HideReport,
+            ComponentName::BlockedList => Action::HideBlockedList,
             ComponentName::LeaderMenu => Action::HideLeaderMenu,
             _ => return None,
         })
@@ -805,6 +827,32 @@ impl Component for CoreWindow {
                     (_, Action::ShowProfile) => Action::ShowProfileFor(chat_id),
                     _ => Action::ShowChatActionsFor(chat_id, None),
                 });
+            }
+            Action::ShowReport(..) => {
+                self.focus_before_report = self.component_focused.filter(|c| !c.is_popup());
+                self.show_popup(ComponentName::Report, action);
+            }
+            Action::HideReport => {
+                let refocus = self.focus_before_report.take();
+                self.close_popup(ComponentName::Report, refocus);
+            }
+            Action::ReportStepped(_) | Action::ReportFailed(_) => {
+                if let Some(component) = self.components.get_mut(&ComponentName::Report) {
+                    component.update(action);
+                }
+            }
+            Action::ShowBlockedList => {
+                self.focus_before_blocked_list = self.component_focused.filter(|c| !c.is_popup());
+                self.show_popup(ComponentName::BlockedList, action);
+            }
+            Action::HideBlockedList => {
+                let refocus = self.focus_before_blocked_list.take();
+                self.close_popup(ComponentName::BlockedList, refocus);
+            }
+            Action::BlockedListLoaded(_) => {
+                if let Some(component) = self.components.get_mut(&ComponentName::BlockedList) {
+                    component.update(action);
+                }
             }
             Action::ShowFindChat => {
                 self.focus_before_find_chat = self.component_focused.filter(|c| !c.is_popup());

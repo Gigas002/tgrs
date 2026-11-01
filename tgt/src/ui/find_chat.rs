@@ -2,25 +2,18 @@
 //! or channel's, whether or not it's in the chat list yet.
 
 use crate::{
-    app::action::{Action, Modifiers},
+    app::action::Action,
     app::context::AppContext,
-    settings::{BorderSurface, HighlightGroup},
+    settings::HighlightGroup,
     ui::component_traits::{Component, HandleFocus},
+    ui::text_input::{self, TextInput},
 };
-use crossterm::event::{KeyCode, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use libtgt::model::parse_username;
-use ratatui::{
-    Frame,
-    layout::{Position, Rect},
-    text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph},
-};
+use ratatui::{Frame, layout::Rect, text::Span};
 use std::{io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
-use unicode_width::UnicodeWidthStr;
 
-/// Widest the popup gets, borders included.
-const WIDTH: u16 = 52;
 const TITLE: &str = "Open chat by username";
 /// Shown under the input until something else is.
 const HINT: &str = "enter opens the chat, esc closes";
@@ -51,9 +44,7 @@ pub struct FindChat {
     name: String,
     action_tx: Option<UnboundedSender<Action>>,
     focused: bool,
-    input: String,
-    /// The cursor, in characters into `input`.
-    cursor: usize,
+    input: TextInput,
     status: Status,
     /// Popup bounds from the most recent draw.
     last_popup: Option<Rect>,
@@ -66,8 +57,7 @@ impl FindChat {
             name: String::new(),
             action_tx: None,
             focused: false,
-            input: String::new(),
-            cursor: 0,
+            input: TextInput::default(),
             status: Status::Hint,
             last_popup: None,
         }
@@ -86,43 +76,7 @@ impl FindChat {
 
     fn reset(&mut self) {
         self.input.clear();
-        self.cursor = 0;
         self.status = Status::Hint;
-    }
-
-    /// The byte offset of the cursor.
-    fn cursor_byte(&self) -> usize {
-        self.input
-            .char_indices()
-            .nth(self.cursor)
-            .map_or(self.input.len(), |(i, _)| i)
-    }
-
-    fn insert(&mut self, text: &str) {
-        // A username is one line
-        let text: String = text.chars().filter(|c| !c.is_control()).collect();
-        let at = self.cursor_byte();
-        self.input.insert_str(at, &text);
-        self.cursor += text.chars().count();
-        self.status = Status::Hint;
-    }
-
-    fn backspace(&mut self) {
-        if self.cursor == 0 {
-            return;
-        }
-        self.cursor -= 1;
-        let at = self.cursor_byte();
-        self.input.remove(at);
-        self.status = Status::Hint;
-    }
-
-    fn delete(&mut self) {
-        if self.cursor < self.input.chars().count() {
-            let at = self.cursor_byte();
-            self.input.remove(at);
-            self.status = Status::Hint;
-        }
     }
 
     /// Looks the username up, unless it can't be one.
@@ -130,31 +84,12 @@ impl FindChat {
         if self.status == Status::Searching {
             return;
         }
-        match parse_username(&self.input) {
+        match parse_username(self.input.text()) {
             Some(username) => {
                 self.status = Status::Searching;
                 self.send(Action::FindChat(username));
             }
             None => self.status = Status::Error(INVALID.to_owned()),
-        }
-    }
-
-    fn handle_key(&mut self, key: KeyCode, modifiers: Modifiers) {
-        match key {
-            KeyCode::Char('u') if modifiers.control => {
-                self.input.drain(..self.cursor_byte());
-                self.cursor = 0;
-            }
-            KeyCode::Char(c) if !modifiers.control && !modifiers.alt => {
-                self.insert(c.encode_utf8(&mut [0; 4]));
-            }
-            KeyCode::Backspace => self.backspace(),
-            KeyCode::Delete => self.delete(),
-            KeyCode::Left => self.cursor = self.cursor.saturating_sub(1),
-            KeyCode::Right => self.cursor = (self.cursor + 1).min(self.input.chars().count()),
-            KeyCode::Home => self.cursor = 0,
-            KeyCode::End => self.cursor = self.input.chars().count(),
-            _ => {}
         }
     }
 }
@@ -180,10 +115,16 @@ impl Component for FindChat {
             Action::ShowFindChat | Action::HideFindChat => self.reset(),
             Action::FindChatConfirm => self.confirm(),
             Action::FindChatFailed(message) => self.status = Status::Error(message),
+            // Typing waits for the answer to a lookup
             Action::Key(key, modifiers) if self.status != Status::Searching => {
-                self.handle_key(key, modifiers)
+                if self.input.handle_key(key, modifiers) {
+                    self.status = Status::Hint;
+                }
             }
-            Action::Paste(text) if self.status != Status::Searching => self.insert(&text),
+            Action::Paste(text) if self.status != Status::Searching => {
+                self.input.insert(&text);
+                self.status = Status::Hint;
+            }
             _ => {}
         }
     }
@@ -204,42 +145,6 @@ impl Component for FindChat {
 
     fn draw(&mut self, frame: &mut Frame<'_>, area: Rect) -> io::Result<()> {
         let theme = self.app_context.theme();
-        let width = WIDTH.min(area.width);
-        let height = 4.min(area.height);
-        let popup = Rect::new(
-            area.x + area.width.saturating_sub(width) / 2,
-            area.y + area.height.saturating_sub(height) / 2,
-            width,
-            height,
-        );
-        frame.render_widget(Clear, popup);
-        let block = Block::new()
-            .borders(Borders::ALL)
-            .border_type(theme.border_type(BorderSurface::Modal))
-            .border_style(theme.style(HighlightGroup::ModalBorder))
-            .title(Span::styled(
-                format!(" {TITLE} "),
-                theme.style(HighlightGroup::ModalTitle),
-            ))
-            .style(theme.style(HighlightGroup::Normal));
-        let inner = block.inner(popup);
-        frame.render_widget(block, popup);
-        // A column of padding on both sides, like the other modals
-        let content = Rect::new(
-            inner.x + 1,
-            inner.y,
-            inner.width.saturating_sub(2),
-            inner.height,
-        );
-
-        // Keep the cursor in view in a long input
-        let before: String = self.input.chars().take(self.cursor).collect();
-        let room = usize::from(content.width).saturating_sub(2);
-        let mut skip = 0;
-        while before.chars().skip(skip).collect::<String>().width() > room {
-            skip += 1;
-        }
-        let shown: String = self.input.chars().skip(skip).collect();
         let status = match &self.status {
             Status::Hint => Span::styled(HINT, theme.style(HighlightGroup::Hint)),
             Status::Searching => Span::styled("Searching…", theme.style(HighlightGroup::Loading)),
@@ -247,19 +152,16 @@ impl Component for FindChat {
                 Span::styled(message.clone(), theme.style(HighlightGroup::Warning))
             }
         };
-        let lines = vec![
-            Line::from(vec![
-                Span::styled("@ ", theme.style(HighlightGroup::FieldLabel)),
-                Span::raw(shown),
-            ]),
-            Line::from(status),
-        ];
-        frame.render_widget(Paragraph::new(lines), content);
-        if self.focused {
-            let x = content.x + 2 + before.chars().skip(skip).collect::<String>().width() as u16;
-            frame.set_cursor_position(Position::new(x.min(content.right()), content.y));
-        }
-        self.last_popup = Some(popup);
+        self.last_popup = Some(text_input::draw_modal(
+            frame,
+            area,
+            theme,
+            TITLE,
+            "@ ",
+            &self.input,
+            status,
+            self.focused,
+        ));
         Ok(())
     }
 }

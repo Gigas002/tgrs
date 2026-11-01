@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, Ordering};
 use std::sync::{Mutex, MutexGuard};
 
 use tdlib_rs::{
-    enums::{ChatList, ChatType, MessageTopic, UserStatus, UserType},
+    enums::{BlockList, ChatList, ChatType, MessageTopic, UserStatus, UserType},
     types::{
         BasicGroup, BasicGroupFullInfo, Chat, ForumTopicInfo, Message, MessageTopicForum,
         SecretChat, Supergroup, SupergroupFullInfo, UpdateForumTopic, User, UserFullInfo,
@@ -618,6 +618,7 @@ impl Store {
                 .is_some_and(|p| p.is_pinned),
             is_unread: chat.unread_count > 0 || chat.is_marked_as_unread,
             last_message_id: chat.last_message.as_ref().map_or(0, |m| m.id),
+            is_blocked: chat.block_list == Some(BlockList::Main),
         })
     }
 

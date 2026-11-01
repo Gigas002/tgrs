@@ -4,6 +4,7 @@ pub mod alert;
 pub mod chat;
 pub mod ids;
 pub mod message;
+pub mod moderation;
 pub mod ordered_chat;
 pub mod profile;
 pub mod sticker;
@@ -21,6 +22,7 @@ pub use message::{
     Media, MediaFile, MediaKind, MessageContentType, MessageEntry, Reaction, TextLine, TextSpan,
     TextStyle, format_duration, format_size, format_timestamp, reaction_emoji,
 };
+pub use moderation::{BlockedSender, ReportOption, ReportStep};
 pub use ordered_chat::OrderedChat;
 pub use profile::{Profile, ProfileSource};
 pub use sticker::{StickerEntry, StickerSetEntry};

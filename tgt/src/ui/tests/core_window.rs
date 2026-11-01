@@ -818,3 +818,19 @@ fn find_chat_gives_the_focus_back_or_opens_the_chat() {
     assert_eq!(window.app_context.store().open_chat_id().as_i64(), 42);
     assert!(sent_actions(&window).contains(&Action::GetChatHistory));
 }
+
+#[test]
+fn report_and_blocked_list_popups_give_the_focus_back() {
+    let mut window = create_test_core_window();
+    window.focus_only(Some(ComponentName::Chat));
+    window.update(Action::ShowReport(5, vec![1]));
+    assert_eq!(window.component_focused, Some(ComponentName::Report));
+    window.update(Action::HideReport);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+
+    window.update(Action::ShowBlockedList);
+    assert_eq!(window.component_focused, Some(ComponentName::BlockedList));
+    window.update(Action::UnfocusComponent);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+    assert!(!window.is_popup_visible(ComponentName::BlockedList));
+}

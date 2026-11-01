@@ -8,8 +8,8 @@ use crate::{
     ui::message,
     ui::popup_list::{self, PopupRow},
 };
-use libtgt::model::{ChatKind, ChatState};
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+use libtgt::model::{ChatKind, ChatState};
 use ratatui::{Frame, layout::Rect, text::Span};
 use std::{io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
@@ -23,7 +23,15 @@ pub fn chat_command_action(command: ChatCommand, chat_id: i64) -> Action {
     if command.needs_confirmation() {
         Action::ShowChatActionsFor(chat_id, Some(command))
     } else {
-        Action::RunChatCommand(command, chat_id)
+        run_action(command, chat_id)
+    }
+}
+
+/// What runs `command` on `chat_id`, once confirmed if it needs to be.
+fn run_action(command: ChatCommand, chat_id: i64) -> Action {
+    match command {
+        ChatCommand::Report => Action::ShowReport(chat_id, Vec::new()),
+        _ => Action::RunChatCommand(command, chat_id),
     }
 }
 
@@ -38,6 +46,9 @@ pub fn command_label(command: ChatCommand, state: &ChatState) -> &'static str {
         ChatCommand::TogglePin => "pin chat",
         ChatCommand::ToggleRead if state.is_unread => "mark as read",
         ChatCommand::ToggleRead => "mark as unread",
+        ChatCommand::ToggleBlock if state.is_blocked => "unblock",
+        ChatCommand::ToggleBlock => "block",
+        ChatCommand::Report => "report",
         ChatCommand::Remove => match state.kind {
             ChatKind::Channel => "leave channel",
             ChatKind::Group => "leave group",
@@ -57,6 +68,9 @@ pub fn done_label(command: ChatCommand, state: &ChatState) -> &'static str {
         ChatCommand::TogglePin => "pinned",
         ChatCommand::ToggleRead if state.is_unread => "marked as read",
         ChatCommand::ToggleRead => "marked as unread",
+        ChatCommand::ToggleBlock if state.is_blocked => "unblocked",
+        ChatCommand::ToggleBlock => "blocked",
+        ChatCommand::Report => "reported",
         ChatCommand::Remove if state.is_left() => "left",
         ChatCommand::Remove => "deleted",
     }
@@ -115,9 +129,12 @@ impl ChatActions {
                 command,
                 label: command_label(command, state),
                 disabled: match command {
-                    ChatCommand::ToggleArchive if state.kind == ChatKind::Saved => {
+                    ChatCommand::ToggleArchive | ChatCommand::Report
+                        if state.kind == ChatKind::Saved =>
+                    {
                         Some("saved messages")
                     }
+                    ChatCommand::ToggleBlock if !state.is_blockable() => Some("not a person"),
                     _ => None,
                 },
             })
@@ -174,7 +191,7 @@ impl ChatActions {
         }
         let chat_id = chat.chat_id;
         let _ = tx.send(Action::HideChatActions);
-        let _ = tx.send(Action::RunChatCommand(item.command, chat_id));
+        let _ = tx.send(run_action(item.command, chat_id));
     }
 
     /// The chat list keys bound to `command`, e.g. `m` to mute.
@@ -321,7 +338,13 @@ impl Component for ChatActions {
             })
             .collect();
         self.last_popup = Some(popup_list::draw(
-            frame, area, theme, &self.title(), &rows, self.selected, 28,
+            frame,
+            area,
+            theme,
+            &self.title(),
+            &rows,
+            self.selected,
+            28,
         ));
         Ok(())
     }

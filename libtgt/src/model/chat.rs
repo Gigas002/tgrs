@@ -83,9 +83,20 @@ pub struct ChatState {
     pub is_unread: bool,
     /// The newest message, read when the chat is marked as read; 0 if none.
     pub last_message_id: i64,
+    /// The other party of a private or secret chat is on your block list.
+    pub is_blocked: bool,
 }
 
 impl ChatState {
+    /// Whether the chat is with someone who can be blocked: a person or a
+    /// bot, not yourself or a group.
+    pub fn is_blockable(&self) -> bool {
+        matches!(
+            self.kind,
+            ChatKind::Private | ChatKind::Bot | ChatKind::Secret
+        )
+    }
+
     /// Whether leaving is how the chat goes away: groups and channels are
     /// left, other chats are deleted.
     pub fn is_left(&self) -> bool {

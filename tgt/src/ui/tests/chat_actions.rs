@@ -44,6 +44,8 @@ fn labels_follow_the_chat_state() {
             "archive",
             "pin chat",
             "mark as unread",
+            "block",
+            "report",
             "leave group"
         ]
     );
@@ -53,6 +55,7 @@ fn labels_follow_the_chat_state() {
         is_archived: true,
         is_pinned: true,
         is_unread: true,
+        is_blocked: true,
         ..group()
     });
     assert_eq!(
@@ -62,6 +65,8 @@ fn labels_follow_the_chat_state() {
             "unarchive",
             "unpin chat",
             "mark as read",
+            "unblock",
+            "report",
             "delete chat"
         ]
     );
@@ -167,4 +172,60 @@ fn an_unknown_chat_shows_nothing() {
     let (mut menu, _rx) = menu_for(group());
     menu.update(Action::ShowChatActionsFor(99, None));
     assert!(menu.chat.is_none());
+}
+
+#[test]
+fn only_people_can_be_blocked_and_saved_messages_not_reported() {
+    let disabled = |state: ChatState, command| {
+        ChatActions::items_for(&state)
+            .into_iter()
+            .find(|item| item.command == command)
+            .unwrap()
+            .disabled
+    };
+    assert_eq!(
+        disabled(group(), ChatCommand::ToggleBlock),
+        Some("not a person")
+    );
+    for kind in [ChatKind::Private, ChatKind::Bot, ChatKind::Secret] {
+        let person = ChatState { kind, ..group() };
+        assert_eq!(disabled(person, ChatCommand::ToggleBlock), None, "{kind:?}");
+    }
+    let saved = ChatState {
+        kind: ChatKind::Saved,
+        ..group()
+    };
+    assert_eq!(
+        disabled(saved.clone(), ChatCommand::ToggleBlock),
+        Some("not a person")
+    );
+    assert_eq!(disabled(saved, ChatCommand::Report), Some("saved messages"));
+    assert_eq!(disabled(group(), ChatCommand::Report), None);
+
+    let blocked = ChatState {
+        kind: ChatKind::Private,
+        is_blocked: true,
+        ..group()
+    };
+    assert_eq!(done_label(ChatCommand::ToggleBlock, &blocked), "unblocked");
+    assert_eq!(done_label(ChatCommand::ToggleBlock, &group()), "blocked");
+}
+
+#[test]
+fn reporting_opens_the_report_popup_instead_of_running() {
+    assert_eq!(
+        chat_command_action(ChatCommand::Report, 7),
+        Action::ShowReport(7, Vec::new())
+    );
+    assert_eq!(
+        chat_command_action(ChatCommand::ToggleBlock, 7),
+        Action::RunChatCommand(ChatCommand::ToggleBlock, 7)
+    );
+    let (mut menu, mut rx) = menu_for(group());
+    select(&mut menu, ChatCommand::Report);
+    menu.update(Action::ChatActionsConfirm);
+    assert_eq!(
+        sent(&mut rx),
+        [Action::HideChatActions, Action::ShowReport(7, Vec::new())]
+    );
 }
