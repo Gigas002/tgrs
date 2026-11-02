@@ -8,6 +8,12 @@ fn tgt(home: &Path) -> Command {
         .env_clear()
         .env("HOME", home)
         .env("PATH", std::env::var_os("PATH").unwrap_or_default());
+    // A TDLib installed outside the system paths (as in CI) is found through these
+    for var in ["LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"] {
+        if let Some(value) = std::env::var_os(var) {
+            command.env(var, value);
+        }
+    }
     command
 }
 
