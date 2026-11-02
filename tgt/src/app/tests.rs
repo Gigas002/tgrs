@@ -86,7 +86,6 @@ fn notifications_map_to_actions() {
     let ctx = test_app_context();
     handle_notification(&ctx, Notification::OpenChatMessageAdded(42)).unwrap();
     handle_notification(&ctx, Notification::OpenChatPinsChanged).unwrap();
-    handle_notification(&ctx, Notification::OpenChatHistoryInvalidated).unwrap();
     handle_notification(&ctx, Notification::ChatListChanged).unwrap();
 
     assert_eq!(ctx.store().jump_target_message_id_i64(), -1);
@@ -98,7 +97,6 @@ fn notifications_map_to_actions() {
             Action::ChatHistoryAppended,
             Action::ViewAllMessages,
             Action::LoadPinnedMessages,
-            Action::GetChatHistory,
             Action::ChatHistoryAppended,
         ]
     );

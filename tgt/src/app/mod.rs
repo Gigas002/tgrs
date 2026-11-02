@@ -300,7 +300,6 @@ fn handle_notification(
         }
         Notification::OpenChatMessageChanged(_) => app_context.mark_dirty(),
         Notification::OpenChatPinsChanged => action_tx.send(Action::LoadPinnedMessages)?,
-        Notification::OpenChatHistoryInvalidated => action_tx.send(Action::GetChatHistory)?,
         Notification::OpenChatTopicsChanged | Notification::OpenChatActivityChanged => {
             app_context.mark_dirty()
         }

@@ -21,8 +21,6 @@ pub enum Notification {
     OpenChatMessageChanged(i64),
     /// A message in the open chat was pinned or unpinned.
     OpenChatPinsChanged,
-    /// TDLib evicted open chat messages from its cache; history should be reloaded.
-    OpenChatHistoryInvalidated,
     /// A topic of the open forum chat changed, or a message arrived in one.
     OpenChatTopicsChanged,
     /// A message to notify the user about (see [`super::Client::enable_notifications`]).
@@ -386,15 +384,17 @@ async fn apply(
             }
         }
         Update::DeleteMessages(update) if update.chat_id == open_chat_id => {
-            // from_cache: TDLib evicted messages from its local cache, they were NOT
-            // deleted on the server. Keep them and reload instead.
+            // from_cache: TDLib evicted messages from its local cache (it does so
+            // after a while idle); they still exist on the server. Our own copies stay,
+            // and nothing needs reloading: loading older history here grew the cache
+            // past its limit on every eviction, until the newest messages (and the
+            // reader's position) were dropped.
             if update.from_cache {
-                tracing::info!(
+                tracing::debug!(
                     chat_id = update.chat_id,
                     count = update.message_ids.len(),
-                    "DeleteMessages from cache, reloading history"
+                    "DeleteMessages from TDLib's cache, keeping them"
                 );
-                let _ = notify.send(Notification::OpenChatHistoryInvalidated);
                 return;
             }
             tracing::info!(
