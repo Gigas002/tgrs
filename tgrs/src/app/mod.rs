@@ -19,7 +19,7 @@ use std::{
 };
 
 use crossterm::event::KeyCode;
-use libtgt::{
+use libtgrs::{
     client::{Client, Notification, Requests},
     model::{
         ReportStep, SignInAlert, TdMessageReplyToMessage, TransferState, format_size,
@@ -120,7 +120,7 @@ async fn run_telegram(settings: &Settings) -> Result<(), AppError> {
         keychain::load_key(&mut keychain, settings.credentials, &database_dir)?;
 
     let store = Arc::new(Store::default());
-    if let Err(e) = libtgt::client::configure_logging(&settings.tdlib_log) {
+    if let Err(e) = libtgrs::client::configure_logging(&settings.tdlib_log) {
         tracing::error!("failed to set up the TDLib log: {e}");
     }
     let mut client = Client::new(Arc::clone(&store), params);
@@ -316,7 +316,7 @@ fn reaction_picker(app_context: &AppContext, message_id: i64, available: Vec<Str
 fn forward_status(
     request: &ForwardRequest,
     count: usize,
-    result: Result<usize, libtgt::tdlib_rs::types::Error>,
+    result: Result<usize, libtgrs::tdlib_rs::types::Error>,
 ) -> String {
     let to = &request.to_chat_name;
     match result {
@@ -333,7 +333,7 @@ async fn privacy_saved(
     app_context: &Arc<AppContext>,
     client: &Client,
     what: &str,
-    result: Result<(), libtgt::tdlib_rs::types::Error>,
+    result: Result<(), libtgrs::tdlib_rs::types::Error>,
 ) -> Result<(), AppError> {
     if let Err(e) = result {
         media::status(app_context, format!("Can't change {what}: {}", e.message));
@@ -627,7 +627,7 @@ fn close_chat(app_context: &AppContext, chat_id: i64) {
 ///
 /// Bursts of [`Action::ChatHistoryAppended`] / [`Action::Refresh`] are folded before handling
 /// ([`fold_chat_list_refresh_actions`]) so one TDLib flurry does not run thousands of chat-list
-/// rebuilds in a single turn. [`libtgt::store::Store`] mutexes are not held across
+/// rebuilds in a single turn. [`libtgrs::store::Store`] mutexes are not held across
 /// `.await` in the [`Action::GetChatHistory`] path (loads use discrete lock regions per batch).
 #[allow(clippy::await_holding_lock)]
 ///
@@ -660,7 +660,7 @@ async fn handle_app_actions(
     let folded_len = folded.len();
     if raw_len > 64 {
         tracing::debug!(
-            target: "tgt::actions",
+            target: "tgrs::actions",
             raw = raw_len,
             folded = folded_len,
             "folded action batch (TDLib/UI burst)"

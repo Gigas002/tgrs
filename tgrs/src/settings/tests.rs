@@ -33,7 +33,7 @@ impl Env {
     }
 
     fn config_dir(&self) -> PathBuf {
-        self.home().join(".config/tgt")
+        self.home().join(".config/tgrs")
     }
 
     fn write_config(&self, name: &str, content: &str) {
@@ -53,17 +53,17 @@ fn defaults_follow_xdg() {
     let settings = env.resolve(CliOverrides::default()).unwrap();
     let home = env.home();
 
-    assert_eq!(settings.dirs.config, home.join(".config/tgt"));
-    assert_eq!(settings.dirs.data, home.join(".local/share/tgt"));
-    assert_eq!(settings.dirs.state, home.join(".local/state/tgt"));
-    assert_eq!(settings.logging.dir, home.join(".local/state/tgt/logs"));
+    assert_eq!(settings.dirs.config, home.join(".config/tgrs"));
+    assert_eq!(settings.dirs.data, home.join(".local/share/tgrs"));
+    assert_eq!(settings.dirs.state, home.join(".local/state/tgrs"));
+    assert_eq!(settings.logging.dir, home.join(".local/state/tgrs/logs"));
     assert_eq!(
         settings.telegram.database_dir,
-        home.join(".local/share/tgt/tdlib")
+        home.join(".local/share/tgrs/tdlib")
     );
     assert_eq!(
         settings.tdlib_log.path,
-        home.join(".local/state/tgt/tdlib.log")
+        home.join(".local/state/tgrs/tdlib.log")
     );
     assert_eq!(settings.telegram.api_id, DEFAULT_API_ID);
     assert_eq!(settings.telegram.api_hash, DEFAULT_API_HASH);
@@ -87,9 +87,9 @@ fn xdg_variables_are_respected() {
         .set("XDG_STATE_HOME", xdg.join("state"))
         .set("XDG_DOWNLOAD_DIR", xdg.join("downloads"));
     let settings = env.resolve(CliOverrides::default()).unwrap();
-    assert_eq!(settings.dirs.config, xdg.join("config/tgt"));
-    assert_eq!(settings.dirs.data, xdg.join("data/tgt"));
-    assert_eq!(settings.dirs.state, xdg.join("state/tgt"));
+    assert_eq!(settings.dirs.config, xdg.join("config/tgrs"));
+    assert_eq!(settings.dirs.data, xdg.join("data/tgrs"));
+    assert_eq!(settings.dirs.state, xdg.join("state/tgrs"));
     assert_eq!(settings.app.download_dir, xdg.join("downloads"));
 }
 

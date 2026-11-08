@@ -7,7 +7,7 @@ use crate::{
     ui::component_traits::{Component, HandleFocus},
     ui::popup_list::{self, PopupRow},
 };
-use libtgt::model::{MessageEntry, TdMessageReplyTo};
+use libtgrs::model::{MessageEntry, TdMessageReplyTo};
 use ratatui::{Frame, layout::Rect, text::Span};
 use std::{io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;

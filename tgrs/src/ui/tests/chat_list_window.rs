@@ -59,7 +59,7 @@ fn row_text(text: &Text<'_>) -> Vec<String> {
 
 #[test]
 fn rows_show_the_icon_time_preview_and_badges() {
-    use libtgt::model::{ChatKind, MessageEntry, TdMessageSender};
+    use libtgrs::model::{ChatKind, MessageEntry, TdMessageSender};
     use ratatui::style::Style;
     use unicode_width::UnicodeWidthStr;
     let app_context = create_test_app_context();
@@ -334,9 +334,9 @@ fn test_chat_list_left_click_on_item_when_focused_selects_and_returns_open() {
 
 #[test]
 fn the_archive_row_comes_first_and_opens_the_archived_chats() {
-    use libtgt::model::OrderedChat;
-    use libtgt::store::ARCHIVE_NAME;
-    use libtgt::tdlib_rs::types::ChatPosition;
+    use libtgrs::model::OrderedChat;
+    use libtgrs::store::ARCHIVE_NAME;
+    use libtgrs::tdlib_rs::types::ChatPosition;
     let mut window = create_test_chat_list_window();
     let store = window.app_context.store();
     store.chats_index().insert(OrderedChat {
@@ -447,8 +447,8 @@ fn a_chat_marked_as_unread_has_an_empty_badge() {
 /// Puts the chats in the main chat list, the first on top; `pinned` of them
 /// are pinned.
 fn pin_chats(app_context: &AppContext, chat_ids: &[i64], pinned: usize) {
-    use libtgt::model::OrderedChat;
-    use libtgt::tdlib_rs::{enums::ChatList, types::ChatPosition};
+    use libtgrs::model::OrderedChat;
+    use libtgrs::tdlib_rs::{enums::ChatList, types::ChatPosition};
     let mut index = app_context.store().chats_index();
     for (row, chat_id) in chat_ids.iter().enumerate() {
         index.insert(OrderedChat {
@@ -519,7 +519,7 @@ fn a_draft_shows_instead_of_the_last_message_except_in_the_open_chat() {
 
 #[test]
 fn the_name_wins_over_the_time_when_the_row_is_narrow() {
-    use libtgt::model::{MessageEntry, TdMessageSender};
+    use libtgrs::model::{MessageEntry, TdMessageSender};
     use unicode_width::UnicodeWidthStr;
     let app_context = create_test_app_context();
     let mut entry = create_mock_chat(5, "A rather long chat name");
@@ -529,7 +529,7 @@ fn the_name_wins_over_the_time_when_the_row_is_narrow() {
         "hi",
         1_700_000_000,
     ));
-    let time = libtgt::model::format_short_timestamp(1_700_000_000);
+    let time = libtgrs::model::format_short_timestamp(1_700_000_000);
 
     // Wide enough for both
     let rows = row_text(&chat_list_item_text(&entry, &app_context, 60, false));

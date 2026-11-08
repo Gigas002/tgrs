@@ -395,7 +395,7 @@ pub enum MessageContentType {
     Other,
 }
 
-/// A message as tgt keeps it: TDLib data reduced to what the client shows.
+/// A message as tgrs keeps it: TDLib data reduced to what the client shows.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MessageEntry {
     id: i64,

@@ -9,7 +9,7 @@ use crate::{
     ui::popup_list::{self, PopupRow},
 };
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-use libtgt::model::{ChatStorage, StorageUsage, format_size};
+use libtgrs::model::{ChatStorage, StorageUsage, format_size};
 use ratatui::{Frame, layout::Rect, text::Span};
 use std::{io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;

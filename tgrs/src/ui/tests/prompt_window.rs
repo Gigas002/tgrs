@@ -297,7 +297,7 @@ fn a_reply_sent_elsewhere_ends_reply_mode() {
 
 mod drafts {
     use super::*;
-    use libtgt::model::TopicEntry;
+    use libtgrs::model::TopicEntry;
     use ratatui::{Terminal, backend::TestBackend};
     use tokio::sync::mpsc::UnboundedReceiver;
 

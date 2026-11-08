@@ -10,7 +10,7 @@ use crate::ui::component_name::ComponentName;
 use crate::ui::component_traits::{Component, HandleFocus};
 use crate::ui::pane;
 use crossterm::event::{MouseButton, MouseEventKind};
-use libtgt::model::{TopicEntry, format_short_timestamp};
+use libtgrs::model::{TopicEntry, format_short_timestamp};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span, Text};

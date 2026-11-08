@@ -1,10 +1,10 @@
 //! Frame-cost benchmarks on a synthetic store (no TDLib connection).
-//! Run with `cargo test --release -p tgt perf -- --ignored --nocapture`.
+//! Run with `cargo test --release -p tgrs perf -- --ignored --nocapture`.
 
 use std::{sync::Arc, time::Instant};
 
 use crossterm::event::{KeyCode, KeyModifiers};
-use libtgt::{
+use libtgrs::{
     model::{MessageEntry, OrderedChat, TdMessageSender},
     tdlib_rs::{
         enums::{ChatAvailableReactions, ChatList, ChatType},

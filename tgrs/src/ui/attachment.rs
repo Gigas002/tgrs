@@ -123,7 +123,7 @@ pub fn save_clipboard_image() -> Result<PathBuf, String> {
     let height = u32::try_from(image.height).map_err(|e| e.to_string())?;
     let buffer = image::RgbaImage::from_raw(width, height, image.bytes.into_owned())
         .ok_or("The clipboard image is malformed.")?;
-    let dir = std::env::temp_dir().join("tgt-clipboard");
+    let dir = std::env::temp_dir().join("tgrs-clipboard");
     std::fs::create_dir_all(&dir).map_err(|e| format!("Can't save the image: {e}"))?;
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -138,7 +138,7 @@ pub fn save_clipboard_image() -> Result<PathBuf, String> {
 /// Without image support, pasting images isn't available.
 #[cfg(not(feature = "media-preview"))]
 pub fn save_clipboard_image() -> Result<PathBuf, String> {
-    Err("Pasting images needs tgt built with the media-preview feature.".to_owned())
+    Err("Pasting images needs tgrs built with the media-preview feature.".to_owned())
 }
 
 #[cfg(test)]

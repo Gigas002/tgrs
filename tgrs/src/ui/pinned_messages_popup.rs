@@ -4,7 +4,7 @@ use crate::{
     ui::component_traits::{Component, HandleFocus},
     ui::message,
 };
-use libtgt::model::MessageEntry;
+use libtgrs::model::MessageEntry;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},

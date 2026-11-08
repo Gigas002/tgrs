@@ -9,8 +9,8 @@ use std::path::Path;
 #[cfg(test)]
 mod tests;
 
-/// Keychain service name of tgt's entries.
-pub const SERVICE: &str = "tgt";
+/// Keychain service name of tgrs's entries.
+pub const SERVICE: &str = "tgrs";
 
 #[derive(Debug, thiserror::Error)]
 pub enum CredentialsError {
@@ -19,7 +19,7 @@ pub enum CredentialsError {
     Keychain(#[from] keyring_core::Error),
 
     #[cfg(not(feature = "keychain"))]
-    #[error("tgt was built without keychain support (the `keychain` feature)")]
+    #[error("tgrs was built without keychain support (the `keychain` feature)")]
     Unsupported,
 
     #[cfg(feature = "keychain")]

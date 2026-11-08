@@ -3,7 +3,7 @@
 //! terminal's own colors.
 //!
 //! Invalid leaves are skipped with a warning instead of failing, so one typo
-//! doesn't keep tgt from starting.
+//! doesn't keep tgrs from starting.
 
 use std::{collections::BTreeMap, path::Path};
 

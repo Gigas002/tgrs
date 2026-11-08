@@ -46,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [tgt, libtgt]
+        package: [tgrs, libtgrs]
 
     name: codecov (${{ matrix.package }})
     runs-on: ubuntu-latest

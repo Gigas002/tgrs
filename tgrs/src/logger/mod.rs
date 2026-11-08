@@ -22,8 +22,8 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
-/// Log files are `tgt.<date>.log` in the log directory.
-pub const FILE_PREFIX: &str = "tgt";
+/// Log files are `tgrs.<date>.log` in the log directory.
+pub const FILE_PREFIX: &str = "tgrs";
 pub const FILE_SUFFIX: &str = "log";
 
 #[derive(Debug, thiserror::Error)]
@@ -112,7 +112,7 @@ pub fn level_filter(level: LogLevel) -> LevelFilter {
     }
 }
 
-/// Stderr format for CLI commands: `tgt: warning: message`, no spans or timestamps.
+/// Stderr format for CLI commands: `tgrs: warning: message`, no spans or timestamps.
 pub struct CliFormat;
 
 impl<S, N> FormatEvent<S, N> for CliFormat
@@ -133,7 +133,7 @@ where
             Level::DEBUG => "debug",
             Level::TRACE => "trace",
         };
-        write!(writer, "tgt: {level}: ")?;
+        write!(writer, "tgrs: {level}: ")?;
         ctx.field_format().format_fields(writer.by_ref(), event)?;
         writeln!(writer)
     }

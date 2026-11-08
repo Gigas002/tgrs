@@ -1,7 +1,7 @@
 //! Rendering of [`MessageEntry`] values with the active theme.
 
 use chrono::{DateTime, Local, NaiveDate};
-use libtgt::model::{
+use libtgrs::model::{
     Media, MediaKind, MessageContentType, MessageEntry, TdMessageReplyTo, TdMessageSender,
     TextLine, TextStyle, format_duration, format_size, format_timestamp,
 };

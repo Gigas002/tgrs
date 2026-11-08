@@ -12,7 +12,7 @@ use std::{
 mod tests;
 
 /// Directory name used under every XDG base directory.
-pub const APP_NAME: &str = "tgt";
+pub const APP_NAME: &str = "tgrs";
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum PathsError {
@@ -55,7 +55,7 @@ impl XdgDirs {
     }
 }
 
-/// Default tgt directories derived from [`XdgDirs`].
+/// Default tgrs directories derived from [`XdgDirs`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppDirs {
     /// `config.toml`, `keymap.toml` and `theme.toml`.

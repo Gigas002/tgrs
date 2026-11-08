@@ -9,13 +9,13 @@ use crate::{
     ui::popup_list::{self, PopupRow},
 };
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-use libtgt::model::SessionEntry;
+use libtgrs::model::SessionEntry;
 use ratatui::{Frame, layout::Rect, text::Span};
 use std::{io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
 /// Said when trying to end this app's own session here.
-pub const CURRENT_SESSION: &str = "This is tgt's own session: `tgt logout` ends it.";
+pub const CURRENT_SESSION: &str = "This is tgrs's own session: `tgrs logout` ends it.";
 
 /// What a second press of the same key will end.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

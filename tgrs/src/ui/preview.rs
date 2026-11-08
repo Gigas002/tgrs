@@ -7,7 +7,7 @@ use std::{
     sync::OnceLock,
 };
 
-use libtgt::model::MediaFile;
+use libtgrs::model::MediaFile;
 use ratatui::{
     Frame,
     layout::{Alignment, Rect},

@@ -126,7 +126,7 @@ fn media_commands_need_media() {
 }
 
 fn message_with_links(id: i64, links: &[&str]) -> MessageEntry {
-    use libtgt::model::{TdMessageSender, TextSpan, TextStyle};
+    use libtgrs::model::{TdMessageSender, TextSpan, TextStyle};
     let link = TextStyle {
         link: true,
         ..TextStyle::default()
@@ -294,7 +294,7 @@ mod previews {
 
 mod layout {
     use super::*;
-    use libtgt::model::TdMessageSender;
+    use libtgrs::model::TdMessageSender;
     use ratatui::{Terminal, backend::TestBackend};
 
     fn screen(window: &mut ChatWindow, width: u16, height: u16) -> Vec<String> {
@@ -355,7 +355,7 @@ mod layout {
 
     #[test]
     fn reactions_and_the_pin_are_shown_under_the_message() {
-        use libtgt::model::Reaction;
+        use libtgrs::model::Reaction;
         let mut window = create_test_chat_window();
         let mut pinned = message(1, 1, "vote", T).with_reactions(vec![
             Reaction {
@@ -448,8 +448,8 @@ fn editing_a_media_message_edits_its_caption() {
 /// A photo whose chat preview is `size` bytes, on disk at `local_path` when given.
 #[cfg(feature = "media-preview")]
 fn photo_with_preview(size: i64, local_path: Option<&std::path::Path>) -> MessageEntry {
-    use libtgt::model::TdMessageSender;
-    use libtgt::model::{Media, MediaFile, MediaKind};
+    use libtgrs::model::TdMessageSender;
+    use libtgrs::model::{Media, MediaFile, MediaKind};
     let thumbnail = MediaFile {
         id: 3,
         size,
@@ -491,7 +491,7 @@ fn previews_follow_the_media_settings() {
     assert!(ChatWindow::preview_file(manual, &small).is_none());
 
     // Downloaded ones show whatever the settings
-    let dir = std::env::temp_dir().join(format!("tgt-preview-test-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("tgrs-preview-test-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("thumb.jpg");
     std::fs::write(&path, b"jpeg").unwrap();

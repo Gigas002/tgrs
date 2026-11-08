@@ -10,7 +10,7 @@ use crate::{
     ui::popup_list::{self, PopupRow},
 };
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-use libtgt::model::{NotificationOption, NotificationSettings, NotificationTarget};
+use libtgrs::model::{NotificationOption, NotificationSettings, NotificationTarget};
 use ratatui::{Frame, layout::Rect, text::Span};
 use std::{io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
@@ -23,7 +23,7 @@ const LABEL_WIDTH: usize = 22;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Row {
     /// The open chat's title, or a scope's name, above its options.
-    Header(Option<libtgt::model::NotificationScope>),
+    Header(Option<libtgrs::model::NotificationScope>),
     Option(NotificationTarget, NotificationOption),
 }
 
@@ -170,7 +170,7 @@ impl NotificationSettingsPopup {
         self.send(Action::SetNotificationOption(target, option, value));
     }
 
-    fn header_text(&self, scope: Option<libtgt::model::NotificationScope>) -> String {
+    fn header_text(&self, scope: Option<libtgrs::model::NotificationScope>) -> String {
         match scope {
             Some(scope) => scope.label().to_owned(),
             None => match self.settings.as_ref().and_then(|s| s.chat.as_ref()) {

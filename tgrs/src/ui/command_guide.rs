@@ -273,7 +273,7 @@ impl CommandGuide {
         lines.push(Line::from(""));
         lines.push(Line::from("Keybindings can be customized by editing:"));
         lines.push(Line::from(vec![Span::styled(
-            "  ~/.config/tgt/keymap.toml",
+            "  ~/.config/tgrs/keymap.toml",
             self.app_context.style_chat(),
         )]));
         lines.push(Line::from(""));

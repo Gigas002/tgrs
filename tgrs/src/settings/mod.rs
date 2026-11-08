@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use libtgt::client::{Proxy, ProxyKind, TdLogging, TdParams};
+use libtgrs::client::{Proxy, ProxyKind, TdLogging, TdParams};
 
 use crate::{
     config::{
@@ -26,12 +26,12 @@ pub use keymap::{ActionBinding, KeyMap, Keymap, KeymapError, is_plain_char};
 pub use theme::{BorderSurface, HighlightGroup, Theme};
 
 /// Overrides the config directory, like `--config-dir`.
-pub const CONFIG_DIR_ENV: &str = "TGT_CONFIG_DIR";
+pub const CONFIG_DIR_ENV: &str = "TGRS_CONFIG_DIR";
 /// Override `telegram.api_id` / `telegram.api_hash`.
 pub const API_ID_ENV: &str = "API_ID";
 pub const API_HASH_ENV: &str = "API_HASH";
 
-/// tgt's public Telegram API credentials, from <https://my.telegram.org>.
+/// tgrs's public Telegram API credentials, from <https://my.telegram.org>.
 pub const DEFAULT_API_ID: i32 = 94575;
 pub const DEFAULT_API_HASH: &str = "a3406de8d171bb422bb6ddf3bbd800e2";
 pub const DEFAULT_LOG_KEEP: usize = 7;
@@ -153,7 +153,7 @@ impl QuietHours {
 /// `[privacy]`, resolved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Privacy {
-    /// Show you online while tgt runs; else others see your last seen time.
+    /// Show you online while tgrs runs; else others see your last seen time.
     pub appear_online: bool,
     /// Tell chats when you're typing a message.
     pub send_typing: bool,
@@ -326,7 +326,7 @@ impl Settings {
     #[cfg(test)]
     pub(crate) fn for_tests() -> Self {
         Self::resolve(CliOverrides::default(), |key| {
-            (key == "HOME").then(|| "/nonexistent/tgt-test-home".into())
+            (key == "HOME").then(|| "/nonexistent/tgrs-test-home".into())
         })
         .expect("default settings resolve")
     }

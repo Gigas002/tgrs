@@ -92,6 +92,6 @@ fn silent_messages_play_no_sound() {
 
 #[test]
 fn window_title_counts_unread_messages() {
-    assert_eq!(window_title(0), "tgt");
-    assert_eq!(window_title(3), "tgt (3)");
+    assert_eq!(window_title(0), "tgrs");
+    assert_eq!(window_title(3), "tgrs (3)");
 }

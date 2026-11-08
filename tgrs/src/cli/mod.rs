@@ -15,17 +15,17 @@ mod tests;
 
 /// A simple TUI for Telegram.
 #[derive(Debug, Parser)]
-#[command(name = "tgt", version, about)]
+#[command(name = "tgrs", version, about)]
 pub struct Cli {
-    /// Directory with config.toml, keymap.toml and theme.toml [env: TGT_CONFIG_DIR] [default: $XDG_CONFIG_HOME/tgt].
+    /// Directory with config.toml, keymap.toml and theme.toml [env: TGRS_CONFIG_DIR] [default: $XDG_CONFIG_HOME/tgrs].
     #[arg(long, global = true, value_name = "DIR")]
     pub config_dir: Option<PathBuf>,
 
-    /// Directory for logs [default: $XDG_STATE_HOME/tgt/logs].
+    /// Directory for logs [default: $XDG_STATE_HOME/tgrs/logs].
     #[arg(long, global = true, value_name = "DIR")]
     pub log_dir: Option<PathBuf>,
 
-    /// Log level for tgt's own log.
+    /// Log level for tgrs's own log.
     #[arg(long, global = true, value_enum, conflicts_with_all = ["verbose", "quiet"])]
     pub log_level: Option<LogLevel>,
 

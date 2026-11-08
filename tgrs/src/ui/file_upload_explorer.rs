@@ -61,7 +61,7 @@ impl FileUploadExplorer {
         self
     }
 
-    /// Full explorer chrome (block, list, highlights) uses the active tgt theme.
+    /// Full explorer chrome (block, list, highlights) uses the active tgrs theme.
     /// Title lines resolve styles on each paint via `Arc<AppContext>` so they stay in sync.
     fn build_explorer_theme(app_context: Arc<AppContext>) -> Theme {
         let style_chat = app_context.style_chat();

@@ -105,7 +105,7 @@ fn notifications_map_to_actions() {
 #[test]
 fn a_new_sign_in_is_told_in_the_status_bar() {
     let ctx = test_app_context();
-    let alert = libtgt::model::SignInAlert {
+    let alert = libtgrs::model::SignInAlert {
         device_model: "Pixel 8".into(),
         location: "Berlin, Germany".into(),
     };
@@ -123,7 +123,7 @@ fn a_new_sign_in_is_told_in_the_status_bar() {
 #[test]
 fn forwarding_tells_where_and_how_many() {
     use crate::app::action::ForwardRequest;
-    use libtgt::tdlib_rs::types::Error;
+    use libtgrs::tdlib_rs::types::Error;
     let request = |count: usize| ForwardRequest {
         to_chat_id: 2,
         to_chat_name: "Ada".into(),
@@ -215,7 +215,7 @@ fn changed_messages_are_redrawn() {
 
 #[test]
 fn the_reaction_picker_lists_our_reactions_first() {
-    use libtgt::model::{MessageEntry, Reaction, TdMessageSender};
+    use libtgrs::model::{MessageEntry, Reaction, TdMessageSender};
     let ctx = test_app_context();
     let reaction = |emoji: &str, chosen| Reaction {
         emoji: emoji.into(),

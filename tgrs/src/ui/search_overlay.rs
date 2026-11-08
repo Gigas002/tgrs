@@ -6,7 +6,7 @@ use crate::{
     ui::component_traits::{Component, HandleFocus},
 };
 use crossterm::event::KeyCode;
-use libtgt::model::{MessageEntry, format_timestamp};
+use libtgrs::model::{MessageEntry, format_timestamp};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},

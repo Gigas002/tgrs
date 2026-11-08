@@ -1,7 +1,7 @@
 use super::*;
 use crate::ui::tests::create_test_app_context;
-use libtgt::model::OrderedChat;
-use libtgt::tdlib_rs::types::ChatPosition;
+use libtgrs::model::OrderedChat;
+use libtgrs::tdlib_rs::types::ChatPosition;
 
 /// Puts the chats in the archive, the first on top.
 fn archive(app_context: &AppContext, chat_ids: &[i64]) {

@@ -8,7 +8,7 @@ body:
       value: |
         > [!WARNING]
         > Before submitting this issue, please ensure that a similar issue or pull request does not already exist.
-        > You can search existing issues and pull requests [here](https://github.com/Gigas002/tgt/issues) and [here](https://github.com/Gigas002/tgt/pulls).
+        > You can search existing issues and pull requests [here](https://github.com/Gigas002/tgrs/issues) and [here](https://github.com/Gigas002/tgrs/pulls).
         > If you find a similar issue or pull request, please consider adding a comment to provide additional information or upvote it to indicate your interest.
   - type: input
     id: description
@@ -50,7 +50,7 @@ body:
     id: installation
     attributes:
       label: Method of Installation
-      description: Please specify how you installed tgt
+      description: Please specify how you installed tgrs
       options:
         - Cargo
         - Download from GitHub
@@ -60,10 +60,10 @@ body:
   - type: input
     id: version
     attributes:
-      label: tgt version
+      label: tgrs version
       description: |
         Please specify the version of the application where the issue occurred.
-        The version can be found by running the command `tgt --version`.
+        The version can be found by running the command `tgrs --version`.
       placeholder: "1.0.0"
     validations:
       required: true

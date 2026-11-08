@@ -9,7 +9,7 @@ use crate::{
     ui::message,
 };
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-use libtgt::model::{ChatKind, Profile};
+use libtgrs::model::{ChatKind, Profile};
 use ratatui::{
     Frame,
     layout::Rect,

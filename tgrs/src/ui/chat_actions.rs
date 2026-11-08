@@ -9,7 +9,7 @@ use crate::{
     ui::popup_list::{self, PopupRow},
 };
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-use libtgt::{
+use libtgrs::{
     model::{ChatKind, ChatState, PinMoveError, move_pinned},
     store::Store,
 };

@@ -9,7 +9,7 @@ use crate::{
 };
 use arboard::Clipboard;
 use crossterm::event::{KeyCode, MouseEventKind};
-use libtgt::model::{MessageEntry, TdMessageReplyTo};
+use libtgrs::model::{MessageEntry, TdMessageReplyTo};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     text::{Line, Span},
@@ -43,7 +43,7 @@ pub struct ChatWindow {
 /// A message's preview in the list: its message id, image, and the row in its
 /// item where the preview starts.
 #[cfg(feature = "media-preview")]
-type PreviewSlot = Option<(i64, libtgt::model::MediaFile, u16)>;
+type PreviewSlot = Option<(i64, libtgrs::model::MediaFile, u16)>;
 /// Implementation of the `ChatWindow` struct.
 impl ChatWindow {
     /// Create a new instance of the `ChatWindow` struct.
@@ -364,7 +364,7 @@ impl ChatWindow {
     fn preview_file(
         media: crate::settings::Media,
         entry: &MessageEntry,
-    ) -> Option<&libtgt::model::MediaFile> {
+    ) -> Option<&libtgrs::model::MediaFile> {
         entry
             .media()?
             .inline_preview()

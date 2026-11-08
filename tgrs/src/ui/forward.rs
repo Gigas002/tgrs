@@ -9,7 +9,7 @@ use crate::{
     ui::text_input::TextInput,
 };
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-use libtgt::model::ChatListEntry;
+use libtgrs::model::ChatListEntry;
 use nucleo_matcher::{Config, Matcher, Utf32Str};
 use ratatui::{
     Frame,

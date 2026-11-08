@@ -10,7 +10,7 @@ use crate::{
     ui::popup_list::{self, PopupRow},
 };
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-use libtgt::model::{Exception, PrivacySetting, PrivacySettings};
+use libtgrs::model::{Exception, PrivacySetting, PrivacySettings};
 use ratatui::{Frame, layout::Rect, text::Span};
 use std::{io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;

@@ -9,7 +9,7 @@ use crate::{
     ui::text_input::{self, TextInput},
 };
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-use libtgt::model::parse_username;
+use libtgrs::model::parse_username;
 use ratatui::{Frame, layout::Rect, text::Span};
 use std::{io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;

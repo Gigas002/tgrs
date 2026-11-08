@@ -1,5 +1,5 @@
-# tgt theme: copy to $XDG_CONFIG_HOME/tgt/theme.toml and uncomment what you
-# want to change. Without this file tgt follows your terminal's colors.
+# tgrs theme: copy to $XDG_CONFIG_HOME/tgrs/theme.toml and uncomment what you
+# want to change. Without this file tgrs follows your terminal's colors.
 #
 # Each [highlight.<Group>] may set:
 #   link          = "<Group>" to inherit unset fields, or "none" to stop inheriting

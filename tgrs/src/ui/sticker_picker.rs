@@ -5,7 +5,7 @@
 use std::{collections::HashSet, io, sync::Arc};
 
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-use libtgt::model::{StickerEntry, StickerSetEntry};
+use libtgrs::model::{StickerEntry, StickerSetEntry};
 use ratatui::{
     Frame,
     layout::{Alignment, Margin, Rect},

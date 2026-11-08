@@ -1,10 +1,10 @@
 [package]
-name = "libtgt"
+name = "libtgrs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
-description = "Telegram domain logic for tgt: data model, store and TDLib client"
+description = "Telegram domain logic for tgrs: data model, store and TDLib client"
 keywords.workspace = true
 repository.workspace = true
 

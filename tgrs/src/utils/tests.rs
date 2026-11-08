@@ -27,9 +27,9 @@ fn xdg_vars_override_fallbacks() {
     .unwrap();
     let dirs = AppDirs::new(&xdg);
 
-    assert_eq!(dirs.config, Path::new("/cfg/tgt"));
-    assert_eq!(dirs.data, Path::new("/data/tgt"));
-    assert_eq!(dirs.state, Path::new("/state/tgt"));
+    assert_eq!(dirs.config, Path::new("/cfg/tgrs"));
+    assert_eq!(dirs.data, Path::new("/data/tgrs"));
+    assert_eq!(dirs.state, Path::new("/state/tgrs"));
 }
 
 #[test]

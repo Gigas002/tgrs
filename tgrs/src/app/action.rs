@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use crossterm::event::{KeyCode, KeyModifiers};
-use libtgt::model::{
+use libtgrs::model::{
     BlockedSender, NotificationOption, NotificationSettings, NotificationTarget, PrivacyRules,
     PrivacySetting, PrivacySettings, ProfileChange, ProfileField, ReportStep, SessionEntry,
     StickerEntry, StickerSetEntry, StorageUsage, TdChatList, TdMessageReplyToMessage,
@@ -409,7 +409,7 @@ pub enum Action {
     /// Search chat messages via TDLib (server-side). Query is sent to backend; results via SearchResults.
     SearchChatMessages(String),
     /// Search results from TDLib (message IDs + entries for display in search overlay).
-    SearchResults(Vec<libtgt::model::MessageEntry>),
+    SearchResults(Vec<libtgrs::model::MessageEntry>),
     /// Jump to a message: load a window around it and select it (for unloaded messages).
     JumpToMessage(i64),
     /// Jump completed: ChatWindow should select this message_id.

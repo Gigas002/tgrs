@@ -1,4 +1,4 @@
-//! Telegram domain logic for tgt: data model, in-memory store and the TDLib client.
+//! Telegram domain logic for tgrs: data model, in-memory store and the TDLib client.
 //!
 //! The library never parses CLI arguments, initializes logging, reads
 //! configuration files or renders anything; callers pass resolved values in.

@@ -39,7 +39,7 @@ impl Tui {
             (
                 ComponentName::TitleBar,
                 TitleBar::new(Arc::clone(&app_context))
-                    .with_name("Tgt")
+                    .with_name("Tgrs")
                     .new_boxed(),
             ),
             (

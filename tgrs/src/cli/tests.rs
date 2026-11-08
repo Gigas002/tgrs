@@ -3,7 +3,7 @@ use clap::{CommandFactory, Parser};
 use super::*;
 
 fn overrides(args: &[&str]) -> CliOverrides {
-    Cli::try_parse_from(std::iter::once("tgt").chain(args.iter().copied()))
+    Cli::try_parse_from(std::iter::once("tgrs").chain(args.iter().copied()))
         .unwrap()
         .into()
 }
@@ -31,22 +31,22 @@ fn verbosity_flags_map_to_levels() {
 
 #[test]
 fn log_level_conflicts_with_verbose() {
-    assert!(Cli::try_parse_from(["tgt", "--log-level", "warn", "-v"]).is_err());
+    assert!(Cli::try_parse_from(["tgrs", "--log-level", "warn", "-v"]).is_err());
 }
 
 #[test]
 fn there_is_no_send_command() {
     // Telegram is only used through the TUI; scripts can't send messages
-    assert!(Cli::try_parse_from(["tgt", "send", "Saved Messages", "hi"]).is_err());
+    assert!(Cli::try_parse_from(["tgrs", "send", "Saved Messages", "hi"]).is_err());
 }
 
 #[test]
 fn global_flags_work_after_subcommand() {
-    let cli = overrides(&["logout", "--config-dir", "/tmp/tgt"]);
+    let cli = overrides(&["logout", "--config-dir", "/tmp/tgrs"]);
 
     assert_eq!(
         cli.config_dir.as_deref(),
-        Some(std::path::Path::new("/tmp/tgt"))
+        Some(std::path::Path::new("/tmp/tgrs"))
     );
     assert_eq!(cli.command, SettingsCommand::Logout);
 }

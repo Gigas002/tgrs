@@ -605,7 +605,7 @@ mod message {
     #[test]
     fn downloaded_path_requires_a_complete_file_on_disk() {
         let dir = std::env::temp_dir();
-        let file = dir.join(format!("libtgt-media-test-{}", std::process::id()));
+        let file = dir.join(format!("libtgrs-media-test-{}", std::process::id()));
         std::fs::write(&file, "x").unwrap();
         let path = file.to_str().unwrap();
 
@@ -1094,7 +1094,7 @@ mod session {
 
     #[test]
     fn sessions_keep_telegram_s_order() {
-        let mut current = session(1, "tgt", SessionDeviceType::Linux, 10);
+        let mut current = session(1, "tgrs", SessionDeviceType::Linux, 10);
         current.is_current = true;
         let entries = session_entries(&[
             current,

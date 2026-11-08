@@ -1,5 +1,5 @@
 [package]
-name = "tgt"
+name = "tgrs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,11 +9,11 @@ keywords.workspace = true
 repository.workspace = true
 
 [lib]
-name = "tgt"
+name = "tgrs"
 path = "src/lib.rs"
 
 [[bin]]
-name = "tgt"
+name = "tgrs"
 path = "src/main.rs"
 
 [features]
@@ -26,7 +26,7 @@ media-preview = ["dep:image", "dep:ratatui-image", "arboard/image-data"]
 notifications = ["dep:notify-rust"]
 
 [dependencies]
-libtgt = { path = "../libtgt", version = "1.0.0" }
+libtgrs = { path = "../libtgrs", version = "1.0.0" }
 arboard.workspace = true
 chrono.workspace = true
 clap.workspace = true

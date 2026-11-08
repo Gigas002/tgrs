@@ -4,7 +4,7 @@
 
 use std::{path::Path, sync::Arc};
 
-use libtgt::{
+use libtgrs::{
     client::Files,
     model::{Media, TransferPurpose, TransferState},
 };

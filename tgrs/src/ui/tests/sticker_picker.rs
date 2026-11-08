@@ -157,7 +157,7 @@ fn draws_the_sets_and_the_stickers_emoji() {
 #[test]
 fn sticker_images_are_requested_and_drawn_in_the_picker() {
     use crate::app::action::{PreviewDecodedPayload, PreviewRequest};
-    use libtgt::model::MediaFile;
+    use libtgrs::model::MediaFile;
     use ratatui::{Terminal, backend::TestBackend, style::Color};
 
     let preview = MediaFile {

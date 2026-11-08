@@ -12,7 +12,7 @@ use crate::{
     ui::text_input::{self, TextInput},
 };
 use crossterm::event::{KeyCode, MouseButton, MouseEvent, MouseEventKind};
-use libtgt::model::{ReportOption, ReportStep};
+use libtgrs::model::{ReportOption, ReportStep};
 use ratatui::{
     Frame,
     layout::Rect,

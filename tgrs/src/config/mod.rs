@@ -1,4 +1,4 @@
-//! Discovery, reading and deserialization of tgt's TOML files:
+//! Discovery, reading and deserialization of tgrs's TOML files:
 //! `config.toml`, `keymap.toml` and `theme.toml`.
 //!
 //! Every field is optional; precedence and defaults are applied in `settings`.
@@ -54,7 +54,7 @@ pub struct AppFile {
     pub download_dir: Option<PathBuf>,
 }
 
-/// `[logger]`: tgt's own log.
+/// `[logger]`: tgrs's own log.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct LoggerFile {
@@ -115,7 +115,7 @@ pub struct NotificationsFile {
     pub unread_in_title: Option<bool>,
 }
 
-/// `[privacy]`: what others see of you while tgt runs.
+/// `[privacy]`: what others see of you while tgrs runs.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct PrivacyFile {

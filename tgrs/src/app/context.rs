@@ -3,7 +3,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU8, AtomicU16, Ordering},
 };
 
-use libtgt::store::Store;
+use libtgrs::store::Store;
 use ratatui::style::Style;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 

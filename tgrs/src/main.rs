@@ -1,14 +1,14 @@
 use std::process::ExitCode;
 
 use clap::Parser;
-use tgt::{app, cli::Cli, logger, settings::Settings, ui::terminal::TuiBackend};
+use tgrs::{app, cli::Cli, logger, settings::Settings, ui::terminal::TuiBackend};
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let settings = match Settings::resolve(cli.into(), |key| std::env::var_os(key)) {
         Ok(settings) => settings,
         Err(err) => {
-            eprintln!("tgt: {err}");
+            eprintln!("tgrs: {err}");
             return ExitCode::from(2);
         }
     };
@@ -16,14 +16,14 @@ fn main() -> ExitCode {
     let _guard = match logger::init(&settings) {
         Ok(guard) => guard,
         Err(err) => {
-            eprintln!("tgt: failed to initialize logging: {err}");
+            eprintln!("tgrs: failed to initialize logging: {err}");
             return ExitCode::FAILURE;
         }
     };
 
     for warning in &settings.warnings {
         tracing::warn!("theme.toml: {warning}");
-        eprintln!("tgt: theme.toml: {warning}");
+        eprintln!("tgrs: theme.toml: {warning}");
     }
 
     // Restore the terminal before the panic message is printed.
@@ -39,7 +39,7 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             tracing::error!("{err}");
-            eprintln!("tgt: {err}");
+            eprintln!("tgrs: {err}");
             ExitCode::FAILURE
         }
     }

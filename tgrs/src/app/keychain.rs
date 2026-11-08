@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use libtgt::client::Client;
+use libtgrs::client::Client;
 
 use crate::{
     app::error::AppError,

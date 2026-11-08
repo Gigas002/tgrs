@@ -1,13 +1,13 @@
 //! Desktop notifications for new messages (the `notifications` feature).
 
 use crate::settings::Notifications;
-use libtgt::model::MessageAlert;
+use libtgrs::model::MessageAlert;
 
 #[cfg(test)]
 mod tests;
 
 /// Application name shown by the notification server.
-pub const APP_NAME: &str = "tgt";
+pub const APP_NAME: &str = "tgrs";
 /// Longer message texts are cut to this many characters.
 const MAX_BODY_CHARS: usize = 200;
 
@@ -44,7 +44,7 @@ pub fn sound<'a>(alert: &MessageAlert, settings: &'a Notifications) -> Option<&'
     settings.sound.as_deref().filter(|_| !alert.is_silent)
 }
 
-/// The terminal's title with `unread` messages, e.g. `tgt (3)`.
+/// The terminal's title with `unread` messages, e.g. `tgrs (3)`.
 pub fn window_title(unread: i32) -> String {
     if unread > 0 {
         format!("{APP_NAME} ({unread})")

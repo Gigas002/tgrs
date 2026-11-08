@@ -1,6 +1,6 @@
 use super::*;
 use crate::ui::tests::create_test_app_context;
-use libtgt::model::{MessageEntry, TdMessageSender};
+use libtgrs::model::{MessageEntry, TdMessageSender};
 
 fn topic(topic_id: i32, name: &str, order: i64) -> TopicEntry {
     TopicEntry {
@@ -63,7 +63,7 @@ fn the_selection_follows_its_topic_when_topics_move() {
     // A new message moves Go to the top
     let message = MessageEntry::plain(1, TdMessageSender::User(2), "hi", 0);
     let go =
-        libtgt::tdlib_rs::enums::MessageTopic::Forum(libtgt::tdlib_rs::types::MessageTopicForum {
+        libtgrs::tdlib_rs::enums::MessageTopic::Forum(libtgrs::tdlib_rs::types::MessageTopicForum {
             forum_topic_id: 3,
         });
     window

@@ -1,7 +1,7 @@
 use super::*;
 use crate::{app::action::Modifiers, ui::tests::create_test_app_context};
 use crossterm::event::{KeyCode, KeyModifiers};
-use libtgt::model::ProfileChange;
+use libtgrs::model::ProfileChange;
 use ratatui::{Terminal, backend::TestBackend};
 use tokio::sync::mpsc;
 

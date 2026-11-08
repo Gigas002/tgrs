@@ -1,6 +1,6 @@
 //! The resolved theme: a style per [`HighlightGroup`] and a border shape per
 //! [`BorderSurface`]. Built-in defaults use the terminal's own colors (ANSI
-//! palette and default foreground/background) plus text modifiers, so tgt
+//! palette and default foreground/background) plus text modifiers, so tgrs
 //! follows the terminal theme; `theme.toml` overrides them.
 
 use ratatui::{

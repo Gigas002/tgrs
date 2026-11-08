@@ -1,6 +1,6 @@
 use super::*;
 use crate::ui::tests::create_test_app_context;
-use libtgt::model::DeviceKind;
+use libtgrs::model::DeviceKind;
 use ratatui::{Terminal, backend::TestBackend};
 use tokio::sync::mpsc;
 
@@ -26,7 +26,7 @@ fn session(id: i64, application: &str) -> SessionEntry {
 
 /// This app, a phone and a new sign-in from a browser.
 fn loaded() -> Action {
-    let mut current = session(1, "tgt 1.0");
+    let mut current = session(1, "tgrs 1.0");
     current.is_current = true;
     current.device_kind = DeviceKind::Computer;
     let mut new = session(3, "Telegram Web");
@@ -62,7 +62,7 @@ fn sessions_show_once_loaded() {
     list.update(loaded());
     let screen = screen(&mut list);
     assert!(screen.contains("Sessions (3)"), "{screen}");
-    assert!(screen.contains("tgt 1.0"), "{screen}");
+    assert!(screen.contains("tgrs 1.0"), "{screen}");
     assert!(screen.contains("(this app)"), "{screen}");
     assert!(
         screen.contains("Telegram Android · Pixel 8 · Android 14 · Berlin, Germany · 12:30"),

@@ -8,7 +8,7 @@ use crate::{
     ui::text_input::TextInput,
 };
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-use libtgt::model::{ProfileEdit, ProfileField};
+use libtgrs::model::{ProfileEdit, ProfileField};
 use ratatui::{
     Frame,
     layout::{Position, Rect},

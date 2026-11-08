@@ -8,22 +8,22 @@ This document defines how Rust projects in this workspace are structured, how co
 
 | Crate | Kind | Responsibility |
 | ----- | ---- | -------------- |
-| `libtgt` | library | Telegram client on top of [tdlib-rs](https://github.com/Gigas002/tdlib-rs): `client/` (TDLib requests, authorization through the `Authenticator` trait, the update loop emitting `Notification`s), `store/` (chats, users and open-chat state shared with the UI), `model/` (UI-agnostic chat and message types). No CLI, settings, logging setup or rendering. |
-| `tgt` | binary | `cli/`, `config/`, `settings/`, `logger/`, `app/` (run loop, `logout`, terminal login, keychain policy, background media tasks), `credentials/` (TDLib database key in the system keychain, behind the `keychain` feature), `media/` (opening files with `xdg-open`, saving downloads), `notifier/` (desktop notifications, behind the `notifications` feature), `ui/` (ratatui components; media previews behind the `media-preview` feature), `utils/` (XDG paths). |
+| `libtgrs` | library | Telegram client on top of [tdlib-rs](https://github.com/Gigas002/tdlib-rs): `client/` (TDLib requests, authorization through the `Authenticator` trait, the update loop emitting `Notification`s), `store/` (chats, users and open-chat state shared with the UI), `model/` (UI-agnostic chat and message types). No CLI, settings, logging setup or rendering. |
+| `tgrs` | binary | `cli/`, `config/`, `settings/`, `logger/`, `app/` (run loop, `logout`, terminal login, keychain policy, background media tasks), `credentials/` (TDLib database key in the system keychain, behind the `keychain` feature), `media/` (opening files with `xdg-open`, saving downloads), `notifier/` (desktop notifications, behind the `notifications` feature), `ui/` (ratatui components; media previews behind the `media-preview` feature), `utils/` (XDG paths). |
 
 Data flow at runtime:
 
 ```text
-TDLib ──updates──▶ libtgt::client ──writes──▶ libtgt::store ◀──reads── tgt::ui
+TDLib ──updates──▶ libtgrs::client ──writes──▶ libtgrs::store ◀──reads── tgrs::ui
                         │                                                  │
-                        └──Notification──▶ tgt::app run loop ◀──Action─────┘
+                        └──Notification──▶ tgrs::app run loop ◀──Action─────┘
                                                │
-                                               └──requests──▶ libtgt::client
+                                               └──requests──▶ libtgrs::client
 ```
 
-Settings precedence is `CLI > environment (TGT_CONFIG_DIR, API_ID, API_HASH) > config.toml > defaults`.
-Files live in XDG directories: config in `$XDG_CONFIG_HOME/tgt`, the TDLib database in
-`$XDG_DATA_HOME/tgt/tdlib` (encrypted with a key from the keychain), logs in `$XDG_STATE_HOME/tgt`.
+Settings precedence is `CLI > environment (TGRS_CONFIG_DIR, API_ID, API_HASH) > config.toml > defaults`.
+Files live in XDG directories: config in `$XDG_CONFIG_HOME/tgrs`, the TDLib database in
+`$XDG_DATA_HOME/tgrs/tdlib` (encrypted with a key from the keychain), logs in `$XDG_STATE_HOME/tgrs`.
 Settings are only changed by editing these files; the UI never writes them.
 
 UI component tests need access to private component state, so they are child modules of

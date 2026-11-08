@@ -73,11 +73,11 @@ impl Component for TitleBar {
         Ok(())
     }
 
-    /// One line like concord's header: ` tgt - v1.2.3 ` and who is logged in.
+    /// One line like concord's header: ` tgrs - v1.2.3 ` and who is logged in.
     fn draw(&mut self, frame: &mut ratatui::Frame<'_>, area: Rect) -> io::Result<()> {
         let theme = self.app_context.theme();
         let mut spans = vec![Span::styled(
-            format!(" tgt - v{} ", env!("CARGO_PKG_VERSION")),
+            format!(" tgrs - v{} ", env!("CARGO_PKG_VERSION")),
             theme.style(HighlightGroup::HeaderTitle),
         )];
         match self.app_context.store().my_name() {

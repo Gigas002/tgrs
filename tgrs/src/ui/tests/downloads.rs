@@ -1,6 +1,6 @@
 use super::*;
 use crate::ui::tests::create_test_app_context;
-use libtgt::model::{Media, MediaFile, MediaKind};
+use libtgrs::model::{Media, MediaFile, MediaKind};
 use ratatui::{Terminal, backend::TestBackend};
 use tokio::sync::mpsc;
 

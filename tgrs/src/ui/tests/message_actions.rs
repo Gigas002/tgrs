@@ -4,7 +4,7 @@ use crate::{
     ui::tests::{create_mock_media_message, create_mock_message, create_test_app_context},
 };
 use crossterm::event::{KeyCode, KeyModifiers};
-use libtgt::model::{TdMessageSender, TextSpan, TextStyle};
+use libtgrs::model::{TdMessageSender, TextSpan, TextStyle};
 use tokio::sync::mpsc;
 
 fn menu_with(messages: Vec<MessageEntry>) -> (MessageActions, mpsc::UnboundedReceiver<Action>) {
@@ -75,8 +75,8 @@ fn own_media_message_enables_media_and_delete() {
     assert_eq!(disabled(&menu, MessageCommand::Edit), None);
 
     // Stickers have none
-    let media = libtgt::model::Media {
-        kind: libtgt::model::MediaKind::Sticker,
+    let media = libtgrs::model::Media {
+        kind: libtgrs::model::MediaKind::Sticker,
         ..create_mock_media_message(6, "").media().cloned().unwrap()
     };
     let sticker = MessageEntry::with_media(6, TdMessageSender::User(me), media, 0);

@@ -8,7 +8,7 @@ use crate::{
     ui::popup_list::{self, PopupRow},
 };
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-use libtgt::model::{Transfer, TransferPurpose, TransferState};
+use libtgrs::model::{Transfer, TransferPurpose, TransferState};
 use ratatui::{Frame, layout::Rect, text::Span};
 use std::{io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;

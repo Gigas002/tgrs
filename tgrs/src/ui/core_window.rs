@@ -39,7 +39,7 @@ use crate::{
     },
 };
 use crossterm::event::{MouseButton, MouseEventKind};
-use libtgt::model::ChatListEntry;
+use libtgrs::model::ChatListEntry;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use std::{collections::HashMap, io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;

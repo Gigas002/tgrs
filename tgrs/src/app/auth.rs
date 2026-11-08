@@ -6,7 +6,7 @@ use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     terminal,
 };
-use libtgt::client::Authenticator;
+use libtgrs::client::Authenticator;
 
 /// Prompts on stdout and reads answers from stdin.
 pub struct StdinAuthenticator;
@@ -60,7 +60,7 @@ impl StdinAuthenticator {
             Ok(_) => input.trim().to_owned(),
             Err(err) => {
                 tracing::error!("failed to read from stdin: {err}");
-                eprintln!("tgt: failed to read from stdin: {err}");
+                eprintln!("tgrs: failed to read from stdin: {err}");
                 std::process::exit(1)
             }
         }
@@ -159,6 +159,6 @@ impl Authenticator for StdinAuthenticator {
     }
 
     fn report_error(&mut self, message: &str) {
-        eprintln!("tgt: {message}");
+        eprintln!("tgrs: {message}");
     }
 }

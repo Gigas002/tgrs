@@ -1,4 +1,4 @@
-//! tgt binary internals, exposed as a library for integration tests.
+//! tgrs binary internals, exposed as a library for integration tests.
 
 pub mod app;
 pub mod cli;

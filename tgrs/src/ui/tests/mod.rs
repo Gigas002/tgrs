@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use libtgt::model::{ChatListEntry, Media, MediaFile, MediaKind, MessageEntry, TdMessageSender};
+use libtgrs::model::{ChatListEntry, Media, MediaFile, MediaKind, MessageEntry, TdMessageSender};
 
 use crate::app::context::AppContext;
 
@@ -79,7 +79,7 @@ fn the_screen_has_a_header_panes_and_hints() {
         .map(|row| row.iter().map(|cell| cell.symbol()).collect())
         .collect();
     let screen = rows.join("\n");
-    assert!(rows[0].starts_with(" tgt - v"), "{screen}");
+    assert!(rows[0].starts_with(" tgrs - v"), "{screen}");
     assert!(
         rows[0].contains("Loading..."),
         "not logged in yet:\n{screen}"

@@ -9,7 +9,7 @@ use crate::{
 };
 use arboard::Clipboard;
 use crossterm::event::KeyCode;
-use libtgt::model::td_enums::TdMessageReplyToMessage;
+use libtgrs::model::td_enums::TdMessageReplyToMessage;
 use ratatui::{
     Frame,
     layout::{Position, Rect},
