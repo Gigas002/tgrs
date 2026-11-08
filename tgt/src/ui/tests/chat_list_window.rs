@@ -516,3 +516,36 @@ fn a_draft_shows_instead_of_the_last_message_except_in_the_open_chat() {
     assert!(lines[1].contains("the last one"), "{lines:?}");
     assert!(!lines[1].contains("Draft:"));
 }
+
+#[test]
+fn the_name_wins_over_the_time_when_the_row_is_narrow() {
+    use libtgt::model::{MessageEntry, TdMessageSender};
+    use unicode_width::UnicodeWidthStr;
+    let app_context = create_test_app_context();
+    let mut entry = create_mock_chat(5, "A rather long chat name");
+    entry.last_message = Some(MessageEntry::plain(
+        9,
+        TdMessageSender::User(1),
+        "hi",
+        1_700_000_000,
+    ));
+    let time = format_timestamp(1_700_000_000);
+
+    // Wide enough for both
+    let rows = row_text(&chat_list_item_text(&entry, &app_context, 60, false));
+    assert!(rows[0].contains("A rather long chat name"), "{rows:?}");
+    assert!(rows[0].ends_with(&time), "{rows:?}");
+
+    // The whole name fits, but not next to the time: the time goes
+    let width = 4 + "A rather long chat name".width() + 2;
+    let rows = row_text(&chat_list_item_text(&entry, &app_context, width, false));
+    assert!(rows[0].contains("A rather long chat name"), "{rows:?}");
+    assert!(!rows[0].contains(&time), "{rows:?}");
+    assert_eq!(rows[0].width(), width, "{rows:?}");
+
+    // Narrower still: the name is cut, with no time
+    let rows = row_text(&chat_list_item_text(&entry, &app_context, 16, false));
+    assert!(rows[0].contains("A rather"), "{rows:?}");
+    assert!(rows[0].trim_end().ends_with('…'), "{rows:?}");
+    assert!(!rows[0].contains(&time), "{rows:?}");
+}

@@ -25,9 +25,26 @@ pub(crate) fn spread(
     width: usize,
 ) -> Line<'static> {
     let used: usize = left.iter().chain(&right).map(Span::width).sum();
-    left.push(Span::raw(" ".repeat(width.saturating_sub(used).max(1))));
+    let gap = width.saturating_sub(used);
+    // At least a space between the sides, none needed without a right one
+    let gap = if right.is_empty() { gap } else { gap.max(1) };
+    left.push(Span::raw(" ".repeat(gap)));
     left.extend(right);
     Line::from(left)
+}
+
+/// The name and time of a row's first line, `width` columns for both and the
+/// space between them. The name wins: the time only shows when the whole name
+/// fits next to it, otherwise it's dropped and the name gets all the width.
+pub(crate) fn name_and_time(
+    name: &str,
+    time: Vec<Span<'static>>,
+    width: usize,
+) -> (String, Vec<Span<'static>>) {
+    let time_width: usize = time.iter().map(Span::width).sum();
+    let fits = name.width() + 1 + time_width <= width;
+    let time = if fits { time } else { Vec::new() };
+    (message::truncate_display_width(name, width.max(1)), time)
 }
 
 /// Rows each chat takes in the list: its two lines and a blank spacer.
@@ -82,7 +99,6 @@ pub(crate) fn chat_list_item_text(
         .as_ref()
         .is_some_and(|user| matches!(user.status, UserStatus::Online(_)));
     let online_width = if online { 2 } else { 0 };
-    let time_width: usize = time.iter().map(Span::width).sum();
     let name_group = if entry.is_muted {
         HighlightGroup::MutedChat
     } else if unread {
@@ -90,11 +106,10 @@ pub(crate) fn chat_list_item_text(
     } else {
         HighlightGroup::Normal
     };
-    let name = message::truncate_display_width(
+    let (name, time) = name_and_time(
         &entry.chat_name,
-        width
-            .saturating_sub(indent + online_width + time_width + 1)
-            .max(1),
+        time,
+        width.saturating_sub(indent + online_width),
     );
     let mut first = vec![
         marker,

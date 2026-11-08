@@ -4,11 +4,11 @@ use crate::app::action::Action;
 use crate::app::context::AppContext;
 use crate::settings::HighlightGroup;
 use crate::ui::chat_list_window::{
-    CHAT_LIST_ITEM_ROWS, badge_spans, draft_spans, preview_spans, spread,
+    CHAT_LIST_ITEM_ROWS, badge_spans, draft_spans, name_and_time, preview_spans, spread,
 };
 use crate::ui::component_name::ComponentName;
 use crate::ui::component_traits::{Component, HandleFocus};
-use crate::ui::{message, pane};
+use crate::ui::pane;
 use crossterm::event::{MouseButton, MouseEventKind};
 use libtgt::model::{TopicEntry, format_timestamp};
 use ratatui::Frame;
@@ -46,7 +46,6 @@ pub(crate) fn topic_list_item_text(
         })
         .unwrap_or_default();
     let lock_width = if topic.is_closed { 3 } else { 0 };
-    let time_width: usize = time.iter().map(Span::width).sum();
     let name_group = if topic.is_muted {
         HighlightGroup::MutedChat
     } else if topic.unread_count > 0 {
@@ -56,12 +55,7 @@ pub(crate) fn topic_list_item_text(
     } else {
         HighlightGroup::Normal
     };
-    let name = message::truncate_display_width(
-        &topic.name,
-        width
-            .saturating_sub(indent + lock_width + time_width + 1)
-            .max(1),
-    );
+    let (name, time) = name_and_time(&topic.name, time, width.saturating_sub(indent + lock_width));
     let mut first = vec![
         marker,
         Span::styled(icon, theme.style(HighlightGroup::ChatTypeMarker)),
