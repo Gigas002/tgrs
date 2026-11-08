@@ -62,10 +62,9 @@ fn the_selection_follows_its_topic_when_topics_move() {
     assert_eq!(selected_name(&window).as_deref(), Some("Rust"));
     // A new message moves Go to the top
     let message = MessageEntry::plain(1, TdMessageSender::User(2), "hi", 0);
-    let go =
-        libtgrs::tdlib_rs::enums::MessageTopic::Forum(libtgrs::tdlib_rs::types::MessageTopicForum {
-            forum_topic_id: 3,
-        });
+    let go = libtgrs::tdlib_rs::enums::MessageTopic::Forum(
+        libtgrs::tdlib_rs::types::MessageTopicForum { forum_topic_id: 3 },
+    );
     window
         .app_context
         .store()
