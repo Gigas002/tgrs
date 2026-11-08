@@ -70,6 +70,8 @@ pub struct CoreWindow {
     prompt_extra_rows: u16,
     /// The pane focused when the leader menu opened, focused again after.
     focus_before_leader: Option<ComponentName>,
+    /// Where the focus goes back to when the command guide closes.
+    focus_before_command_guide: Option<ComponentName>,
     /// The pane focused when the sticker picker opened, focused again after.
     focus_before_stickers: Option<ComponentName>,
     /// The pane focused when the chat actions opened, focused again after.
@@ -317,6 +319,7 @@ impl CoreWindow {
             size_prompt,
             prompt_extra_rows: 0,
             focus_before_leader: None,
+            focus_before_command_guide: None,
             focus_before_stickers: None,
             focus_before_chat_actions: None,
             focus_before_profile: None,
@@ -714,7 +717,8 @@ impl Component for CoreWindow {
             {
                 return component.handle_mouse_events(mouse).map_err(AppError::from);
             }
-            // Left click: focus the section under the cursor (chat list, chat window, prompt)
+            // Left click: focus the section under the cursor (chat list, chat
+            // window, prompt), and the same click acts in it, e.g. opens a chat
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
                 let col = mouse.column;
                 let row = mouse.row;
@@ -731,7 +735,8 @@ impl Component for CoreWindow {
                             && row >= rect.y
                             && row < rect.y + rect.height;
                         if in_rect && self.component_focused != Some(name) {
-                            return Ok(Some(Action::FocusComponent(name)));
+                            self.update(Action::FocusComponent(name));
+                            break;
                         }
                     }
                 }
@@ -869,9 +874,20 @@ impl Component for CoreWindow {
                     .set_reply_message_i64(-1, String::new());
             }
             Action::ShowCommandGuide => {
-                self.toggle_popup(ComponentName::CommandGuide, action, None);
+                if !self.is_popup_visible(ComponentName::CommandGuide) {
+                    // Opened from the leader menu: where the menu was opened
+                    self.focus_before_command_guide = self
+                        .component_focused
+                        .filter(|c| !c.is_popup())
+                        .or(self.focus_before_leader);
+                }
+                let refocus = self.focus_before_command_guide;
+                self.toggle_popup(ComponentName::CommandGuide, action, refocus);
             }
-            Action::HideCommandGuide => self.close_popup(ComponentName::CommandGuide, None),
+            Action::HideCommandGuide => {
+                let refocus = self.focus_before_command_guide.take();
+                self.close_popup(ComponentName::CommandGuide, refocus);
+            }
             Action::ShowMessageActionsFor(_) => {
                 self.show_popup(ComponentName::MessageActions, action);
             }

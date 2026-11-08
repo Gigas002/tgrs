@@ -529,7 +529,7 @@ fn the_name_wins_over_the_time_when_the_row_is_narrow() {
         "hi",
         1_700_000_000,
     ));
-    let time = format_timestamp(1_700_000_000);
+    let time = libtgt::model::format_short_timestamp(1_700_000_000);
 
     // Wide enough for both
     let rows = row_text(&chat_list_item_text(&entry, &app_context, 60, false));
@@ -548,4 +548,20 @@ fn the_name_wins_over_the_time_when_the_row_is_narrow() {
     assert!(rows[0].contains("A rather"), "{rows:?}");
     assert!(rows[0].trim_end().ends_with('…'), "{rows:?}");
     assert!(!rows[0].contains(&time), "{rows:?}");
+}
+
+#[test]
+fn the_preview_keeps_the_colon_after_the_author_or_drops_the_author() {
+    let app_context = create_test_app_context();
+    app_context.store().set_me(1);
+    let message = create_mock_message(1, "hello there");
+    let text = |width| -> String {
+        preview_spans(Some(&message), true, &app_context, width)
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect()
+    };
+    assert_eq!(text(40), "You: hello there");
+    // No room for a readable name: the text alone, not "…: hel…"
+    assert_eq!(text(8), "hello t…");
 }

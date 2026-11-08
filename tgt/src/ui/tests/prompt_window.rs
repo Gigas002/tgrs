@@ -758,3 +758,16 @@ fn the_next_message_can_go_without_sound() {
     window.update(Action::PromptToggleSilent);
     assert!(!window.app_context.store().sends_silently());
 }
+
+#[test]
+fn editing_puts_the_cursor_after_the_text() {
+    let mut window = create_test_prompt_window();
+    let (tx, _rx) = unbounded_channel();
+    window.register_action_handler(tx).unwrap();
+    window.update(Action::EditMessage(10, "first\nsecond".to_string()));
+    window.update(Action::Key(
+        KeyCode::Char('!'),
+        Modifiers::from(KeyModifiers::NONE),
+    ));
+    assert_eq!(window.input.text_to_string(), "first\nsecond!");
+}

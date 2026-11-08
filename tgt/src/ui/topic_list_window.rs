@@ -10,7 +10,7 @@ use crate::ui::component_name::ComponentName;
 use crate::ui::component_traits::{Component, HandleFocus};
 use crate::ui::pane;
 use crossterm::event::{MouseButton, MouseEventKind};
-use libtgt::model::{TopicEntry, format_timestamp};
+use libtgt::model::{TopicEntry, format_short_timestamp};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span, Text};
@@ -40,7 +40,7 @@ pub(crate) fn topic_list_item_text(
         .as_ref()
         .map(|message| {
             vec![Span::styled(
-                format_timestamp(message.timestamp()),
+                format_short_timestamp(message.timestamp()),
                 theme.style(HighlightGroup::Timestamp),
             )]
         })

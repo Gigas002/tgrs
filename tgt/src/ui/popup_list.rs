@@ -78,6 +78,23 @@ pub fn draw(
     min_width: u16,
 ) -> (Rect, usize) {
     let all_lines = lines(theme, rows, selected);
+    let visible = usize::from(area.height.saturating_sub(2));
+    let offset = scroll_offset(selected, all_lines.len(), visible);
+    let popup = draw_lines(frame, area, theme, title, all_lines, offset, min_width);
+    (popup, offset)
+}
+
+/// Draws `all_lines` from `offset` in a modal centered in `area`, at least
+/// `min_width` wide.
+pub fn draw_lines(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    theme: &Theme,
+    title: &str,
+    all_lines: Vec<Line<'static>>,
+    offset: usize,
+    min_width: u16,
+) -> Rect {
     let content_width = all_lines.iter().map(Line::width).max().unwrap_or(0) as u16;
     let width = (content_width + 4)
         .max(min_width)
@@ -91,7 +108,6 @@ pub fn draw(
         height,
     );
     let visible = usize::from(height.saturating_sub(2));
-    let offset = scroll_offset(selected, all_lines.len(), visible);
 
     frame.render_widget(Clear, popup);
     let block = Block::new()
@@ -114,5 +130,5 @@ pub fn draw(
         inner.height,
     );
     frame.render_widget(Paragraph::new(shown).style(Style::default()), content);
-    (popup, offset)
+    popup
 }

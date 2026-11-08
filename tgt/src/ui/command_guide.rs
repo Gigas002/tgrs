@@ -141,9 +141,9 @@ impl CommandGuide {
         ];
 
         let empty = HashMap::new();
-        // None state (global) — keybindings available everywhere
+        // Keybindings available everywhere
         let core_window_lines =
-            self.get_keybindings_section("None state (global)", keymap_config.core_window());
+            self.get_keybindings_section("Everywhere", keymap_config.core_window());
         for line in core_window_lines {
             lines.push(Line::from(line));
         }

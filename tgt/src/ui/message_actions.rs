@@ -167,7 +167,11 @@ impl MessageActions {
             .app_context
             .keymap_config()
             .get_key_of_single_action(ComponentName::Chat, Action::SelectedMessage(command));
-        keys.sort_by_key(|key| key.to_string());
+        // The shortest first: `y` before `Ctrl+c`
+        keys.sort_by_key(|key| {
+            let key = key.to_string();
+            (key.chars().count(), key)
+        });
         keys
     }
 

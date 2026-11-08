@@ -180,6 +180,15 @@ impl Sessions {
                 if let Some(key) = others {
                     title.push_str(&format!(" · {key} all others"));
                 }
+                let unconfirmed = self
+                    .entries
+                    .iter()
+                    .flatten()
+                    .nth(self.selected)
+                    .is_some_and(|entry| entry.is_unconfirmed);
+                if unconfirmed && let Some(key) = self.key_of(Action::SessionsConfirm) {
+                    title.push_str(&format!(" · {key} confirms it's you"));
+                }
                 title
             }
             None => format!("Sessions{count}"),

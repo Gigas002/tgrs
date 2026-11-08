@@ -2,7 +2,7 @@ use {
     crate::{
         app::action::Action,
         app::context::AppContext,
-        settings::HighlightGroup,
+        settings::{HighlightGroup, is_plain_char},
         ui::component_name::ComponentName,
         ui::component_traits::{Component, HandleFocus},
     },
@@ -72,12 +72,71 @@ impl StatusBar {
         self
     }
 
-    /// The first key bound to `action`, in the chat or everywhere.
-    fn first_key(&self, action: Action) -> Option<String> {
+    /// The first key bound to `action` in `component` (or everywhere). In
+    /// the prompt plain characters type text, so they don't count.
+    fn first_key(&self, component: ComponentName, action: Action) -> Option<String> {
         let keymap = self.app_context.keymap_config();
-        let mut keys = keymap.get_key_of_single_action(ComponentName::Chat, action);
-        keys.sort_by_key(ToString::to_string);
-        keys.first().map(ToString::to_string)
+        let mut keys = keymap.get_key_of_single_action(component, action);
+        if component == ComponentName::Prompt {
+            keys.retain(|key| !is_plain_char(key));
+        }
+        // The shortest to read, `q` before `Ctrl+c`
+        let mut keys: Vec<String> = keys.iter().map(ToString::to_string).collect();
+        keys.sort_by_key(|key| (key.chars().count(), key.clone()));
+        keys.into_iter().next()
+    }
+}
+
+/// The keys worth a hint where the focus is: what Enter does there first.
+fn hints(focused: Option<ComponentName>) -> (ComponentName, Vec<(Action, &'static str)>) {
+    let menu = (Action::ShowLeaderMenu, "menu");
+    let help = (Action::ShowCommandGuide, "help");
+    let quit = (Action::TryQuit, "quit");
+    match focused {
+        Some(ComponentName::Prompt) => (
+            ComponentName::Prompt,
+            vec![
+                (Action::PromptSendMessage, "send"),
+                (Action::UnfocusComponent, "leave"),
+                help,
+            ],
+        ),
+        Some(ComponentName::ChatList) => (
+            ComponentName::ChatList,
+            vec![
+                (Action::ChatListOpen, "open"),
+                (Action::ShowChatActions, "chat actions"),
+                menu,
+                help,
+                quit,
+            ],
+        ),
+        Some(ComponentName::ArchiveList) => (
+            ComponentName::ArchiveList,
+            vec![
+                (Action::ArchiveListOpen, "open"),
+                (Action::ShowChatActions, "chat actions"),
+                menu,
+                help,
+                quit,
+            ],
+        ),
+        Some(ComponentName::TopicList) => (
+            ComponentName::TopicList,
+            vec![(Action::TopicListOpen, "open"), menu, help, quit],
+        ),
+        // Popups show their own keys
+        Some(component) if component != ComponentName::Chat => (component, Vec::new()),
+        _ => (
+            ComponentName::Chat,
+            vec![
+                (Action::ShowMessageActions, "message actions"),
+                (Action::FocusComponent(ComponentName::Prompt), "write"),
+                menu,
+                help,
+                quit,
+            ],
+        ),
     }
 }
 
@@ -132,19 +191,12 @@ impl Component for StatusBar {
             )),
             None => {
                 let mut spans = vec![Span::raw(" ")];
-                for (index, (action, label)) in [
-                    (Action::ShowLeaderMenu, "menu"),
-                    (Action::ShowCommandGuide, "help"),
-                    (Action::ShowMessageActions, "message actions"),
-                    (Action::TryQuit, "quit"),
-                ]
-                .into_iter()
-                .enumerate()
-                {
-                    let Some(key) = self.first_key(action) else {
+                let (component, hints) = hints(self.app_context.focused_component());
+                for (action, label) in hints {
+                    let Some(key) = self.first_key(component, action) else {
                         continue;
                     };
-                    if index > 0 {
+                    if spans.len() > 1 {
                         spans.push(Span::styled(" · ", theme.style(HighlightGroup::Decoration)));
                     }
                     spans.push(Span::styled(key, theme.style(HighlightGroup::Shortcut)));
@@ -163,3 +215,7 @@ impl Component for StatusBar {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "tests/status_bar.rs"]
+mod tests;

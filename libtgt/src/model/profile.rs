@@ -63,6 +63,8 @@ impl Profile {
         let status_label = match self.kind {
             ChatKind::Channel => "Subscribers",
             ChatKind::Group => "Members",
+            // Not "Last seen online"
+            _ if self.status == "online" => "Status",
             _ => "Last seen",
         };
         [

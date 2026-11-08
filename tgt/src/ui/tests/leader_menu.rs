@@ -38,3 +38,36 @@ fn draws_only_while_open() {
     menu.update(Action::HideLeaderMenu);
     assert!(!draw(&mut menu).contains("Toggle the chat list"));
 }
+
+fn screen_of(menu: &mut LeaderMenu, width: u16, height: u16) -> String {
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+    terminal
+        .draw(|frame| menu.draw(frame, frame.area()).unwrap())
+        .unwrap();
+    let buffer = terminal.backend().buffer();
+    (0..height)
+        .map(|y| {
+            (0..width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn a_short_terminal_shows_every_entry_in_two_columns() {
+    let mut menu = LeaderMenu::new(create_test_app_context());
+    menu.update(Action::ShowLeaderMenu);
+    let entries = menu.entries();
+    // An 80x24 terminal leaves 22 rows under the title bar and over the
+    // status bar, fewer than there are entries
+    assert!(entries.len() + 2 > 20);
+    let screen = screen_of(&mut menu, 80, 20);
+    for (key, description) in entries {
+        assert!(
+            screen.contains(&format!("{key} {description}")),
+            "{key} {description} is missing:\n{screen}"
+        );
+    }
+}

@@ -74,10 +74,10 @@ fn sent(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Action>) -> Vec<Action> {
     std::iter::from_fn(|| rx.try_recv().ok()).collect()
 }
 
-/// Edit on someone else's message must be a no-op (does not send EditMessage, does not bug the chat).
+/// Edit on someone else's message only says why (no EditMessage, the selection stays).
 /// create_mock_message uses sender user_id 1; test app context has me() = 0, so all mock messages are "others".
 #[test]
-fn test_edit_on_others_message_is_no_op() {
+fn test_edit_on_others_message_only_explains() {
     let mut window = create_test_chat_window();
     let mut rx = with_action_rx(&mut window);
     let messages = vec![
@@ -88,7 +88,12 @@ fn test_edit_on_others_message_is_no_op() {
     window.message_list_state.select(Some(0));
     window.update(Action::SelectedMessage(MessageCommand::Edit));
     assert_eq!(window.message_list_state.selected(), Some(0));
-    assert!(sent(&mut rx).is_empty());
+    assert_eq!(
+        sent(&mut rx),
+        vec![Action::StatusMessage(
+            "Only your own messages can be edited.".into()
+        )]
+    );
 }
 
 #[test]

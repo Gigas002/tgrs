@@ -1280,6 +1280,10 @@ async fn load_older_history(app_context: Arc<AppContext>, requests: Requests) {
         }
         loaded_count += entries.len();
         store.open_chat_messages().insert_messages(entries);
+        // Nothing older came: the start of the chat
+        if store.oldest_message_id().unwrap_or(0) == from_message_id {
+            break;
+        }
         // Show the first batch while the next one loads
         let _ = app_context.action_tx().send(Action::ChatHistoryAppended);
     }

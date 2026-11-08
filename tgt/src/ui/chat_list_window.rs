@@ -7,7 +7,7 @@ use crate::ui::component_name::ComponentName::Prompt;
 use crate::ui::component_traits::{Component, HandleFocus};
 use crate::ui::{message, pane};
 use crossterm::event::{KeyCode, MouseButton, MouseEventKind};
-use libtgt::model::{ChatKind, ChatListEntry, MessageEntry, format_timestamp};
+use libtgt::model::{ChatKind, ChatListEntry, MessageEntry, format_short_timestamp};
 use libtgt::tdlib_rs::enums::{ChatList, UserStatus};
 use nucleo_matcher::{Matcher, Utf32Str};
 use ratatui::Frame;
@@ -89,7 +89,7 @@ pub(crate) fn chat_list_item_text(
         .as_ref()
         .map(|message| {
             vec![Span::styled(
-                format_timestamp(message.timestamp()),
+                format_short_timestamp(message.timestamp()),
                 theme.style(HighlightGroup::Timestamp),
             )]
         })
@@ -242,8 +242,12 @@ pub(crate) fn preview_spans(
     };
     let mut spans = Vec::new();
     let mut left = width;
-    if let Some(author) = author.filter(|author| !author.is_empty()) {
-        let author = message::truncate_display_width(&format!("{author}: "), left / 2);
+    // The name gives way, the `: ` after it stays; with no room for a few
+    // letters of it, the text alone
+    let name_width = (left / 2).saturating_sub(2);
+    if let Some(author) = author.filter(|author| !author.is_empty() && name_width >= 3) {
+        let name = message::truncate_display_width(&author, name_width);
+        let author = format!("{name}: ");
         left = left.saturating_sub(author.width());
         spans.push(Span::styled(author, theme.style(HighlightGroup::Muted)));
     }

@@ -116,6 +116,10 @@ impl TuiBackend {
         if self.paste {
             crossterm::execute!(std::io::stderr(), EnableBracketedPaste)?;
         }
+        // Ask the terminal how it draws images now, before the event reader
+        // takes stdin: a query racing it loses the answer or eats keys
+        #[cfg(feature = "media-preview")]
+        let _ = crate::ui::preview::picker();
         self.start();
         Ok(())
     }

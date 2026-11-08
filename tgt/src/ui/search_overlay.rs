@@ -224,7 +224,14 @@ impl Component for SearchOverlay {
             .iter()
             .map(|m| {
                 let ts_str = format_timestamp(m.timestamp());
-                let preview = m.message_content_to_string();
+                // One line: a caption follows its media label
+                let preview = m
+                    .message_content_to_string()
+                    .lines()
+                    .map(str::trim)
+                    .filter(|line| !line.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" · ");
                 let preview = if preview.chars().count() > 50 {
                     format!("{}…", preview.chars().take(47).collect::<String>())
                 } else {

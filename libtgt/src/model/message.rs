@@ -23,6 +23,20 @@ pub fn format_timestamp(timestamp: i32) -> String {
     datetime.format("%Y-%m-%d %H:%M").to_string()
 }
 
+/// Formats a unix timestamp for a list row, where columns are scarce:
+/// `HH:MM` today, the weekday within the last week, otherwise the date.
+pub fn format_short_timestamp(timestamp: i32) -> String {
+    let d = UNIX_EPOCH + Duration::from_secs(timestamp as u64);
+    let date = DateTime::<Local>::from(d);
+    let today = Local::now().date_naive();
+    let days = (today - date.date_naive()).num_days();
+    match days {
+        0 => date.format("%H:%M").to_string(),
+        1..=6 => date.format("%a").to_string(),
+        _ => date.format("%Y-%m-%d").to_string(),
+    }
+}
+
 fn path_file_basename(path: &str) -> Option<String> {
     if path.is_empty() {
         return None;

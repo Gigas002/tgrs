@@ -6,7 +6,11 @@ use crate::{
     ui::component_traits::{Component, HandleFocus},
     ui::popup_list::{self, PopupRow},
 };
-use ratatui::{Frame, layout::Rect, text::Span};
+use ratatui::{
+    Frame,
+    layout::Rect,
+    text::{Line, Span},
+};
 use std::{io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -110,15 +114,22 @@ impl Component for LeaderMenu {
             })
             .collect();
         // No highlighted row: a key picks the entry
-        popup_list::draw(
-            frame,
-            area,
-            self.app_context.theme(),
-            "Space",
-            &rows,
-            usize::MAX,
-            28,
-        );
+        let theme = self.app_context.theme();
+        let mut lines = popup_list::lines(theme, &rows, usize::MAX);
+        // Too many for the height: side by side in two columns, when they fit
+        let half = lines.len().div_ceil(2);
+        let left_width = lines[..half].iter().map(Line::width).max().unwrap_or(0);
+        let right_width = lines[half..].iter().map(Line::width).max().unwrap_or(0);
+        let two_columns_fit = left_width + 2 + right_width + 4 <= usize::from(area.width);
+        if lines.len() + 2 > usize::from(area.height) && two_columns_fit {
+            let right = lines.split_off(half);
+            for (line, right) in lines.iter_mut().zip(right) {
+                let gap = left_width - line.width() + 2;
+                line.spans.push(Span::raw(" ".repeat(gap)));
+                line.spans.extend(right.spans);
+            }
+        }
+        popup_list::draw_lines(frame, area, theme, "Space", lines, 0, 28);
         Ok(())
     }
 }

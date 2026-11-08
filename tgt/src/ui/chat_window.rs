@@ -297,6 +297,9 @@ impl ChatWindow {
     /// * `revoke` - A boolean flag indicating whether the message should be revoked or not.
     fn delete(&self, entry: &MessageEntry, revoke: bool) {
         if entry.sender_id() != self.app_context.store().me() {
+            self.send(Action::StatusMessage(
+                "Only your own messages can be deleted.".into(),
+            ));
             return;
         }
         let message_id = entry.id();
@@ -307,16 +310,13 @@ impl ChatWindow {
     /// Copies the text of a message to the clipboard.
     fn copy(&self, entry: &MessageEntry) {
         let message = entry.message_content_to_string();
-        match Clipboard::new() {
-            Ok(mut clipboard) => {
-                if clipboard.set_text(&message).is_ok() {
-                    self.send(Action::StatusMessage("Message yanked".into()));
-                } else {
-                    tracing::warn!("Clipboard set_text failed");
-                }
-            }
+        match Clipboard::new().and_then(|mut clipboard| clipboard.set_text(&message)) {
+            Ok(()) => self.send(Action::StatusMessage("Message yanked".into())),
             Err(e) => {
                 tracing::warn!("Clipboard unavailable (copy message): {}", e);
+                self.send(Action::StatusMessage(format!(
+                    "Can't copy the message: {e}"
+                )));
             }
         }
     }
@@ -324,7 +324,9 @@ impl ChatWindow {
     /// Edits a message. Only our own messages can be edited.
     fn edit(&self, entry: &MessageEntry) {
         if entry.sender_id() != self.app_context.store().me() {
-            // Not our message: do nothing to avoid bugging the chat.
+            self.send(Action::StatusMessage(
+                "Only your own messages can be edited.".into(),
+            ));
             return;
         }
         // Media messages edit their caption

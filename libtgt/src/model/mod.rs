@@ -30,7 +30,8 @@ pub use draft::{draft_text, text_draft};
 pub use ids::{ChatId, MessageId};
 pub use message::{
     Media, MediaFile, MediaKind, MessageContentType, MessageEntry, Reaction, TextLine, TextSpan,
-    TextStyle, format_duration, format_size, format_timestamp, reaction_emoji,
+    TextStyle, format_duration, format_short_timestamp, format_size, format_timestamp,
+    reaction_emoji,
 };
 pub use moderation::{BlockedSender, ReportOption, ReportStep};
 pub use notification_settings::{

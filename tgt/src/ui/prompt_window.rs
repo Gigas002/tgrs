@@ -235,7 +235,7 @@ impl Input {
         }
         self.cursor.0 = i;
     }
-    /// Move the cursor to the start of the line.
+    /// Move the cursor to the end of the line.
     fn move_cursor_to_end(&mut self) {
         self.cursor.0 = self.text[self.cursor.1].len();
     }
@@ -244,7 +244,7 @@ impl Input {
         let last = self.text.len().saturating_sub(1);
         self.cursor = (self.text.get(last).map_or(0, Vec::len), last);
     }
-    /// Move the cursor to the end of the line.
+    /// Move the cursor to the start of the line.
     fn move_cursor_to_start(&mut self) {
         self.cursor.0 = 0;
     }
@@ -422,7 +422,9 @@ impl Input {
                     text.push('\n');
                 }
             }
-            clipboard.set_text(text).unwrap();
+            if let Err(e) = clipboard.set_text(text) {
+                tracing::warn!("Clipboard set_text failed (copy prompt): {e}");
+            }
         }
     }
     /// Paste text into the `Input` struct.
@@ -445,7 +447,8 @@ impl Input {
         self.mode = Mode::Edit(message_id);
         self.set_text(&message);
     }
-    /// Replaces the text, lines split at `\n`, with the cursor at the start.
+    /// Replaces the text, lines split at `\n`, with the cursor at its end
+    /// to carry on writing.
     fn set_text(&mut self, message: &str) {
         self.text = message
             .split('\n')
@@ -455,7 +458,7 @@ impl Input {
                     .collect()
             })
             .collect();
-        self.cursor = (0, 0);
+        self.move_cursor_to_text_end();
     }
 
     /// Send a message.

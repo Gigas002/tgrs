@@ -36,6 +36,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - Telegram requests (sending, typing, read marks, drafts, history, pins, search) run in the background, so a slow network no longer freezes typing or drawing.
 - Only the visible messages and chats are laid out on each frame.
 - The prompt wraps long lines on screen and grows with them; its height follows the text.
+- The chat and topic lists show the weekday for messages of the last week and the date for older ones, instead of the full date and time.
+- The sessions popup tells the key that confirms a new sign-in when one is selected.
 
 - Message keys follow concord's: `r` reacts (was reply, now `R`), `o` opens a URL (opening media moved to `x`). The actions menu starts with copy and uses the concord-style list (selection marker, key column, modal border).
 - Edited messages and reaction changes are redrawn right away.
@@ -127,6 +129,20 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Fixed
 
+- Keys typed while the first image preview loaded could be lost, and image previews could fall back to blocks in terminals with graphics: the terminal is now asked how it draws images at start-up, before keys are read.
+- Editing a message or restoring a draft put the cursor before the text instead of after it.
+- Copying selected text in the prompt crashed when the clipboard refused it; copying a message now says why it failed.
+- Loading older history kept asking TDLib when it returned no older messages.
+- The status bar showed the chat's hints (Space menu, q quit, Enter message actions) everywhere, also in the prompt where those keys type or send; it now follows the focus, with the shortest key of each action.
+- The first click in an unfocused pane only focused it: one click now opens the chat or acts on the item.
+- Closing the command guide moved the focus to the chat list instead of back where it was opened.
+- The leader menu lost its last entries in short terminals; it now uses two columns when it doesn't fit.
+- Group chat previews read `Bob Samp…Hello` when the name was cut, and `…: He…` in a narrow list; the name now keeps its `: `, or is left out when there's no room.
+- Search results ran a caption into its media label (`📷 PhotoA caption`).
+- Editing, deleting or copying a message said nothing when it couldn't be done.
+- The command guide's first section was called `None state (global)`, and pane toggles described themselves as `chat_list`, `archive_list` and `topic_list`.
+- Online users' profiles read `Last seen  online`.
+- Menus showed `Ctrl+c copy message` instead of the shorter `y`.
 - Long messages were sent with line breaks where the prompt wrapped them.
 - Esc didn't leave the chat search, so `q` and other keys were typed into it.
 - An unfocused prompt with a multi-line draft asked for a smaller size on every frame.

@@ -159,7 +159,7 @@ fn test_chat_window_search_opens_overlay() {
 }
 
 #[test]
-fn test_mouse_click_in_chat_list_when_not_focused_focuses_chat_list() {
+fn test_mouse_click_in_chat_list_when_not_focused_focuses_and_opens() {
     use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
     use ratatui::layout::Rect;
 
@@ -180,11 +180,14 @@ fn test_mouse_click_in_chat_list_when_not_focused_focuses_chat_list() {
     };
     let result = window.handle_events(Some(Event::Mouse(mouse)));
 
+    // The click focuses the chat list, then the list takes it; with no chats
+    // drawn there's nothing under it to open
+    assert_eq!(window.component_focused, Some(ComponentName::ChatList));
     assert_eq!(
-        result.unwrap(),
-        Some(Action::FocusComponent(ComponentName::ChatList)),
-        "First click in chat list when Chat focused should focus ChatList (not open a chat)"
+        window.app_context.focused_component(),
+        Some(ComponentName::ChatList)
     );
+    assert_eq!(result.unwrap(), None);
 }
 
 #[test]
@@ -985,4 +988,22 @@ fn the_privacy_settings_give_the_focus_back() {
     assert_eq!(window.component_focused, Some(ComponentName::Privacy));
     window.update(Action::HidePrivacy);
     assert_eq!(window.component_focused, Some(ComponentName::Chat));
+}
+
+#[test]
+fn closing_the_command_guide_gives_the_focus_back() {
+    let mut window = create_test_core_window();
+    window.focus_only(Some(ComponentName::Chat));
+    window.update(Action::ShowCommandGuide);
+    assert_eq!(window.component_focused, Some(ComponentName::CommandGuide));
+    window.update(Action::HideCommandGuide);
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+
+    // Opened from the leader menu: back where the menu was opened
+    window.focus_only(Some(ComponentName::Prompt));
+    window.update(Action::ShowLeaderMenu);
+    window.update(Action::ShowCommandGuide);
+    window.update(Action::HideLeaderMenu);
+    window.update(Action::HideCommandGuide);
+    assert_eq!(window.component_focused, Some(ComponentName::Prompt));
 }

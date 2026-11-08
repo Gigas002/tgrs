@@ -26,16 +26,16 @@ keymap = [
   { keys = ["alt+down"], command = "resize_pane_shorter", description = "Make the focused pane shorter"},
   # Open the leader menu, like concord: then e.g. 1 hides or shows the chat list
   { keys = ["space"], command = "show_leader_menu", description = "Open the leader menu"},
-  # Toggle chat_list visibility
-  { keys = ["alt+n"], command = "toggle_chat_list", description = "Toggle chat_list visibility"},
+  # Show or hide the chat list
+  { keys = ["alt+n"], command = "toggle_chat_list", description = "Show or hide the chat list"},
   # Focus the archived chats, showing them
   { keys = ["alt+a"], command = "focus_archive_list", description = "Focus the archived chats"},
-  # Toggle archive_list visibility
-  { keys = ["alt+b"], command = "toggle_archive_list", description = "Toggle archive_list visibility"},
+  # Show or hide the archived chats
+  { keys = ["alt+b"], command = "toggle_archive_list", description = "Show or hide the archived chats"},
   # Focus the topics of the open group with topics (forum)
   { keys = ["alt+t"], command = "focus_topic_list", description = "Focus the topic list"},
-  # Toggle topic_list visibility; it is only shown for groups with topics
-  { keys = ["alt+m"], command = "toggle_topic_list", description = "Toggle topic_list visibility"},
+  # Show or hide the topic list; it is only shown for groups with topics
+  { keys = ["alt+m"], command = "toggle_topic_list", description = "Show or hide the topic list"},
   # Increase the chat list size
   { keys = ["alt+l"], command = "increase_chat_list_size", description = "Increase the chat list size"},
   # Decrease the chat list size
