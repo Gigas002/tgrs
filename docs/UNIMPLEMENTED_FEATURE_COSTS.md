@@ -16,7 +16,7 @@ These are planning estimates, not commitments or measured build results. They as
 
 Code ranges are incremental, rounded order-of-magnitude estimates. Shared infrastructure can reduce the sum when features are implemented together; unsupported TDLib APIs, compatibility work, accessibility, and robust edge handling can increase it.
 
-Runtime footprint is relative to current `tgt`, excluding the already-linked TDLib native library. “App size” means expected Rust binary/dependency growth, not the user's TDLib database or downloaded media. New dependencies should be optional Cargo features when not needed by the core client, consistent with `docs/ARCHITECTURE.md`.
+Runtime footprint is relative to current `tgrs`, excluding the already-linked TDLib native library. “App size” means expected Rust binary/dependency growth, not the user's TDLib database or downloaded media. New dependencies should be optional Cargo features when not needed by the core client, consistent with `docs/ARCHITECTURE.md`.
 
 ## TODO items and partial-feature completion
 

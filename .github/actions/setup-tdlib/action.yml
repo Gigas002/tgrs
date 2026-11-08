@@ -1,6 +1,6 @@
 name: Setup TDLib
 description: >
-  Installs the system libraries tgt links against and TDLib (tdjson), built
+  Installs the system libraries tgrs links against and TDLib (tdjson), built
   from source at a pinned commit and cached per runner.
 
 inputs:

@@ -1,13 +1,13 @@
-# Using tgt
+# Using tgrs
 
-How to run `tgt`, move around, read and write messages, and configure it. For installing and building, see the [README](../README.md).
+How to run `tgrs`, move around, read and write messages, and configure it. For installing and building, see the [README](../README.md).
 
 ## Running
 
 | Command      | Description                                             |
 | ------------ | ------------------------------------------------------- |
-| `tgt`        | Open the TUI (logs in on the terminal first if needed). |
-| `tgt logout` | Log out of Telegram and remove the database key.        |
+| `tgrs`        | Open the TUI (logs in on the terminal first if needed). |
+| `tgrs logout` | Log out of Telegram and remove the database key.        |
 
 Global options: `--config-dir`, `--log-dir`, `--log-level`, `-v`/`-q`.
 
@@ -15,7 +15,7 @@ Chats are only read and messages only sent from the TUI: there is no command-lin
 
 ## Navigation
 
-Like [concord](https://github.com/chojs23/concord): `left`/`right` move between the chat list, the chat and the prompt, `up`/`down` select inside a pane, and `i` in the chat starts writing (`esc` goes back to the chat). A pane always has the focus, the chat list when `tgt` starts; `esc` closes a popup or leaves the prompt.
+Like [concord](https://github.com/chojs23/concord): `left`/`right` move between the chat list, the chat and the prompt, `up`/`down` select inside a pane, and `i` in the chat starts writing (`esc` goes back to the chat). A pane always has the focus, the chat list when `tgrs` starts; `esc` closes a popup or leaves the prompt.
 
 | Key                         | Action                                           |
 | --------------------------- | ------------------------------------------------ |
@@ -99,7 +99,7 @@ Leader `e` (or `e` in your own profile) edits your first and last name, bio and 
 
 ### Active sessions
 
-Leader `d` lists the devices and apps logged in to your account, in Telegram's order with tgt's own session first: each shows the app and its version, the device and system, where it logged in from and when it was last active. `j`/`k` move, `D` (or `delete`) logs the highlighted session out and `T` logs out every session but tgt's; both ask for the same key a second time, as the popup's title says. tgt's own session is ended with `tgt logout` instead. A new sign-in that hasn't been confirmed yet is marked `(new, unconfirmed)`: `c` confirms it as yours, or log it out if it isn't.
+Leader `d` lists the devices and apps logged in to your account, in Telegram's order with tgrs's own session first: each shows the app and its version, the device and system, where it logged in from and when it was last active. `j`/`k` move, `D` (or `delete`) logs the highlighted session out and `T` logs out every session but tgrs's; both ask for the same key a second time, as the popup's title says. tgrs's own session is ended with `tgrs logout` instead. A new sign-in that hasn't been confirmed yet is marked `(new, unconfirmed)`: `c` confirms it as yours, or log it out if it isn't.
 
 When someone logs in to your account and the login is still unconfirmed, the status bar warns about it, naming the device and place, e.g. `New sign-in on Pixel 8 from Berlin, Germany. Not you? Review sessions with space d.`
 
@@ -157,7 +157,7 @@ You can also drop files on the terminal window: most terminals paste the paths o
 
 `alt+q` sends the next message without sound: it arrives silently for the people in the chat, like Telegram's "Send without sound". The prompt's title shows `🔕 without sound` until you send it (text, files, an album or a sticker), then the following message has sound again; `alt+q` once more turns it off before sending.
 
-`tgt` doesn't play media itself. With `media-preview`, images (and the thumbnails of videos, GIFs and files) are previewed under their messages. Files are fetched from Telegram first when needed; progress and errors are shown in the status bar.
+`tgrs` doesn't play media itself. With `media-preview`, images (and the thumbnails of videos, GIFs and files) are previewed under their messages. Files are fetched from Telegram first when needed; progress and errors are shown in the status bar.
 
 - Downloads are listed by leader `t`, see [Downloads](#downloads).
 - Downloads never overwrite: `file.zip` becomes `file (1).zip`.
@@ -166,7 +166,7 @@ You can also drop files on the terminal window: most terminals paste the paths o
 
 ### Downloads
 
-Leader `t` lists the files you've downloaded with `s` or opened with `x` since tgt started, latest first, with their progress: `⬇` downloading, `⏸` paused, `✓` done, `✗` cancelled or failed. `p` pauses a download, keeping what was downloaded, and resumes a paused (or failed) one from where it stopped; once done, it's opened or saved as you first asked, even if you've switched chats. `x` cancels a download and deletes what was downloaded of it, `enter` opens a finished file and `c` clears finished downloads from the list. Image previews in the chat aren't listed.
+Leader `t` lists the files you've downloaded with `s` or opened with `x` since tgrs started, latest first, with their progress: `⬇` downloading, `⏸` paused, `✓` done, `✗` cancelled or failed. `p` pauses a download, keeping what was downloaded, and resumes a paused (or failed) one from where it stopped; once done, it's opened or saved as you first asked, even if you've switched chats. `x` cancels a download and deletes what was downloaded of it, `enter` opens a finished file and `c` clears finished downloads from the list. Image previews in the chat aren't listed.
 
 ### Notifications
 
@@ -179,7 +179,7 @@ New messages show desktop notifications (with the `notifications` feature), exce
 
 A chat's own options cycle between `default` (its kind's setting), on and off. `m` in the chat list still mutes or unmutes a chat.
 
-What tgt does with a notification is set in `config.toml`:
+What tgrs does with a notification is set in `config.toml`:
 
 ```toml
 [notifications]
@@ -188,10 +188,10 @@ show_preview = true                # false hides every message text
 sound = "message-new-instant"      # a freedesktop sound name; silent messages never play it
 quiet_hours = "23:00-07:00"        # no notifications then, in local time
 open_on_click = true               # clicking a notification opens its chat
-unread_in_title = false            # "tgt (3)" in the terminal's title
+unread_in_title = false            # "tgrs (3)" in the terminal's title
 ```
 
-Clicking needs a notification server that supports actions, and the window title needs a terminal that lets programs set it. tgt can't bring its terminal to the front, so it opens the chat in the background.
+Clicking needs a notification server that supports actions, and the window title needs a terminal that lets programs set it. tgrs can't bring its terminal to the front, so it opens the chat in the background.
 
 ### Privacy
 
@@ -203,7 +203,7 @@ The last row is **Read time**: whether people see when you read their messages i
 
 The open chat's title shows what others are doing in it instead of their status: `typing…`, `Ferris is typing…`, `Ada is sending a file…`. In a forum, only the open topic's are shown.
 
-`[privacy]` in `config.toml` sets what tgt tells others:
+`[privacy]` in `config.toml` sets what tgrs tells others:
 
 ```toml
 [privacy]
@@ -229,17 +229,17 @@ Previews already downloaded always show. Files are only downloaded otherwise whe
 
 ## Configuration
 
-`tgt` works without any config file: defaults are bundled in the binary. Files are looked up in XDG directories:
+`tgrs` works without any config file: defaults are bundled in the binary. Files are looked up in XDG directories:
 
 | What                                       | Location                                                                       |
 | ------------------------------------------ | ------------------------------------------------------------------------------ |
-| `config.toml`, `keymap.toml`, `theme.toml` | `$XDG_CONFIG_HOME/tgt` (`~/.config/tgt`), or `--config-dir` / `TGT_CONFIG_DIR` |
-| TDLib database                             | `$XDG_DATA_HOME/tgt/tdlib` (`~/.local/share/tgt/tdlib`)                        |
-| Logs, TDLib log                            | `$XDG_STATE_HOME/tgt` (`~/.local/state/tgt`)                                   |
-| TDLib database key                         | the system keychain, service `tgt` (see `[credentials]`)                       |
+| `config.toml`, `keymap.toml`, `theme.toml` | `$XDG_CONFIG_HOME/tgrs` (`~/.config/tgrs`), or `--config-dir` / `TGRS_CONFIG_DIR` |
+| TDLib database                             | `$XDG_DATA_HOME/tgrs/tdlib` (`~/.local/share/tgrs/tdlib`)                        |
+| Logs, TDLib log                            | `$XDG_STATE_HOME/tgrs` (`~/.local/state/tgrs`)                                   |
+| TDLib database key                         | the system keychain, service `tgrs` (see `[credentials]`)                       |
 | Downloads                                  | `app.download_dir`, default `$XDG_DOWNLOAD_DIR` or `~/Downloads`               |
 
-Settings are resolved as `CLI > environment > config.toml > defaults`. They are only changed by editing the files: `tgt` never writes to them and has no settings UI. `API_ID` and `API_HASH` override the Telegram credentials.
+Settings are resolved as `CLI > environment > config.toml > defaults`. They are only changed by editing the files: `tgrs` never writes to them and has no settings UI. `API_ID` and `API_HASH` override the Telegram credentials.
 
 To customize, copy the files you want to change from [`examples/`](../examples/) into the config directory; missing files keep their defaults.
 
@@ -249,7 +249,7 @@ User keybindings in `keymap.toml` are merged over the defaults: binding a comman
 
 ### Theme
 
-`tgt` follows your terminal's colors: text uses the terminal's default foreground and background, accents use its ANSI palette, and secondary text is dimmed rather than given a fixed color. To change a color, add a `theme.toml` with Highlight Groups, like Vim's:
+`tgrs` follows your terminal's colors: text uses the terminal's default foreground and background, accents use its ANSI palette, and secondary text is dimmed rather than given a fixed color. To change a color, add a `theme.toml` with Highlight Groups, like Vim's:
 
 ```toml
 [highlight.FocusBorder]
@@ -266,4 +266,4 @@ A group inherits the fields it doesn't set from the group it links to, so changi
 
 ## Resetting and uninstalling
 
-To reset or uninstall, remove the directories listed under [Configuration](#configuration) yourself, and the database key with `secret-tool clear service tgt`.
+To reset or uninstall, remove the directories listed under [Configuration](#configuration) yourself, and the database key with `secret-tool clear service tgrs`.

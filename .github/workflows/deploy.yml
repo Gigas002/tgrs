@@ -11,9 +11,9 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  BINARY_CRATES: '["tgt"]'
-  # Empty while libtgt depends on tdlib-rs through git, which crates.io rejects.
-  # In dependency order once publishable: '["libtgt", "tgt"]'.
+  BINARY_CRATES: '["tgrs"]'
+  # Empty while libtgrs depends on tdlib-rs through git, which crates.io rejects.
+  # In dependency order once publishable: '["libtgrs", "tgrs"]'.
   PUBLISH_CRATES: '[]'
 
 jobs:

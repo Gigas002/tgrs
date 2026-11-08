@@ -1,14 +1,14 @@
 [workspace]
-members = ["libtgt", "tgt"]
+members = ["libtgrs", "tgrs"]
 resolver = "3"
 
 [workspace.package]
 edition = "2024"
 license = "MIT OR Apache-2.0"
-homepage = "https://github.com/Gigas002/tgt"
+homepage = "https://github.com/Gigas002/tgrs"
 description = "A simple TUI for Telegram"
 keywords = ["telegram", "tui", "tdlib"]
-repository = "https://github.com/Gigas002/tgt"
+repository = "https://github.com/Gigas002/tgrs"
 version = "1.0.0"
 
 [workspace.dependencies]

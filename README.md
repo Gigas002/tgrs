@@ -1,12 +1,14 @@
-# tgt
+# tgrs
 
 A simple TUI for Telegram
+
+Originally a fork of [tgt](https://github.com/FedericoBruzzone/tgt) by Federico Bruzzone.
 
 ## Installation
 
 ### Requirements
 
-`tgt` does not download or bundle any native library. Install these system-wide with your package manager before building:
+`tgrs` does not download or bundle any native library. Install these system-wide with your package manager before building:
 
 | Dependency                                      | Required for              | Notes                                                                                                                                                              |
 | ----------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -34,13 +36,13 @@ Build features can be combined (e.g. `cargo build --release --no-default-feature
 
 ```sh
 cargo build --release
-./target/release/tgt
+./target/release/tgrs
 ```
 
-The first run logs in on the terminal (phone number, code and, if set, your two-step verification password), then opens the TUI. Move between panes with `left`/`right`, open a chat with `enter`, and press `space` for the leader menu or `alt+f1` to list every key. `tgt logout` logs out again.
+The first run logs in on the terminal (phone number, code and, if set, your two-step verification password), then opens the TUI. Move between panes with `left`/`right`, open a chat with `enter`, and press `space` for the leader menu or `alt+f1` to list every key. `tgrs logout` logs out again.
 
 ## Documentation
 
 - [Usage](docs/USAGE.md): navigation, chats, messages, media, configuration, keybindings and themes.
 - [Architecture](docs/ARCHITECTURE.md): how the code is organized.
-- [Feature matrix](docs/TELEGRAM_FEATURE_MATRIX.md): what Telegram features `tgt` supports.
+- [Feature matrix](docs/TELEGRAM_FEATURE_MATRIX.md): what Telegram features `tgrs` supports.

@@ -1,7 +1,7 @@
-# tgt configuration.
+# tgrs configuration.
 #
-# Location: $XDG_CONFIG_HOME/tgt/config.toml (default ~/.config/tgt/config.toml),
-# or the directory given by `--config-dir` / `TGT_CONFIG_DIR`.
+# Location: $XDG_CONFIG_HOME/tgrs/config.toml (default ~/.config/tgrs/config.toml),
+# or the directory given by `--config-dir` / `TGRS_CONFIG_DIR`.
 # Every key is optional; commented-out values are the defaults.
 # Paths may start with `~`; relative paths are rejected.
 
@@ -24,8 +24,8 @@
 [logger]
 # off, error, warn, info, debug or trace. Overridden by `--log-level`, `-v`, `-q`.
 # level = "info"
-# Log directory (default $XDG_STATE_HOME/tgt/logs). Overridden by `--log-dir`.
-# dir = "~/.local/state/tgt/logs"
+# Log directory (default $XDG_STATE_HOME/tgrs/logs). Overridden by `--log-dir`.
+# dir = "~/.local/state/tgrs/logs"
 # Log file rotation: minutely, hourly, daily or never.
 # rotation = "daily"
 # Number of rotated log files to keep.
@@ -36,8 +36,8 @@
 # Overridden by the API_ID and API_HASH environment variables.
 # api_id = 94575
 # api_hash = "a3406de8d171bb422bb6ddf3bbd800e2"
-# TDLib database directory (default $XDG_DATA_HOME/tgt/tdlib).
-# database_dir = "~/.local/share/tgt/tdlib"
+# TDLib database directory (default $XDG_DATA_HOME/tgrs/tdlib).
+# database_dir = "~/.local/share/tgrs/tdlib"
 # Keep information about downloaded and uploaded files between restarts.
 # use_file_database = true
 # Keep users, groups, channels and secret chats between restarts.
@@ -53,8 +53,8 @@
 # device_model = "Desktop"
 # TDLib log verbosity: 0 fatal, 1 errors, 2 warnings, 3 info, 4 debug, 5 verbose.
 # log_verbosity = 2
-# TDLib log file (default $XDG_STATE_HOME/tgt/tdlib.log).
-# log_path = "~/.local/state/tgt/tdlib.log"
+# TDLib log file (default $XDG_STATE_HOME/tgrs/tdlib.log).
+# log_path = "~/.local/state/tgrs/tdlib.log"
 # Also redirect stderr to the TDLib log.
 # log_redirect_stderr = false
 
@@ -76,7 +76,7 @@
 # Where the key of the encrypted TDLib database (your login session) is kept:
 #   auto     - the system keychain (Secret Service) when available, otherwise
 #              the database is left unencrypted;
-#   keychain - only the system keychain; tgt refuses to start without it;
+#   keychain - only the system keychain; tgrs refuses to start without it;
 #   plain    - no keychain, the database is not encrypted.
 # Switching an encrypted database to `plain` requires logging in again.
 # store = "auto"
@@ -96,13 +96,13 @@
 # support actions).
 # open_on_click = true
 # Show the number of unread messages in unmuted chats in the terminal's
-# title, e.g. "tgt (3)".
+# title, e.g. "tgrs (3)".
 # unread_in_title = false
 # Which chats notify, with previews, mentions and pinned messages, are
 # Telegram's own settings: leader N changes them for every device.
 
 [privacy]
-# Show you online while tgt runs. When off, others see your last seen time,
+# Show you online while tgrs runs. When off, others see your last seen time,
 # as your privacy settings allow (leader P changes those).
 # appear_online = true
 # Tell chats when you're typing a message.

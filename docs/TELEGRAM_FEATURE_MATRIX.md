@@ -1,14 +1,14 @@
-# Telegram and tgt Feature Matrix
+# Telegram and tgrs Feature Matrix
 
 Comparison snapshot: **2026-11-01**. This document helps define project goals; it is not a promise of full Telegram compatibility.
 
 ## Status key
 
-- `[x]` — the basic workflow is implemented and available in the `tgt` interface.
-- `[~]` — partially supported, limited, or requires an action outside `tgt`.
-- `[ ]` — no user-facing workflow was found in `tgt`. **TODO**, **MAYBE**, and **NOT PLANNED** at the start of an item show its current planning direction. **PARTIAL** and **POLISH** mark improvements to existing workflows.
+- `[x]` — the basic workflow is implemented and available in the `tgrs` interface.
+- `[~]` — partially supported, limited, or requires an action outside `tgrs`.
+- `[ ]` — no user-facing workflow was found in `tgrs`. **TODO**, **MAYBE**, and **NOT PLANNED** at the start of an item show its current planning direction. **PARTIAL** and **POLISH** mark improvements to existing workflows.
 
-This matrix evaluates the `tgt` application, not TDLib or the Telegram API. `tgt` is a Linux TUI. Features tied to cameras, address books, mobile notifications, and similar platform capabilities are included as official-client features and marked accordingly. Official clients do not have one identical feature set across platforms, so this document covers the main Telegram workflows for individual users, groups/channels, and account settings. Niche and platform-specific differences can be added as project goals are defined.
+This matrix evaluates the `tgrs` application, not TDLib or the Telegram API. `tgrs` is a Linux TUI. Features tied to cameras, address books, mobile notifications, and similar platform capabilities are included as official-client features and marked accordingly. Official clients do not have one identical feature set across platforms, so this document covers the main Telegram workflows for individual users, groups/channels, and account settings. Niche and platform-specific differences can be added as project goals are defined.
 
 ## 1. Account and sign-in
 
@@ -18,9 +18,9 @@ This matrix evaluates the `tgt` application, not TDLib or the Telegram API. `tgt
 - [x] Sign in with a two-step verification password; the password is masked.
 - [x] Sign in with a code delivered by Telegram or SMS; TDLib handles the code.
 - [x] Sign in with an email code and confirm a new email address; TDLib authentication states are supported.
-- **PARTIAL** [~] Confirm a sign-in from another device; `tgt` displays a link, but confirmation must be completed on that device.
+- **PARTIAL** [~] Confirm a sign-in from another device; `tgrs` displays a link, but confirmation must be completed on that device.
 - **NOT PLANNED** [ ] Register a new account with a name. TDLib exposes the registration state, but the UI flow is not implemented.
-- [x] Sign out with `tgt logout`.
+- [x] Sign out with `tgrs logout`.
 - **MAYBE** [ ] Use multiple accounts and switch between them quickly.
 - [x] View active sessions, terminate sessions, and receive alerts about new sign-ins. Leader `d` lists sessions; `D` logs one out and `T` all others (each pressed twice), `c` confirms a new sign-in, and unconfirmed sign-ins are announced in the status bar. Connected websites and business bots aren't listed.
 - **TODO** [ ] Use passkeys or QR sign-in and manage trusted devices.
@@ -155,7 +155,7 @@ This matrix evaluates the `tgt` application, not TDLib or the Telegram API. `tgt
 - **PARTIAL** [~] Configure sounds, per-user/group/channel settings, and a do-not-disturb schedule. Leader `N` changes Telegram's settings for private chats, groups, channels and the open chat (notifications, previews, mentions, pinned messages); `quiet_hours` is a daily do-not-disturb span and `sound` a freedesktop sound for every notification. Telegram's own notification sounds, per-chat sounds, timed mutes from the popup and story notifications are not supported.
 - [x] Control previews, badge/count, and notification actions. Previews per scope or chat (`N`) and for every notification (`show_preview`); `unread_in_title` puts the unread count in the terminal's title; clicking a notification opens its chat (`open_on_click`). Reply or mark-as-read buttons in notifications are not supported.
 - [x] Show a contact's online/last-seen status when Telegram provides it.
-- **PARTIAL** [~] Set your status, last-seen visibility, privacy exceptions, and read/typing indicators. Leader `P` sets who sees your last seen time, phone number, photo, bio, birthday and forward link, and who can call, invite or find you, with the open private chat's person as an exception (exceptions from other apps are kept), and hides your read time; others' typing, recording and uploads show in the chat title, and tgt sends typing (`send_typing`) and can stay offline (`appear_online`). Emoji statuses, group exceptions and picking people outside the open chat are not supported.
+- **PARTIAL** [~] Set your status, last-seen visibility, privacy exceptions, and read/typing indicators. Leader `P` sets who sees your last seen time, phone number, photo, bio, birthday and forward link, and who can call, invite or find you, with the open private chat's person as an exception (exceptions from other apps are kept), and hides your read time; others' typing, recording and uploads show in the chat title, and tgrs sends typing (`send_typing`) and can stay offline (`appear_online`). Emoji statuses, group exceptions and picking people outside the open chat are not supported.
 
 ## 7. Calls and live streams
 
@@ -206,7 +206,7 @@ This matrix evaluates the `tgt` application, not TDLib or the Telegram API. `tgt
 
 ## Summary
 
-`tgt` already covers the core cloud-messenger workflow in a terminal: sign-in, chat list, reading and sending text/files, history, replies, editing/deleting, search, reactions, pins, forum topics, archive, stickers, downloads, and desktop notifications. Profiles can be viewed but not edited. Major gaps include contacts and profile editing, account/community settings, richer message composition and forwarding, polls, calls, Stories, bot buttons/Mini Apps, and Telegram commerce. Some items describe Telegram-wide features that do not naturally fit a terminal client and would need a product decision before implementation.
+`tgrs` already covers the core cloud-messenger workflow in a terminal: sign-in, chat list, reading and sending text/files, history, replies, editing/deleting, search, reactions, pins, forum topics, archive, stickers, downloads, and desktop notifications. Profiles can be viewed but not edited. Major gaps include contacts and profile editing, account/community settings, richer message composition and forwarding, polls, calls, Stories, bot buttons/Mini Apps, and Telegram commerce. Some items describe Telegram-wide features that do not naturally fit a terminal client and would need a product decision before implementation.
 
 ## Sources and implementation review
 
@@ -218,4 +218,4 @@ Official Telegram references:
 - [Telegram update history](https://telegram.org/evolution) — Stories and newer features.
 - [Telegram Bot Platform](https://core.telegram.org/bots) — bots and Mini Apps.
 
-The `tgt` implementation was reviewed against `README.md`, `docs/USAGE.md`, `CHANGELOG.md`, `docs/ARCHITECTURE.md`, public operations in `libtgt/src/client/mod.rs`, UI modules in `tgt/src/ui/`, and TDLib update handling. `[ ]` means no user-facing workflow was found in the current repository, even if a corresponding method may exist in TDLib.
+The `tgrs` implementation was reviewed against `README.md`, `docs/USAGE.md`, `CHANGELOG.md`, `docs/ARCHITECTURE.md`, public operations in `libtgrs/src/client/mod.rs`, UI modules in `tgrs/src/ui/`, and TDLib update handling. `[ ]` means no user-facing workflow was found in the current repository, even if a corresponding method may exist in TDLib.
