@@ -23,7 +23,7 @@ pub enum Notification {
     OpenChatPinsChanged,
     /// A topic of the open forum chat changed, or a message arrived in one.
     OpenChatTopicsChanged,
-    /// A message to notify the user about (see [`super::Client::enable_notifications`]).
+    /// A message to notify the user about (see [`super::Requests::enable_notifications`]).
     NewMessage(MessageAlert),
     /// Someone logged in to your account and the session isn't confirmed yet.
     NewSignIn(SignInAlert),

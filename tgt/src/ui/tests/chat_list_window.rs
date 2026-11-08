@@ -562,6 +562,6 @@ fn the_preview_keeps_the_colon_after_the_author_or_drops_the_author() {
             .collect()
     };
     assert_eq!(text(40), "You: hello there");
-    // No room for a readable name: the text alone, not "…: hel…"
+    // No room for a readable name: the text alone, without a cut one
     assert_eq!(text(8), "hello t…");
 }
