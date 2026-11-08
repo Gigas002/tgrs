@@ -10,6 +10,7 @@ fn td_params_debug_hides_secrets() {
         use_file_database: true,
         use_chat_info_database: true,
         use_message_database: true,
+        use_test_dc: false,
         system_language_code: "en".into(),
         device_model: "Desktop".into(),
         application_version: "1.0.0".into(),

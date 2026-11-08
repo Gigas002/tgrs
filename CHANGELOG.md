@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Removed
 
+- `app.frame_rate`: the screen is redrawn when something changes instead of at a fixed rate.
 - In-app audio playback (`audio` and `voice-message` features, `rodio`, `ogg`, `audiopus`, ALSA and libopus): media is opened in external applications instead.
 - Theme selector popup, theme switching and the remembered theme in `$XDG_STATE_HOME/tgt/theme`: settings are only changed by editing `config.toml`.
 - Palette themes (`themes/*.toml`, the bundled catppuccin, github, gruvbox, monokai, nord, onedark, tokyo and default themes), `--theme`, `app.theme` and `app.theme_enable`: tgt follows the terminal's colors, and `theme.toml` overrides them.
@@ -32,6 +33,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Changed
 
+- Telegram requests (sending, typing, read marks, drafts, history, pins, search) run in the background, so a slow network no longer freezes typing or drawing.
+- Only the visible messages and chats are laid out on each frame.
+- The prompt wraps long lines on screen and grows with them; its height follows the text.
+
 - Message keys follow concord's: `r` reacts (was reply, now `R`), `o` opens a URL (opening media moved to `x`). The actions menu starts with copy and uses the concord-style list (selection marker, key column, modal border).
 - Edited messages and reaction changes are redrawn right away.
 - The title bar is concord's one-line header (` tgt - v1.0.0  Connected as Name `) and the status bar one line of key hints or the latest status message; the pressed key and terminal size are no longer shown.
@@ -56,6 +61,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+- `telegram.use_test_dc`: use Telegram's test servers, for development.
 - `notifications` feature (default): desktop notifications for new messages through TDLib's notification API, so muted chats, mention-only settings and messages already read elsewhere stay silent; the open chat is never notified about. `[notifications] enabled` and `show_preview` in `config.toml`; the text is also hidden for chats that hide previews in Telegram.
 - Clearing chat history: `X` in the chat list (or the chat actions) deletes every message of a chat for you, keeping the chat, and the chat actions also clear it for everyone where Telegram allows it (private chats, groups you run); both ask for a second press. Commands `clear_chat_history` and `clear_chat_history_for_everyone`.
 - Silent messages: `alt+q` in the prompt sends the next message, file, album or sticker without sound for the recipients (the prompt's title says `🔕 without sound` until it's sent, and `alt+q` again turns it off). Command `prompt_toggle_silent`.
@@ -121,6 +127,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Fixed
 
+- Long messages were sent with line breaks where the prompt wrapped them.
+- Esc didn't leave the chat search, so `q` and other keys were typed into it.
+- An unfocused prompt with a multi-line draft asked for a smaller size on every frame.
 - TDLib's start-up log no longer floods the terminal before login: its verbosity and log file are set before the first client is created.
 - Closing the input (Ctrl+D) at a login prompt quits instead of asking again forever.
 - Keys bound to capital letters (`D`, `R`, `P`, `L`, or `shift+x`) never matched: terminals report them with Shift, which is now dropped for letters.

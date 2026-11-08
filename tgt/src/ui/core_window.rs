@@ -1364,7 +1364,13 @@ impl Component for CoreWindow {
                         Constraint::Length(0)
                     }
                 },
-                Constraint::Length(self.size_prompt + self.prompt_extra_rows),
+                // Taller as its text wraps, up to the most rows a prompt takes
+                Constraint::Length(
+                    (self.size_prompt
+                        + self.prompt_extra_rows
+                        + self.app_context.prompt_extra_rows())
+                    .min(MAX_PROMPT_SIZE.max(self.size_prompt + self.prompt_extra_rows)),
+                ),
             ])
             .split(core_layout[3]);
 

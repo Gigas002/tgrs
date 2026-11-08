@@ -11,6 +11,8 @@ pub struct TdParams {
     pub use_file_database: bool,
     pub use_chat_info_database: bool,
     pub use_message_database: bool,
+    /// Telegram's test servers: separate accounts, for development.
+    pub use_test_dc: bool,
     pub system_language_code: String,
     pub device_model: String,
     pub application_version: String,
@@ -31,6 +33,7 @@ impl fmt::Debug for TdParams {
             .field("use_file_database", &self.use_file_database)
             .field("use_chat_info_database", &self.use_chat_info_database)
             .field("use_message_database", &self.use_message_database)
+            .field("use_test_dc", &self.use_test_dc)
             .field("system_language_code", &self.system_language_code)
             .field("device_model", &self.device_model)
             .field("application_version", &self.application_version)

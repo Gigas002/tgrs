@@ -30,7 +30,7 @@ fn bundled_config_parses_when_uncommented() {
         .join("\n");
 
     let file = parse(&uncommented).unwrap();
-    assert_eq!(file.app.frame_rate, Some(60.0));
+    assert_eq!(file.app.mouse_support, Some(true));
     assert_eq!(file.logger.level, Some(LogLevel::Info));
     assert_eq!(file.logger.rotation, Some(Rotation::Daily));
     assert_eq!(file.telegram.api_id, Some(94575));

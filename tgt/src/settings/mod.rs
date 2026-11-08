@@ -34,7 +34,6 @@ pub const API_HASH_ENV: &str = "API_HASH";
 /// tgt's public Telegram API credentials, from <https://my.telegram.org>.
 pub const DEFAULT_API_ID: i32 = 94575;
 pub const DEFAULT_API_HASH: &str = "a3406de8d171bb422bb6ddf3bbd800e2";
-pub const DEFAULT_FRAME_RATE: f64 = 60.0;
 pub const DEFAULT_LOG_KEEP: usize = 7;
 pub const DEFAULT_TDLIB_VERBOSITY: i32 = 2;
 pub const DEFAULT_PROXY_PORT: i32 = 1080;
@@ -91,7 +90,6 @@ pub struct Dirs {
 pub struct App {
     pub mouse_support: bool,
     pub paste_support: bool,
-    pub frame_rate: f64,
     pub show_status_bar: bool,
     pub show_title_bar: bool,
     pub use_emoji_icons: bool,
@@ -237,9 +235,6 @@ pub enum SettingsError {
     #[error("config.toml: `logger.keep` must be at least 1")]
     LogKeep,
 
-    #[error("config.toml: `app.frame_rate` must be positive")]
-    FrameRate,
-
     #[error("config.toml: `notifications.quiet_hours` must look like \"22:00-07:30\", got {0:?}")]
     QuietHours(String),
 }
@@ -358,14 +353,9 @@ fn resolve_notifications(
 
 fn resolve_app(file: &FileConfig, download_dir: PathBuf) -> Result<App, SettingsError> {
     let app = &file.app;
-    let frame_rate = app.frame_rate.unwrap_or(DEFAULT_FRAME_RATE);
-    if frame_rate <= 0.0 || !frame_rate.is_finite() {
-        return Err(SettingsError::FrameRate);
-    }
     Ok(App {
         mouse_support: app.mouse_support.unwrap_or(true),
         paste_support: app.paste_support.unwrap_or(true),
-        frame_rate,
         show_status_bar: app.show_status_bar.unwrap_or(true),
         show_title_bar: app.show_title_bar.unwrap_or(true),
         use_emoji_icons: app.use_emoji_icons.unwrap_or(false),
@@ -411,6 +401,7 @@ where
         use_file_database: tg.use_file_database.unwrap_or(true),
         use_chat_info_database: tg.use_chat_info_database.unwrap_or(true),
         use_message_database,
+        use_test_dc: tg.use_test_dc.unwrap_or(false),
         system_language_code: tg
             .system_language_code
             .clone()

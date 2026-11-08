@@ -12,7 +12,7 @@ use {
         },
         terminal::{EnterAlternateScreen, LeaveAlternateScreen},
     },
-    futures::{FutureExt, StreamExt, future::Fuse, stream::Next},
+    futures::StreamExt,
     ratatui::{Terminal, backend::CrosstermBackend},
     std::{
         io::{self, Stderr},
@@ -46,8 +46,6 @@ pub struct TuiBackend {
     /// This is used to receive events from the event queue for processing.
     /// The main loop consumes events from this queue calling the next method.
     pub event_rx: UnboundedReceiver<Event>,
-    /// The frame rate at which the user interface should be rendered.
-    pub frame_rate: f64,
     /// A boolean flag that represents whether the mouse is enabled or not.
     pub mouse: bool,
     /// A boolean flag that represents whether the paste mode is enabled or
@@ -65,7 +63,6 @@ impl TuiBackend {
     ///   of the `TuiBackend` struct or an error.
     pub fn new(app_context: Arc<AppContext>) -> Result<Self, std::io::Error> {
         tracing::info!("Creating TuiBackend");
-        let frame_rate = app_context.app_config().frame_rate;
         let mouse = app_context.app_config().mouse_support;
         let paste = app_context.app_config().paste_support;
         let terminal = Terminal::new(CrosstermBackend::new(std::io::stderr()))?;
@@ -77,7 +74,6 @@ impl TuiBackend {
             task,
             event_rx,
             event_tx,
-            frame_rate,
             mouse,
             paste,
         })
@@ -186,20 +182,6 @@ impl TuiBackend {
         self.enter()?;
         Ok(())
     }
-    /// Set the frame rate at which the user interface should be rendered.
-    /// The frame rate is specified in frames per second (FPS).
-    /// The default frame rate is 60 FPS.
-    ///
-    /// # Arguments
-    /// * `frame_rate` - The frame rate at which the user interface should be
-    ///   rendered.
-    ///
-    /// # Returns
-    /// * `Self` - The modified instance of the `TuiBackend` struct.
-    pub fn with_frame_rate(mut self, frame_rate: f64) -> Self {
-        self.frame_rate = frame_rate;
-        self
-    }
     /// Enable or disable the mouse for the user interface.
     /// By default, the mouse is disabled.
     ///
@@ -246,63 +228,48 @@ impl TuiBackend {
     /// event queue for processing.
     fn start(&mut self) {
         let event_tx = self.event_tx.clone();
-        let render_delay = Duration::from_secs_f64(1.0 / self.frame_rate);
-
         self.task = tokio::spawn(async move {
             let mut reader = EventStream::new();
-            let mut render_interval = tokio::time::interval(render_delay);
-
             event_tx.send(Event::Init)?;
             loop {
-                let crossterm_event: Fuse<Next<'_, EventStream>> = reader.next().fuse();
-                let render_tick = render_interval.tick();
-
-                tokio::select! {
-                    maybe_event = crossterm_event => {
-                        match maybe_event {
-                            Some(Ok(event)) => {
-                                match event {
-                                    CrosstermEvent::Key(key) => {
-                                        // Only handle presses; ignore repeat/release events.
-                                        if key.kind == KeyEventKind::Press {
-                                            let (code, modifiers) =
-                                                normalize_key(key.code, key.modifiers);
-                                            event_tx.send(Event::Key(code, modifiers))?;
-                                        }
-                                    },
-                                    CrosstermEvent::Mouse(mouse) => {
-                                        event_tx.send(Event::Mouse(mouse))?;
-                                    },
-                                    CrosstermEvent::Resize(width, height) => {
-                                        event_tx.send(Event::Resize(width, height))?;
-                                    },
-                                    CrosstermEvent::FocusLost => {
-                                        event_tx.send(Event::FocusLost)?;
-                                    }
-                                    CrosstermEvent::FocusGained => {
-                                        event_tx.send(Event::FocusGained)?;
-                                    }
-                                    CrosstermEvent::Paste(text) => {
-                                        event_tx.send(Event::Paste(text))?;
-                                    },
+                match reader.next().await {
+                    Some(Ok(event)) => {
+                        match event {
+                            CrosstermEvent::Key(key) => {
+                                // Only handle presses; ignore repeat/release events.
+                                if key.kind == KeyEventKind::Press {
+                                    let (code, modifiers) = normalize_key(key.code, key.modifiers);
+                                    event_tx.send(Event::Key(code, modifiers))?;
                                 }
-                          }
-                          // If the terminal event stream ends or errors, don't panic.
-                          // Panicking here can leave the terminal in raw/alt-screen state
-                          // which looks like the app "froze".
-                          Some(Err(e)) => {
-                              tracing::error!("TUI event stream error: {e:?}");
-                              // Back off a bit to avoid a hot loop if the stream is failing repeatedly.
-                              tokio::time::sleep(Duration::from_millis(50)).await;
-                          }
-                          None => {
-                              tracing::warn!("TUI event stream ended");
-                              break;
-                          }
+                            }
+                            CrosstermEvent::Mouse(mouse) => {
+                                event_tx.send(Event::Mouse(mouse))?;
+                            }
+                            CrosstermEvent::Resize(width, height) => {
+                                event_tx.send(Event::Resize(width, height))?;
+                            }
+                            CrosstermEvent::FocusLost => {
+                                event_tx.send(Event::FocusLost)?;
+                            }
+                            CrosstermEvent::FocusGained => {
+                                event_tx.send(Event::FocusGained)?;
+                            }
+                            CrosstermEvent::Paste(text) => {
+                                event_tx.send(Event::Paste(text))?;
+                            }
                         }
-                    },
-                    _ = render_tick => {
-                        event_tx.send(Event::Render)?;
+                    }
+                    // If the terminal event stream ends or errors, don't panic.
+                    // Panicking here can leave the terminal in raw/alt-screen state
+                    // which looks like the app "froze".
+                    Some(Err(e)) => {
+                        tracing::error!("TUI event stream error: {e:?}");
+                        // Back off a bit to avoid a hot loop if the stream is failing repeatedly.
+                        tokio::time::sleep(Duration::from_millis(50)).await;
+                    }
+                    None => {
+                        tracing::warn!("TUI event stream ended");
+                        break;
                     }
                 }
             }

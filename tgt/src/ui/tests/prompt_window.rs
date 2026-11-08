@@ -85,27 +85,91 @@ fn normal_mode_unchanged_after_esc() {
 fn wide_chars_wrap_by_display_width() {
     let mut window = create_test_prompt_window();
     let modifiers = Modifiers::from(KeyModifiers::empty());
-    window.update_input(Rect::new(0, 0, 7, 3));
 
     window.update(Action::Key(KeyCode::Char('하'), modifiers.clone()));
     window.update(Action::Key(KeyCode::Char('니'), modifiers.clone()));
     window.update(Action::Key(KeyCode::Char('달'), modifiers.clone()));
 
-    assert_eq!(window.input.text.len(), 2);
-    assert_eq!(window.input.cursor, (1, 1));
-    assert_eq!(
-        window.input.text[0]
-            .iter()
-            .map(|cell| cell.c)
-            .collect::<String>(),
-        "하니"
-    );
-    assert_eq!(
-        window.input.text[1]
-            .iter()
-            .map(|cell| cell.c)
-            .collect::<String>(),
-        "달"
+    // 5 columns inside the borders: two wide characters and the cursor's column
+    let (rows, cursor_row, cursor_col) = window.input.rows(5);
+    assert_eq!(rows, vec![(0, 0, 2), (0, 2, 3)]);
+    assert_eq!((cursor_row, cursor_col), (1, 2));
+    // The text itself isn't broken
+    assert_eq!(window.input.text_to_string(), "하니달");
+}
+
+/// Long text is wrapped on screen only: it's sent as typed, and the prompt
+/// grows with it.
+#[test]
+fn long_text_is_sent_without_the_wrapping() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let app_context = create_test_app_context();
+    let mut window = PromptWindow::new(Arc::clone(&app_context));
+    window.register_action_handler(tx).unwrap();
+    window.focus();
+    let mut terminal = Terminal::new(TestBackend::new(12, 6)).unwrap();
+    let modifiers = Modifiers::from(KeyModifiers::empty());
+    let typed = "the quick brown fox jumps";
+    for c in typed.chars() {
+        window.update(Action::Key(KeyCode::Char(c), modifiers.clone()));
+        terminal
+            .draw(|frame| window.draw(frame, frame.area()).unwrap())
+            .unwrap();
+    }
+    // 10 columns inside the borders, 9 of text a row: 3 rows
+    assert_eq!(app_context.prompt_extra_rows(), 2);
+    let screen: String = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect();
+    assert!(screen.contains("the quick"), "{screen}");
+
+    window.update(Action::PromptSendMessage);
+    while rx.try_recv().is_ok() {}
+    let mut sent_rx = app_context.action_rx();
+    let sent = std::iter::from_fn(|| sent_rx.try_recv().ok()).find_map(|action| match action {
+        Action::SendMessage(text, _) => Some(text),
+        _ => None,
+    });
+    assert_eq!(sent.as_deref(), Some(typed));
+    drop(sent_rx);
+    terminal
+        .draw(|frame| window.draw(frame, frame.area()).unwrap())
+        .unwrap();
+    assert_eq!(app_context.prompt_extra_rows(), 0);
+}
+
+/// An unfocused prompt only tells its size, it doesn't keep asking for redraws.
+#[test]
+fn drawing_an_unfocused_prompt_sends_nothing() {
+    use ratatui::{Terminal, backend::TestBackend};
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let app_context = create_test_app_context();
+    let mut window = PromptWindow::new(Arc::clone(&app_context));
+    window.register_action_handler(tx).unwrap();
+    window.focus();
+    window.update(Action::Paste("one\ntwo\nthree".to_owned()));
+    window.unfocus();
+    while rx.try_recv().is_ok() {}
+    let mut terminal = Terminal::new(TestBackend::new(30, 5)).unwrap();
+    for _ in 0..3 {
+        terminal
+            .draw(|frame| window.draw(frame, frame.area()).unwrap())
+            .unwrap();
+        app_context.clear_render_flag();
+    }
+    assert!(rx.try_recv().is_err());
+    assert_eq!(app_context.prompt_extra_rows(), 0);
+    terminal
+        .draw(|frame| window.draw(frame, frame.area()).unwrap())
+        .unwrap();
+    assert!(
+        !app_context.needs_render(),
+        "a steady prompt asks for no redraw"
     );
 }
 

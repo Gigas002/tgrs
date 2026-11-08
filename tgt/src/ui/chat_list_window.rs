@@ -521,39 +521,29 @@ impl ChatListWindow {
         {
             let mut config = nucleo_matcher::Config::DEFAULT;
             config.prefer_prefix = true;
-            let mut matcher = Matcher::new(config.clone());
-            let search_chars: Vec<char> = s.chars().collect();
-            items.retain(|chat| {
-                let chat_name_chars: Vec<char> = chat.chat_name.chars().collect();
-                matcher
-                    .fuzzy_indices(
-                        Utf32Str::Unicode(&chat_name_chars),
-                        Utf32Str::Unicode(&search_chars),
-                        &mut Vec::new(),
-                    )
-                    .is_some()
-            });
             let mut matcher = Matcher::new(config);
-            items.sort_by(|a, b| {
-                let a: Vec<char> = a.chat_name.chars().collect();
-                let b: Vec<char> = b.chat_name.chars().collect();
-                let a_score = matcher
-                    .fuzzy_indices(
-                        Utf32Str::Unicode(&a),
-                        Utf32Str::Unicode(&search_chars),
-                        &mut Vec::new(),
-                    )
-                    .unwrap_or(0);
-                let b_score = matcher
-                    .fuzzy_indices(
-                        Utf32Str::Unicode(&b),
-                        Utf32Str::Unicode(&search_chars),
-                        &mut Vec::new(),
-                    )
-                    .unwrap_or(0);
-                a_score.cmp(&b_score)
-            });
-            items.reverse();
+            let search_chars: Vec<char> = s.chars().collect();
+            let mut name_chars = Vec::new();
+            let mut indices = Vec::new();
+            // Scored once each; the chats that don't match are left out
+            let mut scored: Vec<(u16, ChatListEntry)> = items
+                .into_iter()
+                .filter_map(|chat| {
+                    name_chars.clear();
+                    name_chars.extend(chat.chat_name.chars());
+                    indices.clear();
+                    matcher
+                        .fuzzy_indices(
+                            Utf32Str::Unicode(&name_chars),
+                            Utf32Str::Unicode(&search_chars),
+                            &mut indices,
+                        )
+                        .map(|score| (score, chat))
+                })
+                .collect();
+            // Best first; equal scores keep the chat list's order (recent first)
+            scored.sort_by_key(|(score, _)| std::cmp::Reverse(*score));
+            items = scored.into_iter().map(|(_, chat)| chat).collect();
         }
         self.visible_chats = items;
 
@@ -796,9 +786,18 @@ impl Component for ChatListWindow {
         self.last_list_area = Some(inner);
         let width = usize::from(inner.width);
         let selected = self.chat_list_state.selected();
-        let items = self.visible_chats.iter().enumerate().map(|(index, item)| {
-            chat_list_item_text(item, &self.app_context, width, selected == Some(index))
-        });
+        // Only the rows the list can show from its offset (or the selection) are laid out
+        let reach = self.chat_list_state.offset().max(selected.unwrap_or(0))
+            + usize::from(inner.height)
+            + 1;
+        let items = self
+            .visible_chats
+            .iter()
+            .take(reach)
+            .enumerate()
+            .map(|(index, item)| {
+                chat_list_item_text(item, &self.app_context, width, selected == Some(index))
+            });
         // The selection is drawn by the rows: marker and highlighted background
         let list = List::new(items)
             .block(block)

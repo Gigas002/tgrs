@@ -56,9 +56,16 @@ const MAX_TOPICS: usize = 1000;
 /// Chats with notifications shown at once; any positive value enables them.
 const NOTIFICATION_GROUP_COUNT_MAX: i64 = 25;
 
-pub struct Client {
+/// The requests that only need the client id and the store. Cheap to
+/// clone into background tasks, so slow requests don't hold up the caller.
+#[derive(Clone)]
+pub struct Requests {
     client_id: i32,
     store: Arc<Store>,
+}
+
+pub struct Client {
+    requests: Requests,
     params: TdParams,
     auth_rx: UnboundedReceiver<AuthorizationState>,
     auth_tx: UnboundedSender<AuthorizationState>,
@@ -79,8 +86,7 @@ impl Client {
         tracing::info!("Created TDLib client with client_id: {}", client_id);
 
         Self {
-            client_id,
-            store,
+            requests: Requests { client_id, store },
             params,
             auth_rx,
             auth_tx,
@@ -96,6 +102,11 @@ impl Client {
         &self.store
     }
 
+    /// The requests that can run in a background task.
+    pub fn requests(&self) -> Requests {
+        self.requests.clone()
+    }
+
     pub fn client_id(&self) -> i32 {
         self.client_id
     }
@@ -108,13 +119,6 @@ impl Client {
     /// or when the given key didn't match and the database was opened unencrypted.
     pub fn is_database_encrypted(&self) -> bool {
         self.database_encrypted
-    }
-
-    /// A handle for downloading files that can be moved into other tasks.
-    pub fn files(&self) -> Files {
-        Files {
-            client_id: self.client_id,
-        }
     }
 
     /// Starts the TDLib update loop; changes are announced on `notify`.
@@ -277,7 +281,7 @@ impl Client {
     async fn set_tdlib_parameters(&self, database_encryption_key: String) -> Result<(), TdError> {
         let params = &self.params;
         functions::set_tdlib_parameters(
-            false,
+            params.use_test_dc,
             params.database_dir.to_string_lossy().into_owned(),
             String::new(),
             database_encryption_key,
@@ -359,6 +363,23 @@ impl Client {
     pub async fn load_all_chats(&mut self) {
         while !self.full_chat_lists.contains(&TdChatList::Main) {
             self.load_chats(ChatList::Main, HISTORY_BATCH).await;
+        }
+    }
+}
+
+impl std::ops::Deref for Client {
+    type Target = Requests;
+
+    fn deref(&self) -> &Requests {
+        &self.requests
+    }
+}
+
+impl Requests {
+    /// A handle for downloading files that can be moved into other tasks.
+    pub fn files(&self) -> Files {
+        Files {
+            client_id: self.client_id,
         }
     }
 

@@ -10,9 +10,6 @@
 # mouse_support = true
 # Bracketed paste support in the terminal.
 # paste_support = true
-# Frames per second. Lower values reduce CPU usage when idle
-# (120 ultra smooth, 60 smooth, 30 balanced, 15 battery saving).
-# frame_rate = 60.0
 # Show the status bar at the bottom of the terminal.
 # show_status_bar = true
 # Show the title bar at the top of the terminal.
@@ -47,6 +44,9 @@
 # use_chat_info_database = true
 # Keep chats and messages between restarts.
 # use_message_database = true
+# Use Telegram's test servers, which have their own accounts; for development.
+# Keep their database apart from your real one with `database_dir`.
+# use_test_dc = false
 # IETF language tag of the system language.
 # system_language_code = "en"
 # Device model reported to Telegram.

@@ -68,7 +68,6 @@ fn defaults_follow_xdg() {
     assert_eq!(settings.telegram.api_id, DEFAULT_API_ID);
     assert_eq!(settings.telegram.api_hash, DEFAULT_API_HASH);
     assert!(settings.telegram.use_message_database);
-    assert_eq!(settings.app.frame_rate, DEFAULT_FRAME_RATE);
     assert_eq!(settings.logging.level, LogLevel::Info);
     assert_eq!(settings.theme, Theme::default());
     assert!(settings.warnings.is_empty());
@@ -107,7 +106,6 @@ fn config_file_values_apply() {
         "config.toml",
         r#"
         [app]
-        frame_rate = 30.0
         use_emoji_icons = true
         download_dir = "~/dl"
 
@@ -135,7 +133,6 @@ fn config_file_values_apply() {
     let settings = env.resolve(CliOverrides::default()).unwrap();
     let home = env.home();
 
-    assert_eq!(settings.app.frame_rate, 30.0);
     assert!(settings.app.use_emoji_icons);
     assert_eq!(settings.app.download_dir, home.join("dl"));
     assert_eq!(settings.credentials, CredentialStore::Plain);
@@ -247,12 +244,6 @@ fn invalid_numbers_are_rejected() {
     assert!(matches!(
         env.resolve(CliOverrides::default()),
         Err(SettingsError::LogKeep)
-    ));
-
-    env.write_config("config.toml", "[app]\nframe_rate = 0.0\n");
-    assert!(matches!(
-        env.resolve(CliOverrides::default()),
-        Err(SettingsError::FrameRate)
     ));
 }
 

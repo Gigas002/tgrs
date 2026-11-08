@@ -47,7 +47,6 @@ pub struct FileConfig {
 pub struct AppFile {
     pub mouse_support: Option<bool>,
     pub paste_support: Option<bool>,
-    pub frame_rate: Option<f64>,
     pub show_status_bar: Option<bool>,
     pub show_title_bar: Option<bool>,
     pub use_emoji_icons: Option<bool>,
@@ -75,6 +74,7 @@ pub struct TelegramFile {
     pub use_file_database: Option<bool>,
     pub use_chat_info_database: Option<bool>,
     pub use_message_database: Option<bool>,
+    pub use_test_dc: Option<bool>,
     pub system_language_code: Option<String>,
     pub device_model: Option<String>,
     pub log_verbosity: Option<i32>,

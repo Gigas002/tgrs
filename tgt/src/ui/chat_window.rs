@@ -668,10 +668,24 @@ impl Component for ChatWindow {
             })
             .flatten();
         let selected = self.message_list_state.selected();
-        let mut items: Vec<ListItem<'_>> = Vec::with_capacity(self.message_list.len() + 1);
+        let loading = self.app_context.store().is_history_loading();
+        // Every item, newest first in the list widget: the loading row, then the messages
+        let item_count = self.message_list.len() + usize::from(loading);
+        // Only the messages the list can reach from its offset (or the selection)
+        // are laid out: each takes at least one row
+        let reach = self
+            .message_list_state
+            .offset()
+            .max(selected.map_or(0, |i| item_count.saturating_sub(1).saturating_sub(i)))
+            + usize::from(list_inner.height)
+            + 1;
+        let first_laid_out = item_count
+            .saturating_sub(reach)
+            .min(self.message_list.len());
+        let mut items: Vec<ListItem<'_>> = Vec::with_capacity(reach.min(item_count));
         #[cfg(feature = "media-preview")]
-        let mut slots: Vec<PreviewSlot> = Vec::with_capacity(self.message_list.len() + 1);
-        for (index, entry) in self.message_list.iter().enumerate() {
+        let mut slots: Vec<PreviewSlot> = Vec::with_capacity(reach.min(item_count));
+        for (index, entry) in self.message_list.iter().enumerate().skip(first_laid_out) {
             let previous = index
                 .checked_sub(1)
                 .and_then(|index| self.message_list.get(index));
@@ -695,7 +709,7 @@ impl Component for ChatWindow {
             );
             items.push(ListItem::new(laid_out.lines));
         }
-        if self.app_context.store().is_history_loading() {
+        if loading {
             items.push(ListItem::new(Line::from(Span::styled(
                 "Loading…",
                 self.app_context.style(HighlightGroup::Loading),
@@ -718,7 +732,6 @@ impl Component for ChatWindow {
         // "first" item is newest; with BottomToTop that draws at the bottom, keeping
         // visual order: oldest at top, newest at bottom.
         items.reverse();
-        let item_count = items.len();
 
         // Selection is stored as index into message_list (oldest=0). In reversed list,
         // newest=0, oldest=len-1. Convert to list index for the widget, then back after render.

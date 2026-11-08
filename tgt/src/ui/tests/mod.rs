@@ -96,3 +96,5 @@ fn the_screen_has_a_header_panes_and_hints() {
     assert!(last.contains("Alt+F1 help"), "{screen}");
     assert!(last.contains("q quit"), "{screen}");
 }
+
+mod perf;

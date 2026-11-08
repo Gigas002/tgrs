@@ -18,8 +18,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crossterm::event::KeyCode;
 use libtgt::{
-    client::{Client, Notification},
+    client::{Client, Notification, Requests},
     model::{
         ReportStep, SignInAlert, TdMessageReplyToMessage, TransferState, format_size,
         profile_change_failure,
@@ -51,8 +52,56 @@ use crate::{
 const HISTORY_BATCH: i32 = 50;
 /// Chats fetched at startup so the list reaches its latest state quickly.
 const INITIAL_CHATS: i32 = 200;
-/// Redraw tick (~60 FPS).
-const REFRESH_MS: u64 = 16;
+/// How often the screen is redrawn with nothing else happening, for what
+/// expires with time (status messages, typing notices).
+const CLOCK_TICK: Duration = Duration::from_secs(1);
+
+/// A background job: a Telegram request and what follows from its answer.
+type Job = futures::future::BoxFuture<'static, ()>;
+
+/// Runs jobs one at a time, in the order they came, off the UI loop: a slow
+/// request then never holds up typing or drawing.
+struct Worker(UnboundedSender<Job>);
+
+impl Worker {
+    fn start() -> Self {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Job>();
+        tokio::spawn(async move {
+            while let Some(job) = rx.recv().await {
+                // Its own task, so a job that panics doesn't stop the ones after it
+                if let Err(e) = tokio::spawn(job).await {
+                    tracing::error!("a background request failed: {e}");
+                }
+            }
+        });
+        Self(tx)
+    }
+
+    fn run(&self, job: impl Future<Output = ()> + Send + 'static) {
+        let _ = self.0.send(Box::pin(job));
+    }
+}
+
+/// Background workers: what we send (kept in order: messages, edits,
+/// reactions, typing, read marks, drafts) and what we load (history, pins,
+/// topics, search), so a long history load doesn't hold up sending.
+struct Workers {
+    send: Worker,
+    load: Worker,
+    /// A read mark is waiting to be sent: it covers every message up to
+    /// then, so a busy chat doesn't queue one per message ahead of ours.
+    view_pending: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl Workers {
+    fn start() -> Self {
+        Self {
+            send: Worker::start(),
+            load: Worker::start(),
+            view_pending: Arc::default(),
+        }
+    }
+}
 
 /// Runs the command selected on the command line.
 pub fn run(settings: &Settings) -> Result<(), AppError> {
@@ -121,6 +170,9 @@ async fn run_telegram(settings: &Settings) -> Result<(), AppError> {
 }
 
 /// The TUI event loop.
+// The action receiver's lock is held while waiting: the loop is its only
+// reader, and it's let go before the actions are handled.
+#[allow(clippy::await_holding_lock)]
 async fn run_tui(
     app_context: Arc<AppContext>,
     client: &mut Client,
@@ -153,30 +205,30 @@ async fn run_tui(
         app_context.action_tx().send(Action::TrimCache)?;
     }
 
-    let (wake_tx, mut wake_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
-    let refresh_tx = app_context.action_tx().clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_millis(REFRESH_MS));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            interval.tick().await;
-            if refresh_tx.send(Action::Refresh).is_err() {
-                break;
-            }
-            let _ = wake_tx.send(());
-        }
-    });
+    let workers = Workers::start();
+    // Only for what changes with time alone: status messages and typing
+    // notices expiring. Everything else redraws when it changes.
+    let mut clock = tokio::time::interval(CLOCK_TICK);
+    clock.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-    // One blocking wait (tick | notification), then drain every queue.
+    // Sleep until something happens, handle everything queued, then draw
+    // once if anything changed.
     let result = loop {
+        let mut event = None;
         let mut notification = None;
-        tokio::select! {
-            _ = tokio::time::sleep(Duration::from_millis(REFRESH_MS)) => {}
-            _ = wake_rx.recv() => {}
-            n = notify_rx.recv() => notification = n,
+        let mut action = None;
+        {
+            let mut action_rx = app_context.action_rx();
+            tokio::select! {
+                e = tui_backend.next() => event = e,
+                n = notify_rx.recv() => notification = n,
+                a = action_rx.recv() => action = a,
+                _ = clock.tick() => app_context.mark_dirty(),
+            }
         }
         let step = async {
-            while let Some(ev) = tui_backend.try_next() {
+            let mut event = event;
+            while let Some(ev) = event.take().or_else(|| tui_backend.try_next()) {
                 handle_tui_backend_one_event(
                     Arc::clone(&app_context),
                     &mut tui,
@@ -191,10 +243,26 @@ async fn run_tui(
             {
                 handle_notification(&app_context, n)?;
             }
-            handle_app_actions(Arc::clone(&app_context), &mut tui, &mut tui_backend, client).await
+            handle_app_actions(
+                Arc::clone(&app_context),
+                &mut tui,
+                &mut tui_backend,
+                client,
+                &workers,
+                action,
+            )
+            .await
         };
         if let Err(err) = step.await {
             break Err(err);
+        }
+        if app_context.should_render() {
+            if let Err(err) = tui_backend.terminal.draw(|f| {
+                tui.draw(f, f.area()).unwrap();
+            }) {
+                break Err(err.into());
+            }
+            app_context.clear_render_flag();
         }
         if app_context.quit_acquire() || !client.is_authorized() {
             break Ok(());
@@ -339,8 +407,9 @@ async fn handle_tui_backend_one_event(
     tui_backend: &mut TuiBackend,
     event: Event,
 ) -> Result<(), AppError> {
+    // Input is answered on screen right away
+    app_context.mark_dirty();
     match event {
-        Event::Render => app_context.mark_dirty(),
         Event::Resize(width, height) => {
             app_context.mark_dirty();
             app_context
@@ -355,9 +424,9 @@ async fn handle_tui_backend_one_event(
             if focused == Some(ComponentName::LeaderMenu) {
                 return handle_leader_key(&app_context, &key_event);
             }
-            // The chat search takes typed characters as text
+            // The chat search takes typed characters as text, and Esc ends it
             let typing = focused == Some(ComponentName::ChatList) && app_context.is_typing();
-            if typing && is_plain_char(&key_event) {
+            if typing && (is_plain_char(&key_event) || key == KeyCode::Esc) {
                 app_context
                     .action_tx()
                     .send(Action::Key(key, modifiers.into()))?;
@@ -488,177 +557,6 @@ fn fold_chat_list_refresh_actions(actions: Vec<Action>) -> Vec<Action> {
     out
 }
 
-/// Returns true for actions that change UI-visible state and should trigger a render.
-fn action_changes_ui(action: &Action) -> bool {
-    matches!(
-        action,
-        Action::FocusComponent(_)
-            | Action::ChatListNext
-            | Action::ChatListPrevious
-            | Action::ChatListSearch
-            | Action::ChatListOpen
-            | Action::ChatListSortWithString(_)
-            | Action::ChatListRestoreSort
-            | Action::ChatWindowNext
-            | Action::ChatWindowPrevious
-            | Action::ChatWindowSearch
-            | Action::ChatWindowSortWithString(_)
-            | Action::ChatWindowRestoreSort
-            | Action::SearchChatMessages(_)
-            | Action::SearchResults(_)
-            | Action::JumpToMessage(_)
-            | Action::JumpCompleted(_)
-            | Action::CloseSearchOverlay
-            | Action::ShowSearchOverlay
-            | Action::SearchOverlaySubmit
-            | Action::SearchOverlayConfirm
-            | Action::ShowMessageActionsFor(_)
-            | Action::ShowChatActionsFor(..)
-            | Action::HideChatActions
-            | Action::ChatActionsNext
-            | Action::ChatActionsPrevious
-            | Action::ChatActionsConfirm
-            | Action::ShowFindChat
-            | Action::MovePinnedChat(_)
-            | Action::ShowReport(..)
-            | Action::HideReport
-            | Action::ReportNext
-            | Action::ReportPrevious
-            | Action::ReportConfirm
-            | Action::ReportStepped(_)
-            | Action::ReportFailed(_)
-            | Action::ShowBlockedList
-            | Action::HideBlockedList
-            | Action::BlockedListLoaded(_)
-            | Action::BlockedListNext
-            | Action::BlockedListPrevious
-            | Action::BlockedListUnblock
-            | Action::ShowForward(..)
-            | Action::HideForward
-            | Action::ForwardNext
-            | Action::ForwardPrevious
-            | Action::ForwardToggleCopy
-            | Action::ForwardConfirm
-            | Action::ShowDownloads
-            | Action::HideDownloads
-            | Action::DownloadsNext
-            | Action::DownloadsPrevious
-            | Action::DownloadsTogglePause
-            | Action::DownloadsCancel
-            | Action::DownloadsOpen
-            | Action::DownloadsClearFinished
-            | Action::ShowNotificationSettings
-            | Action::HideNotificationSettings
-            | Action::NotificationSettingsLoaded(_)
-            | Action::NotificationSettingsNext
-            | Action::NotificationSettingsPrevious
-            | Action::NotificationSettingsToggle
-            | Action::ShowPrivacy
-            | Action::HidePrivacy
-            | Action::PrivacyLoaded(_)
-            | Action::PrivacyNext
-            | Action::PrivacyPrevious
-            | Action::PrivacyCycle
-            | Action::PrivacyAlways
-            | Action::PrivacyNever
-            | Action::PrivacyFollow
-            | Action::ShowStorage
-            | Action::HideStorage
-            | Action::StorageLoaded(_)
-            | Action::StorageNext
-            | Action::StoragePrevious
-            | Action::StorageClearAll
-            | Action::StorageClearChat
-            | Action::ShowSessions
-            | Action::HideSessions
-            | Action::SessionsLoaded(_)
-            | Action::SessionsNext
-            | Action::SessionsPrevious
-            | Action::SessionsTerminate
-            | Action::SessionsTerminateOthers
-            | Action::SessionsConfirm
-            | Action::HideFindChat
-            | Action::FindChatConfirm
-            | Action::FindChatFailed(_)
-            | Action::OpenChatById(_)
-            | Action::ShowProfileFor(_)
-            | Action::ProfileLoaded(_)
-            | Action::HideProfile
-            | Action::ProfileScrollDown
-            | Action::ProfileScrollUp
-            | Action::PromptPasteImage
-            | Action::PromptToggleSilent
-            | Action::ShowEditProfile
-            | Action::HideEditProfile
-            | Action::EditProfileNextField
-            | Action::EditProfilePreviousField
-            | Action::EditProfileConfirm
-            | Action::EditProfileLoaded
-            | Action::EditProfileFailed(..)
-            | Action::ProfileSaved
-            | Action::HideMessageActions
-            | Action::MessageActionsPrevious
-            | Action::MessageActionsNext
-            | Action::ShowLeaderMenu
-            | Action::HideLeaderMenu
-            | Action::FocusNextPane
-            | Action::FocusPreviousPane
-            | Action::ResizePaneWider
-            | Action::ResizePaneNarrower
-            | Action::ResizePaneTaller
-            | Action::ResizePaneShorter
-            | Action::UnfocusComponent
-            | Action::ShowPicker(_)
-            | Action::HidePicker
-            | Action::PickerPrevious
-            | Action::PickerNext
-            | Action::ShowStickerPicker
-            | Action::HideStickerPicker
-            | Action::StickerSetsLoaded(_)
-            | Action::StickerSetLoaded(_)
-            | Action::StickerPickerLeft
-            | Action::StickerPickerRight
-            | Action::StickerPickerUp
-            | Action::StickerPickerDown
-            | Action::StickerPickerNextSet
-            | Action::StickerPickerPreviousSet
-            | Action::RunMessageCommand(..)
-            | Action::StatusMessage(_)
-            | Action::ShowFileUploadExplorer
-            | Action::HideFileUploadExplorer
-            | Action::LoadPinnedMessages
-            | Action::ShowPinnedMessagesPopup
-            | Action::PinnedPopupConfirmJump
-            | Action::HidePinnedMessagesPopup
-            | Action::PinnedPopupPrevious
-            | Action::PinnedPopupNext
-            | Action::Refresh
-            | Action::ToggleChatList
-            | Action::ToggleArchiveList
-            | Action::CloseArchiveList
-            | Action::ArchiveListNext
-            | Action::ArchiveListPrevious
-            | Action::ArchiveListOpen
-            | Action::ToggleTopicList
-            | Action::LoadForumTopics
-            | Action::TopicListNext
-            | Action::TopicListPrevious
-            | Action::TopicListOpen
-            | Action::IncreaseChatListSize
-            | Action::DecreaseChatListSize
-            | Action::IncreasePromptSize
-            | Action::DecreasePromptSize
-            | Action::HideChatWindowReply
-            | Action::EditMessage(_, _)
-            | Action::ReplyMessage(_, _)
-            | Action::ShowCommandGuide
-            | Action::HideCommandGuide
-            | Action::UpdateArea(_)
-            | Action::GetChatHistoryNewer
-            | Action::ChatHistoryAppended
-    ) || preview_changes_ui(action)
-}
-
 /// Runs a chat action and says how it went in the status bar. A chat that is
 /// left or deleted while open is closed.
 async fn run_chat_command(
@@ -725,16 +623,6 @@ fn close_chat(app_context: &AppContext, chat_id: i64) {
     store.clear_reply_message();
 }
 
-#[cfg(feature = "media-preview")]
-fn preview_changes_ui(action: &Action) -> bool {
-    matches!(action, Action::PreviewDecoded(_))
-}
-
-#[cfg(not(feature = "media-preview"))]
-fn preview_changes_ui(_: &Action) -> bool {
-    false
-}
-
 /// Handle incoming actions from the application.
 ///
 /// Bursts of [`Action::ChatHistoryAppended`] / [`Action::Refresh`] are folded before handling
@@ -756,8 +644,10 @@ async fn handle_app_actions(
     tui: &mut Tui,
     tui_backend: &mut TuiBackend,
     client: &mut Client,
+    workers: &Workers,
+    first: Option<Action>,
 ) -> Result<(), AppError> {
-    let mut batch = Vec::new();
+    let mut batch: Vec<Action> = first.into_iter().collect();
     while let Ok(a) = app_context.action_rx().try_recv() {
         batch.push(a);
     }
@@ -777,6 +667,8 @@ async fn handle_app_actions(
         );
     }
 
+    // Whatever the actions change is drawn: one frame for the whole batch
+    app_context.mark_dirty();
     for action in folded {
         match &action {
             Action::Render => {
@@ -817,19 +709,28 @@ async fn handle_app_actions(
                         std::time::Instant::now(),
                     )
                 {
-                    client.send_typing(chat_id, store.open_send_topic()).await;
+                    let requests = client.requests();
+                    let topic = store.open_send_topic();
+                    workers
+                        .send
+                        .run(async move { requests.send_typing(chat_id, topic).await });
                 }
             }
             Action::SendMessage(message, reply_to) => {
                 app_context.reset_typing();
-                let _ = client
-                    .send_message(
-                        message.to_string(),
-                        app_context.store().open_chat_id().as_i64(),
-                        app_context.store().open_send_topic(),
-                        reply_to.clone(),
-                    )
-                    .await;
+                let requests = client.requests();
+                let (message, reply_to) = (message.to_string(), reply_to.clone());
+                let chat_id = app_context.store().open_chat_id().as_i64();
+                let topic = app_context.store().open_send_topic();
+                let ctx = Arc::clone(&app_context);
+                workers.send.run(async move {
+                    if let Err(e) = requests
+                        .send_message(message, chat_id, topic, reply_to)
+                        .await
+                    {
+                        media::status(&ctx, format!("Message not sent: {}", e.message));
+                    }
+                });
                 app_context.action_tx().send(Action::HideChatWindowReply)?;
             }
             Action::SendReport(request) => {
@@ -1062,9 +963,14 @@ async fn handle_app_actions(
                 app_context.action_tx().send(result)?;
             }
             Action::SaveDraft(chat_id, topic_id, text) => {
-                if let Err(e) = client.set_draft(*chat_id, *topic_id, text).await {
-                    media::status(&app_context, format!("Can't save the draft: {}", e.message));
-                }
+                let requests = client.requests();
+                let (chat_id, topic_id, text) = (*chat_id, *topic_id, text.clone());
+                let ctx = Arc::clone(&app_context);
+                workers.send.run(async move {
+                    if let Err(e) = requests.set_draft(chat_id, topic_id, &text).await {
+                        media::status(&ctx, format!("Can't save the draft: {}", e.message));
+                    }
+                });
             }
             Action::SetPinnedChats(archived, order) => {
                 if let Err(e) = client.set_pinned_chats(*archived, order.clone()).await {
@@ -1101,16 +1007,29 @@ async fn handle_app_actions(
                     });
                 let replying = reply_to.is_some();
                 let topic = store.open_send_topic();
-                if let Err(e) = client.send_sticker(sticker, chat_id, topic, reply_to).await {
-                    media::status(&app_context, format!("Sticker not sent: {}", e.message));
-                } else if replying {
-                    app_context.action_tx().send(Action::HideChatWindowReply)?;
-                }
+                let requests = client.requests();
+                let sticker = sticker.clone();
+                let ctx = Arc::clone(&app_context);
+                workers.send.run(async move {
+                    if let Err(e) = requests
+                        .send_sticker(&sticker, chat_id, topic, reply_to)
+                        .await
+                    {
+                        media::status(&ctx, format!("Sticker not sent: {}", e.message));
+                    } else if replying {
+                        let _ = ctx.action_tx().send(Action::HideChatWindowReply);
+                    }
+                });
             }
             Action::SendMessageEdited(message_id, message) => {
-                if let Err(e) = client.edit_message(*message_id, message.to_string()).await {
-                    media::status(&app_context, format!("Not edited: {}", e.message));
-                }
+                let requests = client.requests();
+                let (message_id, message) = (*message_id, message.to_string());
+                let ctx = Arc::clone(&app_context);
+                workers.send.run(async move {
+                    if let Err(e) = requests.edit_message(message_id, message).await {
+                        media::status(&ctx, format!("Not edited: {}", e.message));
+                    }
+                });
             }
             Action::SendFile(file_path, caption, reply_to) => {
                 let chat_id = app_context.store().open_chat_id().as_i64();
@@ -1201,12 +1120,14 @@ async fn handle_app_actions(
             }
             Action::SetReaction(message_id, emoji, add) => {
                 let chat_id = app_context.store().open_chat_id().as_i64();
-                if let Err(e) = client
-                    .set_reaction(chat_id, *message_id, emoji.clone(), *add)
-                    .await
-                {
-                    media::status(&app_context, format!("Can't react: {}", e.message));
-                }
+                let requests = client.requests();
+                let (message_id, emoji, add) = (*message_id, emoji.clone(), *add);
+                let ctx = Arc::clone(&app_context);
+                workers.send.run(async move {
+                    if let Err(e) = requests.set_reaction(chat_id, message_id, emoji, add).await {
+                        media::status(&ctx, format!("Can't react: {}", e.message));
+                    }
+                });
             }
             Action::SetPinned(message_id, pinned) => {
                 let chat_id = app_context.store().open_chat_id().as_i64();
@@ -1242,280 +1163,50 @@ async fn handle_app_actions(
                 media::load_preview(&app_context, client.files(), request.clone());
             }
             Action::LoadForumTopics => {
-                let chat_id = app_context.store().open_chat_id().as_i64();
-                match client.get_forum_topics(chat_id).await {
-                    Ok(topics) if app_context.store().open_chat_id().as_i64() == chat_id => {
-                        app_context.store().set_open_chat_topics(topics);
-                    }
-                    Ok(_) => {}
-                    Err(e) => media::status(&app_context, format!("No topics: {}", e.message)),
-                }
+                let (ctx, requests) = (Arc::clone(&app_context), client.requests());
+                workers.load.run(load_forum_topics(ctx, requests));
             }
             Action::GetChatHistory if !app_context.store().is_history_loading() => {
+                // Set now: the request that follows waits for this one
                 app_context.store().set_history_loading(true);
-                let chat_id = app_context.store().open_chat_id().as_i64();
-                let topic_id = app_context.store().open_topic_id();
-                let cache_len_before = app_context.store().open_chat_messages().len();
-
-                // An empty cache (initial load) gets two batches to fill the window,
-                // incremental scrolling one.
-                let target_load = if cache_len_before == 0 {
-                    2 * HISTORY_BATCH as usize
-                } else {
-                    HISTORY_BATCH as usize
-                };
-                let mut loaded_count = 0;
-
-                while loaded_count < target_load {
-                    if app_context.store().open_chat_id().as_i64() != chat_id
-                        || app_context.store().open_topic_id() != topic_id
-                    {
-                        break;
-                    }
-
-                    // Always use the oldest message in cache (or 0 if empty) to ensure continuity
-                    let from_message_id = app_context.store().oldest_message_id().unwrap_or(0);
-                    let (entries, _has_more) = client
-                        .get_chat_history_batch(
-                            chat_id,
-                            topic_id,
-                            from_message_id,
-                            0,
-                            HISTORY_BATCH,
-                        )
-                        .await;
-
-                    if entries.is_empty() {
-                        break;
-                    }
-
-                    if app_context.store().open_chat_id().as_i64() != chat_id
-                        || app_context.store().open_topic_id() != topic_id
-                    {
-                        break;
-                    }
-
-                    loaded_count += entries.len();
-                    app_context
-                        .store()
-                        .open_chat_messages()
-                        .insert_messages(entries);
-                }
-
-                app_context.store().set_history_loading(false);
-                let _ = app_context.action_tx().send(Action::ChatHistoryAppended);
+                let (ctx, requests) = (Arc::clone(&app_context), client.requests());
+                workers.load.run(load_older_history(ctx, requests));
             }
             Action::LoadPinnedMessages => {
-                let chat_id = app_context.store().open_chat_id().as_i64();
-                if chat_id == 0 {
-                    continue;
-                }
-                let topic_id = app_context.store().open_topic_id();
-                let topic = app_context.store().open_message_topic();
-                let pins = client.fetch_all_pinned_messages(chat_id, topic).await;
-                if app_context.store().open_chat_id().as_i64() == chat_id
-                    && app_context.store().open_topic_id() == topic_id
-                {
-                    app_context.store().set_open_chat_pinned(pins);
-                }
+                let (ctx, requests) = (Arc::clone(&app_context), client.requests());
+                workers.load.run(load_pinned_messages(ctx, requests));
             }
             Action::GetChatHistoryNewer if !app_context.store().is_history_loading() => {
-                let chat_id = app_context.store().open_chat_id().as_i64();
-                let topic_id = app_context.store().open_topic_id();
-                let newest = app_context.store().open_chat_messages().newest_message_id();
-                if let Some(from_id) = newest {
-                    app_context.store().set_history_loading(true);
-                    // TDLib: offset -N = from_message_id + N newer messages; limit >= -offset
-                    // Use offset -49 to get from_id (which we already have) + 49 newer, then filter out from_id
-                    let (entries, _) = client
-                        .get_chat_history_batch(
-                            chat_id,
-                            topic_id,
-                            from_id,
-                            -(HISTORY_BATCH - 1),
-                            HISTORY_BATCH,
-                        )
-                        .await;
-                    if app_context.store().open_chat_id().as_i64() == chat_id
-                        && app_context.store().open_topic_id() == topic_id
-                        && !entries.is_empty()
-                    {
-                        // Skip the first message if it's the boundary message we already have
-                        let new_messages = if entries.first().map(|e| e.id()) == Some(from_id) {
-                            &entries[1..]
-                        } else {
-                            &entries[..]
-                        };
-                        if !new_messages.is_empty() {
-                            app_context
-                                .store()
-                                .open_chat_messages()
-                                .insert_messages(new_messages.iter().cloned());
-                        }
-                    }
-                    app_context.store().set_history_loading(false);
-                    let _ = app_context.action_tx().send(Action::ChatHistoryAppended);
-                }
-            }
-            Action::SearchChatMessages(query) => {
-                let chat_id = app_context.store().open_chat_id().as_i64();
-                if chat_id == 0 {
-                    let _ = app_context.action_tx().send(Action::StatusMessage(
-                        "Open a chat before searching messages.".into(),
-                    ));
-                    continue;
-                }
-                let topic = app_context.store().open_message_topic();
-                match client
-                    .search_chat_messages(chat_id, topic, query.clone(), HISTORY_BATCH)
-                    .await
-                {
-                    Ok(entries) => {
-                        let _ = app_context.action_tx().send(Action::StatusMessage(format!(
-                            "Search results: {}",
-                            entries.len()
-                        )));
-                        let _ = app_context.action_tx().send(Action::SearchResults(entries));
-                    }
-                    Err(e) => {
-                        let _ = app_context.action_tx().send(Action::StatusMessage(format!(
-                            "Search failed: {}",
-                            e.message
-                        )));
-                        let _ = app_context.action_tx().send(Action::SearchResults(vec![]));
-                    }
-                }
-            }
-            Action::JumpToMessage(message_id) => {
-                let chat_id = app_context.store().open_chat_id().as_i64();
-                let topic_id = app_context.store().open_topic_id();
-                if chat_id == 0 {
-                    continue;
-                }
-                // If message already loaded, just select it; don't clear (avoids wiping chat).
                 if app_context
                     .store()
                     .open_chat_messages()
-                    .get_message(*message_id)
+                    .newest_message_id()
                     .is_some()
                 {
-                    app_context
-                        .store()
-                        .set_jump_target_message_id_i64(*message_id);
-                    let _ = app_context
-                        .action_tx()
-                        .send(Action::JumpCompleted(*message_id));
-                    let _ = app_context.action_tx().send(Action::ChatHistoryAppended);
-                    continue;
+                    app_context.store().set_history_loading(true);
+                    let (ctx, requests) = (Arc::clone(&app_context), client.requests());
+                    workers.load.run(load_newer_history(ctx, requests));
                 }
-
-                // Clear chat history BEFORE loading new messages to ensure clean slate
-                app_context.store().clear_open_chat_messages();
-                app_context.store().set_history_loading(true);
-
-                // Load symmetric window around target message
-                // TDLib limitation: offset must be > -100, so we can't load 250 newer in one call
-                // Strategy: Load target + older messages, then load newer in multiple batches
-                const OLDER_LIMIT: i32 = 100; // target + 99 older messages
-                const NEWER_BATCH_SIZE: i32 = 99; // max we can use with offset -98
-                const NEWER_BATCHES: usize = 3; // 3 batches of ~99 = ~297 newer messages
-
-                // Get target + 99 older messages (offset 0 = include from_message_id)
-                let (mut all_entries, _) = client
-                    .get_chat_history_batch(chat_id, topic_id, *message_id, 0, OLDER_LIMIT)
-                    .await;
-
-                // Load newer messages in multiple batches (TDLib offset limit is -100)
-                let mut current_from_id = *message_id;
-                for batch_num in 0..NEWER_BATCHES {
-                    let (entries_newer, _) = client
-                        .get_chat_history_batch(
-                            chat_id,
-                            topic_id,
-                            current_from_id,
-                            -(NEWER_BATCH_SIZE - 1),
-                            NEWER_BATCH_SIZE,
-                        )
-                        .await;
-
-                    if entries_newer.is_empty() {
-                        break;
-                    }
-
-                    // Filter out the boundary message (already have it from previous batch or older)
-                    let new_msgs: Vec<_> = entries_newer
-                        .into_iter()
-                        .filter(|e| e.id() != current_from_id)
-                        .collect();
-
-                    if new_msgs.is_empty() {
-                        break;
-                    }
-
-                    // Update boundary for next batch
-                    if let Some(last) = new_msgs.last() {
-                        current_from_id = last.id();
-                    }
-
-                    all_entries.extend(new_msgs);
-
-                    tracing::debug!(
-                        batch_num,
-                        loaded = all_entries.len(),
-                        "JumpToMessage: loaded newer batch"
-                    );
-                }
-
-                tracing::debug!(
-                    target_id = message_id,
-                    total_count = all_entries.len(),
-                    first = all_entries.first().map(|e| e.id()),
-                    last = all_entries.last().map(|e| e.id()),
-                    "JumpToMessage: loaded all batches"
-                );
-
-                if !all_entries.is_empty() {
-                    // Insert messages into the fresh (already cleared) cache
-                    app_context
-                        .store()
-                        .open_chat_messages()
-                        .insert_messages(all_entries);
-
-                    let final_oldest = app_context.store().oldest_message_id();
-                    let final_newest = app_context.store().newest_message_id();
-                    let has_target = app_context.store().get_message(*message_id).is_some();
-                    tracing::debug!(
-                        target_id = message_id,
-                        has_target,
-                        final_oldest,
-                        final_newest,
-                        total_cached = app_context.store().open_chat_messages().len(),
-                        "JumpToMessage: cache after insert"
-                    );
-                    // Only set jump target AFTER messages are inserted, so the message is in cache
-                    app_context
-                        .store()
-                        .set_jump_target_message_id_i64(*message_id);
-                } else {
-                    tracing::warn!(
-                        target_id = message_id,
-                        "JumpToMessage: failed to load any messages, cache is empty"
-                    );
-                }
-                app_context.store().set_history_loading(false);
-                let _ = app_context
-                    .action_tx()
-                    .send(Action::JumpCompleted(*message_id));
-                let _ = app_context.action_tx().send(Action::ChatHistoryAppended);
+            }
+            Action::SearchChatMessages(query) => {
+                let (ctx, requests) = (Arc::clone(&app_context), client.requests());
+                workers
+                    .load
+                    .run(search_chat_messages(ctx, requests, query.clone()));
+            }
+            Action::JumpToMessage(message_id) => {
+                let (ctx, requests) = (Arc::clone(&app_context), client.requests());
+                workers
+                    .load
+                    .run(jump_to_message(ctx, requests, *message_id));
             }
             Action::DeleteMessages(message_ids, revoke) => {
-                client
-                    .delete_messages(
-                        app_context.store().open_chat_id().as_i64(),
-                        message_ids.to_vec(),
-                        *revoke,
-                    )
-                    .await;
+                let requests = client.requests();
+                let chat_id = app_context.store().open_chat_id().as_i64();
+                let (message_ids, revoke) = (message_ids.to_vec(), *revoke);
+                workers.send.run(async move {
+                    requests.delete_messages(chat_id, message_ids, revoke).await;
+                });
             }
             Action::ReplyMessage(message_id, message) => {
                 app_context
@@ -1523,26 +1214,232 @@ async fn handle_app_actions(
                     .set_reply_message_i64(*message_id, message.to_string());
             }
             Action::ViewAllMessages => {
-                client.view_all_messages().await;
+                use std::sync::atomic::Ordering;
+                if !workers.view_pending.swap(true, Ordering::AcqRel) {
+                    let requests = client.requests();
+                    let pending = Arc::clone(&workers.view_pending);
+                    workers.send.run(async move {
+                        // Reads what's unread when it's sent
+                        pending.store(false, Ordering::Release);
+                        requests.view_all_messages().await;
+                    });
+                }
             }
             _ => {}
         }
 
-        if action_changes_ui(&action) {
-            app_context.mark_dirty();
-        }
-        tui.update(action.clone())
+        tui.update(action)
     }
 
     if raw_len >= 32 {
         tokio::task::yield_now().await;
     }
-
-    if app_context.should_render() {
-        tui_backend.terminal.draw(|f| {
-            tui.draw(f, f.area()).unwrap();
-        })?;
-        app_context.clear_render_flag();
-    }
     Ok(())
+}
+
+/// Loads the open forum's topics.
+async fn load_forum_topics(app_context: Arc<AppContext>, requests: Requests) {
+    let chat_id = app_context.store().open_chat_id().as_i64();
+    match requests.get_forum_topics(chat_id).await {
+        Ok(topics) if app_context.store().open_chat_id().as_i64() == chat_id => {
+            app_context.store().set_open_chat_topics(topics);
+            app_context.mark_dirty();
+        }
+        Ok(_) => {}
+        Err(e) => media::status(&app_context, format!("No topics: {}", e.message)),
+    }
+}
+
+/// Loads older messages of the open chat; the history must be marked loading.
+async fn load_older_history(app_context: Arc<AppContext>, requests: Requests) {
+    let store = app_context.store();
+    let chat_id = store.open_chat_id().as_i64();
+    let topic_id = store.open_topic_id();
+    // An empty cache (initial load) gets two batches to fill the window,
+    // incremental scrolling one.
+    let target_load = if store.open_chat_messages().is_empty() {
+        2 * HISTORY_BATCH as usize
+    } else {
+        HISTORY_BATCH as usize
+    };
+    let mut loaded_count = 0;
+    while loaded_count < target_load {
+        if store.open_chat_id().as_i64() != chat_id || store.open_topic_id() != topic_id {
+            break;
+        }
+        // Always from the oldest message in cache (or 0 if empty) for continuity
+        let from_message_id = store.oldest_message_id().unwrap_or(0);
+        let (entries, _has_more) = requests
+            .get_chat_history_batch(chat_id, topic_id, from_message_id, 0, HISTORY_BATCH)
+            .await;
+        if entries.is_empty()
+            || store.open_chat_id().as_i64() != chat_id
+            || store.open_topic_id() != topic_id
+        {
+            break;
+        }
+        loaded_count += entries.len();
+        store.open_chat_messages().insert_messages(entries);
+        // Show the first batch while the next one loads
+        let _ = app_context.action_tx().send(Action::ChatHistoryAppended);
+    }
+    store.set_history_loading(false);
+    let _ = app_context.action_tx().send(Action::ChatHistoryAppended);
+}
+
+/// Loads messages newer than the newest loaded one; the history must be
+/// marked loading.
+async fn load_newer_history(app_context: Arc<AppContext>, requests: Requests) {
+    let store = app_context.store();
+    let chat_id = store.open_chat_id().as_i64();
+    let topic_id = store.open_topic_id();
+    let newest = store.open_chat_messages().newest_message_id();
+    if let Some(from_id) = newest {
+        // TDLib: offset -N = from_message_id + N newer messages; limit >= -offset.
+        // from_id (which we have) + 49 newer, then from_id is left out.
+        let (entries, _) = requests
+            .get_chat_history_batch(
+                chat_id,
+                topic_id,
+                from_id,
+                -(HISTORY_BATCH - 1),
+                HISTORY_BATCH,
+            )
+            .await;
+        if store.open_chat_id().as_i64() == chat_id && store.open_topic_id() == topic_id {
+            let new_messages = entries.into_iter().filter(|entry| entry.id() != from_id);
+            store.open_chat_messages().insert_messages(new_messages);
+        }
+    }
+    store.set_history_loading(false);
+    let _ = app_context.action_tx().send(Action::ChatHistoryAppended);
+}
+
+/// Loads the pinned messages of the open chat (or topic).
+async fn load_pinned_messages(app_context: Arc<AppContext>, requests: Requests) {
+    let store = app_context.store();
+    let chat_id = store.open_chat_id().as_i64();
+    if chat_id == 0 {
+        return;
+    }
+    let topic_id = store.open_topic_id();
+    let topic = store.open_message_topic();
+    let pins = requests.fetch_all_pinned_messages(chat_id, topic).await;
+    if store.open_chat_id().as_i64() == chat_id && store.open_topic_id() == topic_id {
+        store.set_open_chat_pinned(pins);
+        app_context.mark_dirty();
+    }
+}
+
+/// Searches the open chat (or topic) on the server.
+async fn search_chat_messages(app_context: Arc<AppContext>, requests: Requests, query: String) {
+    let action_tx = app_context.action_tx();
+    let chat_id = app_context.store().open_chat_id().as_i64();
+    if chat_id == 0 {
+        let _ = action_tx.send(Action::StatusMessage(
+            "Open a chat before searching messages.".into(),
+        ));
+        return;
+    }
+    let topic = app_context.store().open_message_topic();
+    match requests
+        .search_chat_messages(chat_id, topic, query, HISTORY_BATCH)
+        .await
+    {
+        Ok(entries) => {
+            let _ = action_tx.send(Action::StatusMessage(format!(
+                "Search results: {}",
+                entries.len()
+            )));
+            let _ = action_tx.send(Action::SearchResults(entries));
+        }
+        Err(e) => {
+            let _ = action_tx.send(Action::StatusMessage(format!(
+                "Search failed: {}",
+                e.message
+            )));
+            let _ = action_tx.send(Action::SearchResults(vec![]));
+        }
+    }
+}
+
+/// Shows `message_id` in the open chat: selects it when it's loaded, or
+/// loads the history around it.
+async fn jump_to_message(app_context: Arc<AppContext>, requests: Requests, message_id: i64) {
+    let store = app_context.store();
+    let action_tx = app_context.action_tx();
+    let chat_id = store.open_chat_id().as_i64();
+    let topic_id = store.open_topic_id();
+    if chat_id == 0 {
+        return;
+    }
+    // Already loaded: just select it, without clearing the chat
+    if store.open_chat_messages().get_message(message_id).is_some() {
+        store.set_jump_target_message_id_i64(message_id);
+        let _ = action_tx.send(Action::JumpCompleted(message_id));
+        let _ = action_tx.send(Action::ChatHistoryAppended);
+        return;
+    }
+
+    store.clear_open_chat_messages();
+    store.set_history_loading(true);
+
+    // A window around the target. TDLib's offset must be > -100, so the newer
+    // messages come in several batches.
+    const OLDER_LIMIT: i32 = 100; // target + 99 older messages
+    const NEWER_BATCH_SIZE: i32 = 99; // the most offset -98 allows
+    const NEWER_BATCHES: usize = 3; // ~297 newer messages
+
+    let (mut all_entries, _) = requests
+        .get_chat_history_batch(chat_id, topic_id, message_id, 0, OLDER_LIMIT)
+        .await;
+    let mut current_from_id = message_id;
+    for batch_num in 0..NEWER_BATCHES {
+        let (entries_newer, _) = requests
+            .get_chat_history_batch(
+                chat_id,
+                topic_id,
+                current_from_id,
+                -(NEWER_BATCH_SIZE - 1),
+                NEWER_BATCH_SIZE,
+            )
+            .await;
+        // The boundary message is loaded already
+        let new_msgs: Vec<_> = entries_newer
+            .into_iter()
+            .filter(|e| e.id() != current_from_id)
+            .collect();
+        let Some(last) = new_msgs.last() else {
+            break;
+        };
+        current_from_id = last.id();
+        all_entries.extend(new_msgs);
+        tracing::debug!(
+            batch_num,
+            loaded = all_entries.len(),
+            "JumpToMessage: loaded newer batch"
+        );
+    }
+
+    let same_chat = store.open_chat_id().as_i64() == chat_id && store.open_topic_id() == topic_id;
+    if !same_chat {
+        tracing::debug!(message_id, "JumpToMessage: the chat changed while loading");
+    } else if all_entries.is_empty() {
+        tracing::warn!(
+            target_id = message_id,
+            "JumpToMessage: failed to load any messages, cache is empty"
+        );
+    } else {
+        store.open_chat_messages().insert_messages(all_entries);
+        tracing::debug!(
+            target_id = message_id,
+            total_cached = store.open_chat_messages().len(),
+            "JumpToMessage: cache after insert"
+        );
+        // Only once the message is in the cache
+        store.set_jump_target_message_id_i64(message_id);
+    }
+    store.set_history_loading(false);
+    let _ = action_tx.send(Action::JumpCompleted(message_id));
+    let _ = action_tx.send(Action::ChatHistoryAppended);
 }

@@ -82,23 +82,12 @@ struct Input {
     cursor: (usize, usize),
     /// The area of the component where the input is displayed.
     area_input: Rect,
-    /// An unbounded sender that send action for processing.
-    /// It is used to send actions to the main event loop for processing.
-    /// Basically, it is used to send `IncreasePromptSize` and `DecreasePromptSize`
-    /// actions.
+    /// Sends search updates to the main event loop.
     action_tx: Option<UnboundedSender<Action>>,
     /// An enum that represents the direction of the selection.
     /// Implicitly, it is used to keep track whether the user is selecting text
     /// or not.
     dir_selection: DirSelection,
-    /// The correct prompt size.
-    /// It is used to keep track of the correct prompt size when the prompt
-    /// window is focused or unfocused.
-    correct_prompt_size: usize,
-    /// A flag indicating whether the prompt size is restored or not.
-    /// Basically, it is used to keep track of whether the prompt size is
-    /// equal to the correct prompt size or not.
-    is_restored: bool,
     /// The mode of the input.
     /// It is used to keep track of the mode of the input.
     mode: Mode,
@@ -115,14 +104,6 @@ impl Input {
     /// Returns the rendered width of a line in terminal columns.
     fn line_display_width(line: &[InputCell]) -> usize {
         line.iter().map(|cell| cell.c.width().unwrap_or(0)).sum()
-    }
-    /// Get the cursor x position of the `Input` struct.
-    fn cursor_x(&self) -> usize {
-        Self::line_display_width(&self.text[self.cursor.1][..self.cursor.0])
-    }
-    /// Get the cursor y position of the `Input` struct.
-    fn cursor_y(&self) -> usize {
-        self.cursor.1
     }
     /// Get the text of the `Input` struct.
     fn text(&self) -> &Vec<Vec<InputCell>> {
@@ -145,19 +126,9 @@ impl Input {
             _ => {}
         }
     }
-    /// Insert a character into the `Input` struct.
-    /// The character is inserted at the current cursor position.
-    /// If the cursor is at the end of the line, a new line is inserted.
-    ///
-    /// # Arguments
-    /// * `c` - The character to insert.
+    /// Insert a character at the cursor. Long lines are only wrapped on
+    /// screen: the text keeps the line breaks that were typed.
     fn insert(&mut self, c: char) {
-        // Subtract the two border columns and wrap by rendered width.
-        let available_width = self.area_input.width.saturating_sub(2) as usize;
-        let next_cell_width = c.width().unwrap_or(0);
-        if available_width > 0 && self.cursor_x() + next_cell_width >= available_width {
-            self.insert_newline();
-        }
         self.text[self.cursor.1].insert(self.cursor.0, InputCell { c, selected: false });
         self.cursor.0 += 1;
         // Send search update if in search mode
@@ -176,21 +147,9 @@ impl Input {
         // Move cursor to the start of the new line
         self.cursor.0 = 0;
         self.cursor.1 += 1;
-        // Increase the prompt size to accommodate the new line
-        if let Some(tx) = self.action_tx.as_ref() {
-            self.correct_prompt_size += 1;
-            tx.send(Action::IncreasePromptSize).unwrap()
-        }
     }
     /// Delete the character before the cursor position.
     fn backspace(&mut self) {
-        if self.text[self.cursor.1].is_empty()
-            && self.cursor.1 > 0
-            && let Some(tx) = self.action_tx.as_ref()
-        {
-            self.correct_prompt_size -= 1;
-            tx.send(Action::DecreasePromptSize).unwrap();
-        }
         if self.cursor.0 == 0 {
             if self.cursor.1 > 0 {
                 let line = self.text.remove(self.cursor.1);
@@ -304,55 +263,46 @@ impl Input {
         // Send search update if in search mode
         self.send_search_update();
     }
-    /// Restore the prompt size of the `Input` struct.
-    /// It is used to restore the prompt size to the correct prompt size when
-    /// the prompt window is focused.
-    /// It sends `IncreasePromptSize` actions to the main event loop to increase
-    /// the prompt size.
-    fn restore_prompt_size(&mut self) {
-        if !self.is_restored {
-            if let Some(tx) = self.action_tx.as_ref() {
-                for _ in 0..self.correct_prompt_size {
-                    tx.send(Action::IncreasePromptSize).unwrap();
-                }
-            }
-            self.is_restored = true;
-        }
-    }
-    /// Set the prompt size to one.
-    /// It is used to set the prompt size to one.
-    fn set_prompt_size_to_one(&mut self) {
-        if let Some(tx) = self.action_tx.as_ref() {
-            for _ in 0..self.correct_prompt_size {
-                tx.send(Action::DecreasePromptSize).unwrap();
-            }
-        }
-    }
-    /// Set the prompt size to one.
-    /// It is used to set the prompt size to one when the prompt window is
-    /// focused.
-    /// Simply, it set the correct prompt size to zero and the cursor to the
-    /// start of the line.
-    fn set_prompt_size_to_one_focused(&mut self) {
-        self.set_prompt_size_to_one();
-        self.correct_prompt_size = 0;
+    /// Puts the cursor at the start, e.g. after the text was sent.
+    fn reset_cursor(&mut self) {
         self.cursor = (0, 0);
     }
-    /// Clear the input text and reset cursor and prompt size so the state is
-    /// consistent (avoids cursor out of bounds when text is cleared).
+    /// Clear the input text and reset the cursor.
     fn clear_and_reset_cursor(&mut self) {
         self.text = vec![vec![]];
         self.cursor = (0, 0);
-        self.correct_prompt_size = 0;
     }
-    /// Set the prompt size to one.
-    /// It is used to set the prompt size to one when the prompt window is
-    /// unfocused.
-    /// It means that when the prompt window will return to focus, the prompt
-    /// size will be restored to the correct prompt size.
-    fn set_prompt_size_to_one_unfocused(&mut self) {
-        self.set_prompt_size_to_one();
-        self.is_restored = false;
+    /// The text as rows `width` columns wide: (line, first cell, end cell)
+    /// for each, and the row and column of the cursor. A row leaves a column
+    /// free for the cursor at its end.
+    fn rows(&self, width: usize) -> (Vec<(usize, usize, usize)>, usize, usize) {
+        let room = width.saturating_sub(1).max(1);
+        let mut rows = Vec::with_capacity(self.text.len());
+        let (mut cursor_row, mut cursor_col) = (0, 0);
+        for (index, line) in self.text.iter().enumerate() {
+            let first_row = rows.len();
+            let mut start = 0;
+            let mut used = 0;
+            for (i, cell) in line.iter().enumerate() {
+                let w = cell.c.width().unwrap_or(0);
+                if used + w > room && i > start {
+                    rows.push((index, start, i));
+                    start = i;
+                    used = 0;
+                }
+                used += w;
+            }
+            rows.push((index, start, line.len()));
+            if index == self.cursor.1 {
+                // The row of the line the cursor is in; at a row's end it stays there
+                let row = (first_row..rows.len())
+                    .find(|&row| self.cursor.0 < rows[row].2)
+                    .unwrap_or(rows.len() - 1);
+                cursor_row = row;
+                cursor_col = Self::line_display_width(&line[rows[row].1..self.cursor.0]);
+            }
+        }
+        (rows, cursor_row, cursor_col)
     }
     /// Move the cursor to the left and toggle the selection.
     fn move_cursor_left_and_toggle_selection(&mut self) {
@@ -505,11 +455,6 @@ impl Input {
                     .collect()
             })
             .collect();
-        let extra_lines = self.text.len().saturating_sub(1);
-        self.correct_prompt_size = extra_lines;
-        // Let restore_prompt_size() send IncreasePromptSize on next focused draw,
-        // so we only adjust size once and the prompt is correctly sized when shown.
-        self.is_restored = false;
         self.cursor = (0, 0);
     }
 
@@ -535,13 +480,13 @@ impl Input {
                 Mode::Normal => {
                     let _ = action_tx.send(Action::SendMessage(self.text_to_string(), None));
                     self.text = vec![vec![]];
-                    self.set_prompt_size_to_one_focused();
+                    self.reset_cursor();
                 }
                 Mode::Edit(message_id) => {
                     let _ = action_tx
                         .send(Action::SendMessageEdited(message_id, self.text_to_string()));
                     self.text = vec![vec![]];
-                    self.set_prompt_size_to_one_focused();
+                    self.reset_cursor();
                     self.mode = Mode::Normal;
                 }
                 Mode::Reply(message_id) => {
@@ -553,7 +498,7 @@ impl Input {
                         }),
                     ));
                     self.text = vec![vec![]];
-                    self.set_prompt_size_to_one_focused();
+                    self.reset_cursor();
                     self.mode = Mode::Normal;
                 }
                 Mode::SearchChatList => {
@@ -575,7 +520,7 @@ impl Input {
                         .unwrap();
                     self.text = vec![vec![]];
                     self.mode = Mode::Normal;
-                    self.set_prompt_size_to_one_focused();
+                    self.reset_cursor();
                 }
                 Mode::SearchChatMessages => {
                     // Open server search overlay and run search with prompt text
@@ -594,7 +539,7 @@ impl Input {
                     }
                     self.text = vec![vec![]];
                     self.mode = Mode::Normal;
-                    self.set_prompt_size_to_one_focused();
+                    self.reset_cursor();
                 }
             }
         }
@@ -619,8 +564,6 @@ impl Default for Input {
             area_input: Rect::default(),
             action_tx: None,
             dir_selection: DirSelection::Empty,
-            correct_prompt_size: 0,
-            is_restored: true,
             mode: Mode::Normal,
         }
     }
@@ -758,7 +701,7 @@ impl PromptWindow {
         if matches!(self.input.mode, Mode::Normal | Mode::Reply(_)) {
             self.input.mode = Mode::Normal;
             self.input.set_text("");
-            self.input.set_prompt_size_to_one_focused();
+            self.input.reset_cursor();
         }
         if let Some(tx) = self.action_tx.as_ref() {
             let path = |p: &PathBuf| p.display().to_string();
@@ -1134,7 +1077,7 @@ impl Component for PromptWindow {
                                 .unwrap();
                             self.input.text = vec![vec![]];
                             self.input.mode = Mode::Normal;
-                            self.input.set_prompt_size_to_one_focused();
+                            self.input.reset_cursor();
                         }
                         Mode::SearchChatMessages => {
                             self.action_tx
@@ -1144,7 +1087,7 @@ impl Component for PromptWindow {
                                 .unwrap();
                             self.input.text = vec![vec![]];
                             self.input.mode = Mode::Normal;
-                            self.input.set_prompt_size_to_one_focused();
+                            self.input.reset_cursor();
                         }
                         _ => {
                             self.input.insert_newline();
@@ -1242,36 +1185,37 @@ impl Component for PromptWindow {
         let theme = app_context.theme();
         let character_count: usize = self.input.text().iter().map(Vec::len).sum::<usize>()
             + self.input.text().len().saturating_sub(1);
-        let text = self
-            .input
-            .text()
-            .iter()
-            .map(|line| {
-                Line::from(
-                    line.iter()
-                        .map(|cell| {
-                            if cell.selected {
-                                Span::styled(
-                                    cell.c.to_string(),
-                                    self.app_context.style_prompt_message_text_selected(),
-                                )
-                            } else {
-                                Span::styled(
-                                    cell.c.to_string(),
-                                    self.app_context.style_prompt_message_text(),
-                                )
-                            }
-                        })
-                        .collect::<Vec<Span>>(),
-                )
-            })
-            .collect::<Vec<Line>>();
+        // Inside the borders
+        let width = usize::from(area.width.saturating_sub(2));
+        let visible_rows = usize::from(area.height.saturating_sub(2)).max(1);
+        let (rows, cursor_row, cursor_col) = self.input.rows(width);
+        // The cursor's row stays in view
+        let scroll = cursor_row.saturating_sub(visible_rows - 1);
 
-        let (text, style_text) = if self.focused {
-            self.input.restore_prompt_size();
-            (text, self.app_context.style_prompt())
+        let (text, style_text, extra_rows) = if self.focused {
+            let normal = self.app_context.style_prompt_message_text();
+            let selected = self.app_context.style_prompt_message_text_selected();
+            let lines = rows
+                .iter()
+                .skip(scroll)
+                .take(visible_rows)
+                .map(|&(line, start, end)| {
+                    // One span per run of selected or unselected text
+                    let cells = &self.input.text()[line][start..end];
+                    let mut spans: Vec<Span> = Vec::new();
+                    for run in cells.chunk_by(|a, b| a.selected == b.selected) {
+                        let style = if run[0].selected { selected } else { normal };
+                        spans.push(Span::styled(
+                            run.iter().map(|cell| cell.c).collect::<String>(),
+                            style,
+                        ));
+                    }
+                    Line::from(spans)
+                })
+                .collect::<Vec<Line>>();
+            let extra_rows = u16::try_from(rows.len() - 1).unwrap_or(u16::MAX);
+            (lines, self.app_context.style_prompt(), extra_rows)
         } else {
-            self.input.set_prompt_size_to_one_unfocused();
             (
                 vec![Line::from(format!(
                     "Press {} to write a message",
@@ -1282,8 +1226,13 @@ impl Component for PromptWindow {
                         .join(" or ")
                 ))],
                 theme.style(HighlightGroup::Placeholder),
+                0,
             )
         };
+        // The layout makes room for the wrapped text from the next frame on
+        if self.app_context.set_prompt_extra_rows(extra_rows) {
+            self.app_context.mark_dirty();
+        }
 
         // Set title based on mode (sending, editing, replying, search)
         let title: String = match &self.input.mode {
@@ -1351,8 +1300,8 @@ impl Component for PromptWindow {
 
         if self.focused {
             frame.set_cursor_position(Position {
-                x: area.x + self.input.cursor_x() as u16 + 1,
-                y: area.y + self.input.cursor_y() as u16 + 1,
+                x: area.x + cursor_col as u16 + 1,
+                y: area.y + (cursor_row - scroll) as u16 + 1,
             });
         }
         Ok(())

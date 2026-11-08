@@ -1,6 +1,6 @@
 use std::sync::{
     Arc, Mutex, MutexGuard,
-    atomic::{AtomicBool, AtomicU8, Ordering},
+    atomic::{AtomicBool, AtomicU8, AtomicU16, Ordering},
 };
 
 use libtgt::store::Store;
@@ -51,6 +51,8 @@ pub struct AppContext {
     /// A text input outside the prompt (the chat search) takes typed keys,
     /// so plain characters skip the keymap.
     typing: AtomicBool,
+    /// Rows the prompt's text takes, wrapped, beyond the first one.
+    prompt_extra_rows: AtomicU16,
 }
 
 impl AppContext {
@@ -72,6 +74,7 @@ impl AppContext {
             store,
             focused_component: AtomicU8::new(0),
             typing: AtomicBool::new(false),
+            prompt_extra_rows: AtomicU16::new(0),
         }
     }
 
@@ -234,6 +237,17 @@ impl AppContext {
 
     pub fn set_typing(&self, typing: bool) {
         self.typing.store(typing, Ordering::Release);
+    }
+
+    /// Rows the prompt's wrapped text takes beyond the first one, which the
+    /// layout makes room for.
+    pub fn prompt_extra_rows(&self) -> u16 {
+        self.prompt_extra_rows.load(Ordering::Acquire)
+    }
+
+    /// Sets [`Self::prompt_extra_rows`]; true when it changed.
+    pub fn set_prompt_extra_rows(&self, rows: u16) -> bool {
+        self.prompt_extra_rows.swap(rows, Ordering::AcqRel) != rows
     }
 
     /// The style of `group` in the theme.
