@@ -17,9 +17,17 @@ mod tests;
 #[derive(Debug, Parser)]
 #[command(name = "tgrs", version, about)]
 pub struct Cli {
-    /// Directory with config.toml, keymap.toml and theme.toml [env: TGRS_CONFIG_DIR] [default: $XDG_CONFIG_HOME/tgrs].
-    #[arg(long, global = true, value_name = "DIR")]
-    pub config_dir: Option<PathBuf>,
+    /// Config file [default: $XDG_CONFIG_HOME/tgrs/config.toml].
+    #[arg(long, global = true, value_name = "FILE")]
+    pub config: Option<PathBuf>,
+
+    /// Keymap file [default: $XDG_CONFIG_HOME/tgrs/keymap.toml].
+    #[arg(long, global = true, value_name = "FILE")]
+    pub keymap: Option<PathBuf>,
+
+    /// Theme file [default: $XDG_CONFIG_HOME/tgrs/theme.toml].
+    #[arg(long, global = true, value_name = "FILE")]
+    pub theme: Option<PathBuf>,
 
     /// Directory for logs [default: $XDG_STATE_HOME/tgrs/logs].
     #[arg(long, global = true, value_name = "DIR")]
@@ -63,7 +71,9 @@ impl From<Cli> for CliOverrides {
     fn from(cli: Cli) -> Self {
         let log_level = cli.log_level();
         Self {
-            config_dir: cli.config_dir,
+            config: cli.config,
+            keymap: cli.keymap,
+            theme: cli.theme,
             log_dir: cli.log_dir,
             log_level,
             command: cli

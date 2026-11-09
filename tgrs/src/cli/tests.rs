@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use clap::{CommandFactory, Parser};
 
 use super::*;
@@ -42,11 +44,18 @@ fn there_is_no_send_command() {
 
 #[test]
 fn global_flags_work_after_subcommand() {
-    let cli = overrides(&["logout", "--config-dir", "/tmp/tgrs"]);
+    let cli = overrides(&[
+        "logout",
+        "--config",
+        "/tmp/c.toml",
+        "--keymap",
+        "/tmp/k.toml",
+        "--theme",
+        "/tmp/t.toml",
+    ]);
 
-    assert_eq!(
-        cli.config_dir.as_deref(),
-        Some(std::path::Path::new("/tmp/tgrs"))
-    );
+    assert_eq!(cli.config.as_deref(), Some(Path::new("/tmp/c.toml")));
+    assert_eq!(cli.keymap.as_deref(), Some(Path::new("/tmp/k.toml")));
+    assert_eq!(cli.theme.as_deref(), Some(Path::new("/tmp/t.toml")));
     assert_eq!(cli.command, SettingsCommand::Logout);
 }

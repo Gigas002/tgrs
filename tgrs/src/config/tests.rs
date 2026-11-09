@@ -56,14 +56,15 @@ fn parse_rejects_invalid_enum_values() {
 #[test]
 fn load_missing_file_is_none() {
     let dir = tempfile::tempdir().unwrap();
-    assert!(load(dir.path()).unwrap().is_none());
+    assert!(load(&dir.path().join(FILE_NAME)).unwrap().is_none());
 }
 
 #[test]
 fn load_reports_parse_errors_with_path() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join(FILE_NAME), "[app\n").unwrap();
-    let err = load(dir.path()).unwrap_err();
+    let path = dir.path().join(FILE_NAME);
+    std::fs::write(&path, "[app\n").unwrap();
+    let err = load(&path).unwrap_err();
     assert!(matches!(err, ConfigError::Parse { .. }));
     assert!(err.to_string().contains(FILE_NAME));
 }
@@ -145,11 +146,13 @@ selection = ""
 }
 
 #[test]
-fn missing_theme_file_is_the_default_theme() {
+fn missing_theme_file_is_none() {
     let dir = tempfile::tempdir().unwrap();
-    let (file, warnings) = theme::load(dir.path()).unwrap();
-    assert_eq!(file, theme::ThemeFile::default());
-    assert!(warnings.is_empty());
+    assert!(
+        theme::load(&dir.path().join(theme::FILE_NAME))
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]

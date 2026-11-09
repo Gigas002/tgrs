@@ -56,9 +56,9 @@ pub struct KeymapFile {
     pub leader_menu: Option<KeymapMode>,
 }
 
-/// Loads `keymap.toml` from `config_dir`; a missing file is `Ok(None)`.
-pub fn load(config_dir: &Path) -> Result<Option<KeymapFile>, ConfigError> {
-    read_toml(&config_dir.join(FILE_NAME))
+/// Loads a `keymap.toml` file; a missing file is `Ok(None)`.
+pub fn load(path: &Path) -> Result<Option<KeymapFile>, ConfigError> {
+    read_toml(path)
 }
 
 /// The bundled default keymap.

@@ -1,4 +1,4 @@
-//! Unified resolver: CLI > environment > config files > built-in defaults.
+//! Unified resolver: CLI > config files > built-in defaults.
 //!
 //! [`Settings`] is the only configuration type passed below `main`.
 
@@ -25,12 +25,6 @@ mod tests;
 pub use keymap::{ActionBinding, KeyMap, Keymap, KeymapError, is_plain_char};
 pub use theme::{BorderSurface, HighlightGroup, Theme};
 
-/// Overrides the config directory, like `--config-dir`.
-pub const CONFIG_DIR_ENV: &str = "TGRS_CONFIG_DIR";
-/// Override `telegram.api_id` / `telegram.api_hash`.
-pub const API_ID_ENV: &str = "API_ID";
-pub const API_HASH_ENV: &str = "API_HASH";
-
 /// tgrs's public Telegram API credentials, from <https://my.telegram.org>.
 pub const DEFAULT_API_ID: i32 = 94575;
 pub const DEFAULT_API_HASH: &str = "a3406de8d171bb422bb6ddf3bbd800e2";
@@ -41,7 +35,11 @@ pub const DEFAULT_PROXY_PORT: i32 = 1080;
 /// Values taken from the command line, already converted from `clap` types.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CliOverrides {
-    pub config_dir: Option<PathBuf>,
+    /// `config.toml`, `keymap.toml` and `theme.toml`; None for the ones in
+    /// the config directory.
+    pub config: Option<PathBuf>,
+    pub keymap: Option<PathBuf>,
+    pub theme: Option<PathBuf>,
     pub log_dir: Option<PathBuf>,
     pub log_level: Option<LogLevel>,
     pub command: Command,
@@ -79,8 +77,6 @@ pub struct Settings {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Dirs {
     pub home: PathBuf,
-    /// Holds `config.toml`, `keymap.toml` and `theme.toml`.
-    pub config: PathBuf,
     pub data: PathBuf,
     pub state: PathBuf,
 }
@@ -229,8 +225,8 @@ pub enum SettingsError {
     #[error("config.toml: `{key}` must be an absolute path (or start with `~`), got {}", path.display())]
     RelativePath { key: &'static str, path: PathBuf },
 
-    #[error("{API_ID_ENV} must be an integer, got {0:?}")]
-    ApiId(String),
+    #[error("{} does not exist", path.display())]
+    MissingFile { path: PathBuf },
 
     #[error("config.toml: `logger.keep` must be at least 1")]
     LogKeep,
@@ -240,8 +236,8 @@ pub enum SettingsError {
 }
 
 impl Settings {
-    /// Resolves settings from CLI values, config files and the environment
-    /// (`lookup` is typically `std::env::var_os`).
+    /// Resolves settings from CLI values and config files; `lookup` reads the
+    /// `HOME` and XDG variables (typically `std::env::var_os`).
     pub fn resolve<F>(cli: CliOverrides, lookup: F) -> Result<Self, SettingsError>
     where
         F: Fn(&str) -> Option<OsString>,
@@ -249,19 +245,17 @@ impl Settings {
         let xdg = XdgDirs::from_lookup(&lookup)?;
         let defaults = AppDirs::new(&xdg);
 
-        let config_dir = match cli
-            .config_dir
-            .or_else(|| lookup(CONFIG_DIR_ENV).map(PathBuf::from))
-        {
-            Some(dir) => absolute(dir)?,
-            None => defaults.config,
-        };
-        let file = config::load(&config_dir)?.unwrap_or_default();
+        let file = load_file(
+            cli.config,
+            &defaults.config,
+            config::FILE_NAME,
+            config::load,
+        )?
+        .unwrap_or_default();
         let from_config = |key, path| config_path(key, path, &xdg.home);
 
         let dirs = Dirs {
             home: xdg.home.clone(),
-            config: config_dir,
             data: defaults.data,
             state: defaults.state,
         };
@@ -283,7 +277,7 @@ impl Settings {
         let download_dir = from_config("app.download_dir", file.app.download_dir.clone())?
             .unwrap_or_else(|| xdg.download_dir.clone());
         let app = resolve_app(&file, download_dir)?;
-        let telegram = resolve_telegram(&file, &dirs, &lookup, &from_config)?;
+        let telegram = resolve_telegram(&file, &dirs, &from_config)?;
         let tdlib_log = TdLogging {
             verbosity_level: file
                 .telegram
@@ -294,12 +288,21 @@ impl Settings {
             redirect_stderr: file.telegram.log_redirect_stderr.unwrap_or(false),
         };
 
-        let keymap = Keymap::resolve(
-            &config::keymap::bundled(),
-            config::keymap::load(&dirs.config)?.as_ref(),
+        let user_keymap = load_file(
+            cli.keymap,
+            &defaults.config,
+            config::keymap::FILE_NAME,
+            config::keymap::load,
         )?;
+        let keymap = Keymap::resolve(&config::keymap::bundled(), user_keymap.as_ref())?;
 
-        let (theme_file, mut warnings) = config::theme::load(&dirs.config)?;
+        let (theme_file, mut warnings) = load_file(
+            cli.theme,
+            &defaults.config,
+            config::theme::FILE_NAME,
+            config::theme::load,
+        )?
+        .unwrap_or_default();
         let theme = Theme::resolve(&theme_file, &mut warnings);
 
         Ok(Self {
@@ -322,7 +325,7 @@ impl Settings {
         })
     }
 
-    /// Defaults only: no config files, environment or CLI values.
+    /// Defaults only: no config files or CLI values.
     #[cfg(test)]
     pub(crate) fn for_tests() -> Self {
         Self::resolve(CliOverrides::default(), |key| {
@@ -363,30 +366,19 @@ fn resolve_app(file: &FileConfig, download_dir: PathBuf) -> Result<App, Settings
     })
 }
 
-fn resolve_telegram<F, P>(
+fn resolve_telegram<P>(
     file: &FileConfig,
     dirs: &Dirs,
-    lookup: &F,
     from_config: &P,
 ) -> Result<TdParams, SettingsError>
 where
-    F: Fn(&str) -> Option<OsString>,
     P: Fn(&'static str, Option<PathBuf>) -> Result<Option<PathBuf>, SettingsError>,
 {
     let tg = &file.telegram;
-    let api_id = match lookup(API_ID_ENV) {
-        Some(value) => {
-            let value = value.to_string_lossy();
-            value
-                .trim()
-                .parse()
-                .map_err(|_| SettingsError::ApiId(value.into_owned()))?
-        }
-        None => tg.api_id.unwrap_or(DEFAULT_API_ID),
-    };
-    let api_hash = lookup(API_HASH_ENV)
-        .map(|value| value.to_string_lossy().trim().to_owned())
-        .or_else(|| tg.api_hash.clone())
+    let api_id = tg.api_id.unwrap_or(DEFAULT_API_ID);
+    let api_hash = tg
+        .api_hash
+        .clone()
         .unwrap_or_else(|| DEFAULT_API_HASH.to_owned());
 
     let use_message_database = tg.use_message_database.unwrap_or(true);
@@ -433,6 +425,26 @@ fn resolve_proxy(proxy: &ProxyFile) -> Option<Proxy> {
         port: proxy.port.unwrap_or(DEFAULT_PROXY_PORT),
         kind,
     })
+}
+
+/// Loads a config file given on the command line, which must exist, or
+/// `name` in `config_dir`, which may be missing.
+fn load_file<T>(
+    cli: Option<PathBuf>,
+    config_dir: &Path,
+    name: &str,
+    load: impl Fn(&Path) -> Result<Option<T>, ConfigError>,
+) -> Result<Option<T>, SettingsError> {
+    match cli {
+        Some(path) => {
+            let path = absolute(path)?;
+            match load(&path)? {
+                Some(value) => Ok(Some(value)),
+                None => Err(SettingsError::MissingFile { path }),
+            }
+        }
+        None => Ok(load(&config_dir.join(name))?),
+    }
 }
 
 /// CLI paths are relative to the working directory.
