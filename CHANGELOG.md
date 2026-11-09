@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-09
+
 ### Removed
 
 - `app.frame_rate`: the screen is redrawn when something changes instead of at a fixed rate.
