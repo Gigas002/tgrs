@@ -19,27 +19,16 @@ Originally a fork of [tgt](https://github.com/FedericoBruzzone/tgt) by Federico 
 | A Secret Service provider                       | `keychain` (default)      | E.g. GNOME Keyring or KeePassXC. Without one, `store = "auto"` leaves the TDLib database unencrypted.                                                              |
 | A notification server                           | `notifications` (default) | E.g. mako, dunst or your desktop's own; reached over D-Bus.                                                                                                        |
 
-For example, on Arch Linux: `sudo pacman -S tdlib pkgconf xdg-utils dbus gnome-keyring`.
-
 ### Build features
 
 Build features can be combined (e.g. `cargo build --release --no-default-features --features media-preview` for previews without the keychain).
 
-| Feature         | Description                                                                                                                                                 |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `default`       | Enables `keychain`, `media-preview` and `notifications`.                                                                                                    |
-| `keychain`      | Encrypt the TDLib database (your login session) with a key kept in the system keychain (Secret Service). See `[credentials]` in `config.toml`.              |
-| `media-preview` | Image previews in the chat: photos, static stickers and the thumbnails of videos, GIFs, video messages and files.                                            |
-| `notifications` | Desktop notifications for new messages, following each chat's Telegram notification settings. See `[notifications]` in `config.toml`.                       |
-
-## Quick start
-
-```sh
-cargo build --release
-./target/release/tgrs
-```
-
-The first run logs in on the terminal (phone number, code and, if set, your two-step verification password), then opens the TUI. Move between panes with `left`/`right`, open a chat with `enter`, and press `space` for the leader menu or `alt+f1` to list every key. `tgrs logout` logs out again.
+| Feature         | Description                                                                                                                                    |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `default`       | Enables `keychain`, `media-preview` and `notifications`.                                                                                       |
+| `keychain`      | Encrypt the TDLib database (your login session) with a key kept in the system keychain (Secret Service). See `[credentials]` in `config.toml`. |
+| `media-preview` | Image previews in the chat: photos, static stickers and the thumbnails of videos, GIFs, video messages and files.                              |
+| `notifications` | Desktop notifications for new messages, following each chat's Telegram notification settings. See `[notifications]` in `config.toml`.          |
 
 ## Documentation
 
