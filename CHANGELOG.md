@@ -64,6 +64,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+- Logging in with a QR code: answer `qr` to the phone number prompt and scan the code shown in the terminal with a phone logged in to Telegram. `libtgrs`'s `Authenticator::phone_number` is replaced by `login`, which returns a `Login`.
 - The mouse works in the message actions, reaction and link pickers and the leader menu: the wheel moves the highlight, a click highlights an entry, a second click runs it and a click outside closes the menu. The wheel also moves through pinned messages and the upload explorer, and a click outside closes them.
 - The leader menu highlights an entry: `up`/`down` move it and `enter` runs it. Commands `leader_menu_previous`, `leader_menu_next` and `leader_menu_confirm`.
 - `telegram.use_test_dc`: use Telegram's test servers, for development.

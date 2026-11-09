@@ -6,10 +6,15 @@ use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     terminal,
 };
-use libtgrs::client::Authenticator;
+use libtgrs::client::{Authenticator, Login};
+use qrcode::{QrCode, render::unicode::Dense1x2};
 
 /// Prompts on stdout and reads answers from stdin.
-pub struct StdinAuthenticator;
+#[derive(Default)]
+pub struct StdinAuthenticator {
+    /// A QR code was shown already, so the next one replaces an expired one.
+    qr_code_shown: bool,
+}
 
 impl StdinAuthenticator {
     fn ask(prompt: &str) -> String {
@@ -65,6 +70,33 @@ impl StdinAuthenticator {
             }
         }
     }
+}
+
+/// What was answered to the login prompt: `qr` (in any case) for a QR code,
+/// anything else is a phone number.
+pub(crate) fn parse_login(answer: &str) -> Login {
+    if answer.trim().eq_ignore_ascii_case("qr") {
+        Login::QrCode
+    } else {
+        Login::PhoneNumber(answer.trim().to_owned())
+    }
+}
+
+/// `link` as a QR code of half-height blocks, with its quiet zone. With
+/// `colors`, it's drawn black on white, as scanners expect even on a dark
+/// terminal; without, dark modules are the terminal's text color.
+pub(crate) fn qr_code_text(link: &str, colors: bool) -> Option<String> {
+    let code = QrCode::new(link).ok()?;
+    let text = code.render::<Dense1x2>().quiet_zone(true).build();
+    if !colors {
+        return Some(text);
+    }
+    Some(
+        text.lines()
+            .map(|line| format!("\x1b[30;107m{line}\x1b[0m"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
 }
 
 /// Restores the terminal when dropped, also on panic.
@@ -127,8 +159,10 @@ pub(crate) fn read_masked(
 }
 
 impl Authenticator for StdinAuthenticator {
-    fn phone_number(&mut self) -> String {
-        Self::ask("Enter your phone number (include the country calling code):")
+    fn login(&mut self) -> Login {
+        parse_login(&Self::ask(
+            "Enter your phone number (include the country calling code), or `qr` to log in with a QR code:",
+        ))
     }
 
     fn code(&mut self) -> String {
@@ -155,7 +189,18 @@ impl Authenticator for StdinAuthenticator {
     }
 
     fn confirm_link(&mut self, link: &str) {
-        println!("Confirm this login link on another device: {link}");
+        if std::mem::replace(&mut self.qr_code_shown, true) {
+            println!("\nThe QR code expired, scan this one instead:");
+        } else {
+            println!(
+                "On a phone logged in to Telegram, open Settings > Devices > Link Desktop Device and scan this QR code:"
+            );
+        }
+        match qr_code_text(link, io::stdout().is_terminal()) {
+            Some(code) => println!("{code}"),
+            None => tracing::error!("the login link doesn't fit in a QR code"),
+        }
+        println!("Or open this link there: {link}");
     }
 
     fn report_error(&mut self, message: &str) {

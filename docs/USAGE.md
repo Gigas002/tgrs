@@ -11,6 +11,8 @@ How to run `tgrs`, move around, read and write messages, and configure it. For i
 
 Global options: `--config`, `--keymap`, `--theme`, `--log-dir`, `--log-level`, `-v`/`-q`.
 
+The first time, `tgrs` logs in on the terminal. Enter your phone number with its country calling code to get a login code, or `qr` to log in with a QR code: on a phone logged in to Telegram, open Settings > Devices > Link Desktop Device and scan the code `tgrs` shows (a new one is shown when it expires). A cloud password, if set, is asked for next. Passkeys aren't supported: Telegram only accepts them from its own apps.
+
 Chats are only read and messages only sent from the TUI: there is no command-line or scripting interface to the account.
 
 ## Navigation

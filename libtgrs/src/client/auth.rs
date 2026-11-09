@@ -113,18 +113,29 @@ impl From<&Proxy> for tdlib_rs::types::Proxy {
     }
 }
 
+/// How to log in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Login {
+    /// Get a code sent to this phone number (with the country calling code).
+    PhoneNumber(String),
+    /// Scan a QR code with a device already logged in; see
+    /// [`Authenticator::confirm_link`].
+    QrCode,
+}
+
 /// Answers TDLib's interactive login steps (phone number, codes, password, ...).
 ///
 /// The library has no terminal of its own; the binary decides how to ask.
 pub trait Authenticator {
-    fn phone_number(&mut self) -> String;
+    fn login(&mut self) -> Login;
     fn code(&mut self) -> String;
     fn email_address(&mut self) -> String;
     fn email_code(&mut self) -> String;
     fn password(&mut self) -> String;
     /// First and last name for a new account.
     fn registration(&mut self) -> (String, String);
-    /// The login has to be confirmed with this link on another device.
+    /// The login has to be confirmed with this link on another device,
+    /// usually by scanning it as a QR code. A new link replaces an expired one.
     fn confirm_link(&mut self, link: &str);
     /// TDLib rejected the last answer.
     fn report_error(&mut self, message: &str);

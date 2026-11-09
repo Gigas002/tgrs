@@ -35,6 +35,7 @@ image = { version = "0.25", default-features = false, features = [
 keyring-core = "1"
 notify-rust = "4"
 nucleo-matcher = "0.3"
+qrcode = { version = "0.14", default-features = false }
 ratatui = "0.30"
 ratatui-explorer = "0.3"
 ratatui-image = { version = "11", default-features = false }

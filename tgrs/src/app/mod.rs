@@ -128,7 +128,7 @@ async fn run_telegram(settings: &Settings) -> Result<(), AppError> {
     let (notify_tx, notify_rx) = tokio::sync::mpsc::unbounded_channel();
     client.start(notify_tx);
     client.set_logging(&settings.tdlib_log).await;
-    client.authorize(&mut StdinAuthenticator).await;
+    client.authorize(&mut StdinAuthenticator::default()).await;
 
     if client.is_authorized() {
         if let Some(keychain) = &keychain
@@ -162,7 +162,7 @@ async fn run_telegram(settings: &Settings) -> Result<(), AppError> {
             client.close().await;
         }
         // Drain the authorization updates until TDLib reports `Closed`.
-        client.authorize(&mut StdinAuthenticator).await;
+        client.authorize(&mut StdinAuthenticator::default()).await;
         client.join().await;
         result
     } else {
