@@ -33,7 +33,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Changed
 
-- Renamed the project from `tgt` to `tgrs`: the crates are `tgrs` and `libtgrs`, the binary is `tgrs`, the config, data and state directories are `$XDG_*_HOME/tgrs` and the environment variable is `TGRS_CONFIG_DIR`.
+- Renamed the project from `tgt` to `tgrs`: the crates are `tgrs` and `libtgrs`, the binary is `tgrs`, the config, data and state directories are `$XDG_*_HOME/tgrs`.
 - Telegram requests (sending, typing, read marks, drafts, history, pins, search) run in the background, so a slow network no longer freezes typing or drawing.
 - Only the visible messages and chats are laid out on each frame.
 - The prompt wraps long lines on screen and grows with them; its height follows the text.
@@ -93,7 +93,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - Message actions menu (`Enter` in the chat) listing every message action with its key; unavailable actions are dimmed.
 - `keychain` feature (default): the TDLib database is encrypted with a key kept in the system keychain (Secret Service); `[credentials] store = "auto" | "keychain" | "plain"`. Existing databases are encrypted on the next start; `tgrs logout` removes the key.
 - Captions, videos, GIFs, video messages and stickers are shown in the chat with their duration or size.
-- Subcommand `logout`; options `--config-dir`, `--log-dir`, `--log-level` and `-v`/`-q`.
+- Subcommand `logout`; options `--config`, `--keymap`, `--theme` (paths to `config.toml`, `keymap.toml` and `theme.toml`), `--log-dir`, `--log-level` and `-v`/`-q`.
 - Concord-style theme: the UI follows the terminal's colors (default foreground/background and ANSI palette, dim for secondary text). `theme.toml` overrides named Highlight Groups that inherit from each other, border shapes per surface (`[ui.border]`) and the selection marker (`[ui.indicator]`); invalid entries are skipped with a warning.
 - Concord-style message layout: consecutive messages from one sender within 7 minutes share a header (name, time, `(edited)`, ✓/✓✓ for sent/read), day separators, a ` New ` divider before the first unread message, replies as a muted `↪ Name preview` line, attachments as `[photo] 1.2 MiB` labels, and the selected message framed by a rounded card instead of a highlighted background. Links, mentions and code are drawn with the `MessageLink`, `MentionOther` and `InlineCode` groups.
 - Reactions: shown under their messages (yours highlighted, custom emoji as `✦`), and `r` opens a picker of the emoji the chat allows; picking one of yours removes it, `1`-`9` and `0` pick directly.

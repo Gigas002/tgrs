@@ -9,7 +9,7 @@ How to run `tgrs`, move around, read and write messages, and configure it. For i
 | `tgrs`        | Open the TUI (logs in on the terminal first if needed). |
 | `tgrs logout` | Log out of Telegram and remove the database key.        |
 
-Global options: `--config-dir`, `--log-dir`, `--log-level`, `-v`/`-q`.
+Global options: `--config`, `--keymap`, `--theme`, `--log-dir`, `--log-level`, `-v`/`-q`.
 
 Chats are only read and messages only sent from the TUI: there is no command-line or scripting interface to the account.
 
@@ -233,13 +233,13 @@ Previews already downloaded always show. Files are only downloaded otherwise whe
 
 | What                                       | Location                                                                       |
 | ------------------------------------------ | ------------------------------------------------------------------------------ |
-| `config.toml`, `keymap.toml`, `theme.toml` | `$XDG_CONFIG_HOME/tgrs` (`~/.config/tgrs`), or `--config-dir` / `TGRS_CONFIG_DIR` |
+| `config.toml`, `keymap.toml`, `theme.toml` | `$XDG_CONFIG_HOME/tgrs` (`~/.config/tgrs`), or `--config` / `--keymap` / `--theme` |
 | TDLib database                             | `$XDG_DATA_HOME/tgrs/tdlib` (`~/.local/share/tgrs/tdlib`)                        |
 | Logs, TDLib log                            | `$XDG_STATE_HOME/tgrs` (`~/.local/state/tgrs`)                                   |
 | TDLib database key                         | the system keychain, service `tgrs` (see `[credentials]`)                       |
 | Downloads                                  | `app.download_dir`, default `$XDG_DOWNLOAD_DIR` or `~/Downloads`               |
 
-Settings are resolved as `CLI > environment > config.toml > defaults`. They are only changed by editing the files: `tgrs` never writes to them and has no settings UI. `API_ID` and `API_HASH` override the Telegram credentials.
+Settings are resolved as `CLI > config.toml > defaults`; tgrs reads no environment variables of its own. They are only changed by editing the files: `tgrs` never writes to them and has no settings UI. A file passed with `--config`, `--keymap` or `--theme` must exist.
 
 To customize, copy the files you want to change from [`examples/`](../examples/) into the config directory; missing files keep their defaults.
 

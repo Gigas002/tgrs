@@ -21,7 +21,7 @@ TDLib ──updates──▶ libtgrs::client ──writes──▶ libtgrs::stor
                                                └──requests──▶ libtgrs::client
 ```
 
-Settings precedence is `CLI > environment (TGRS_CONFIG_DIR, API_ID, API_HASH) > config.toml > defaults`.
+Settings precedence is `CLI > config.toml > defaults`; no environment variables besides `HOME` and the XDG ones are read.
 Files live in XDG directories: config in `$XDG_CONFIG_HOME/tgrs`, the TDLib database in
 `$XDG_DATA_HOME/tgrs/tdlib` (encrypted with a key from the keychain), logs in `$XDG_STATE_HOME/tgrs`.
 Settings are only changed by editing these files; the UI never writes them.
