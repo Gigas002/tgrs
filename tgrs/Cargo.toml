@@ -19,14 +19,18 @@ path = "src/main.rs"
 [features]
 default = ["keychain", "media-preview", "notifications"]
 # Keep the key of the encrypted TDLib database in the system keychain (Secret Service).
-keychain = ["dep:keyring-core", "dep:dbus-secret-service-keyring-store", "dep:getrandom"]
+keychain = [
+    "dep:keyring-core",
+    "dep:dbus-secret-service-keyring-store",
+    "dep:getrandom",
+]
 # Image previews of photos, videos, GIFs and stickers in the chat.
 media-preview = ["dep:image", "dep:ratatui-image", "arboard/image-data"]
 # Desktop notifications for new messages.
 notifications = ["dep:notify-rust"]
 
 [dependencies]
-libtgrs = { path = "../libtgrs", version = "1.0.0" }
+libtgrs = { path = "../libtgrs", version = "0.1.0" }
 arboard.workspace = true
 chrono.workspace = true
 clap.workspace = true
