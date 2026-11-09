@@ -38,7 +38,7 @@ mod updates;
 #[cfg(test)]
 mod tests;
 
-pub use auth::{Authenticator, Proxy, ProxyKind, TdLogging, TdParams};
+pub use auth::{Authenticator, Login, Proxy, ProxyKind, TdLogging, TdParams};
 pub use execute::configure_logging;
 pub use updates::Notification;
 
@@ -195,14 +195,21 @@ impl Client {
                     }
                 }
                 AuthorizationState::WaitPhoneNumber => loop {
-                    let phone_number = auth.phone_number();
-                    match functions::set_authentication_phone_number(
-                        phone_number,
-                        None,
-                        self.client_id,
-                    )
-                    .await
-                    {
+                    let response = match auth.login() {
+                        Login::PhoneNumber(phone_number) => {
+                            functions::set_authentication_phone_number(
+                                phone_number,
+                                None,
+                                self.client_id,
+                            )
+                            .await
+                        }
+                        Login::QrCode => {
+                            functions::request_qr_code_authentication(Vec::new(), self.client_id)
+                                .await
+                        }
+                    };
+                    match response {
                         Ok(_) => break,
                         Err(e) => auth.report_error(&e.message),
                     }

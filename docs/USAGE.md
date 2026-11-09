@@ -9,7 +9,9 @@ How to run `tgrs`, move around, read and write messages, and configure it. For i
 | `tgrs`        | Open the TUI (logs in on the terminal first if needed). |
 | `tgrs logout` | Log out of Telegram and remove the database key.        |
 
-Global options: `--config-dir`, `--log-dir`, `--log-level`, `-v`/`-q`.
+Global options: `--config`, `--keymap`, `--theme`, `--log-dir`, `--log-level`, `-v`/`-q`.
+
+The first time, `tgrs` logs in on the terminal. Enter your phone number with its country calling code to get a login code, or `qr` to log in with a QR code: on a phone logged in to Telegram, open Settings > Devices > Link Desktop Device and scan the code `tgrs` shows (a new one is shown when it expires). A cloud password, if set, is asked for next. Passkeys aren't supported: Telegram only accepts them from its own apps.
 
 Chats are only read and messages only sent from the TUI: there is no command-line or scripting interface to the account.
 
@@ -27,7 +29,7 @@ Like [concord](https://github.com/chojs23/concord): `left`/`right` move between 
 
 ### Leader menu
 
-`space` opens the leader menu, which lists what comes next. Its entries are the `[leader_menu]` section of `keymap.toml`.
+`space` opens the leader menu, which lists what comes next. Press an entry's key, or move to it with `up`/`down` (or the mouse wheel, or a click) and press `enter` (or click it again). Its entries are the `[leader_menu]` section of `keymap.toml`.
 
 | Key     | Action                                       |
 | ------- | -------------------------------------------- |
@@ -125,7 +127,7 @@ What you write and don't send stays with its chat (or forum topic) as a draft, k
 
 ### Message actions
 
-Select a message in the chat (`up`/`down`) and press a key, or `enter` for the actions menu, which lists every action with its key and dims the ones that don't apply. The keys follow [concord](https://github.com/chojs23/concord)'s:
+Select a message in the chat (`up`/`down`) and press a key, or `enter` for the actions menu, which lists every action with its key and dims the ones that don't apply. In the menu, press an action's key, or move to it with `up`/`down` (or the mouse wheel, or a click) and press `enter` (or click it again); a click outside closes it, like in the other menus. The keys follow [concord](https://github.com/chojs23/concord)'s:
 
 | Key | Action                                                                                             |
 | --- | -------------------------------------------------------------------------------------------------- |
@@ -233,13 +235,13 @@ Previews already downloaded always show. Files are only downloaded otherwise whe
 
 | What                                       | Location                                                                       |
 | ------------------------------------------ | ------------------------------------------------------------------------------ |
-| `config.toml`, `keymap.toml`, `theme.toml` | `$XDG_CONFIG_HOME/tgrs` (`~/.config/tgrs`), or `--config-dir` / `TGRS_CONFIG_DIR` |
+| `config.toml`, `keymap.toml`, `theme.toml` | `$XDG_CONFIG_HOME/tgrs` (`~/.config/tgrs`), or `--config` / `--keymap` / `--theme` |
 | TDLib database                             | `$XDG_DATA_HOME/tgrs/tdlib` (`~/.local/share/tgrs/tdlib`)                        |
 | Logs, TDLib log                            | `$XDG_STATE_HOME/tgrs` (`~/.local/state/tgrs`)                                   |
 | TDLib database key                         | the system keychain, service `tgrs` (see `[credentials]`)                       |
 | Downloads                                  | `app.download_dir`, default `$XDG_DOWNLOAD_DIR` or `~/Downloads`               |
 
-Settings are resolved as `CLI > environment > config.toml > defaults`. They are only changed by editing the files: `tgrs` never writes to them and has no settings UI. `API_ID` and `API_HASH` override the Telegram credentials.
+Settings are resolved as `CLI > config.toml > defaults`; tgrs reads no environment variables of its own. They are only changed by editing the files: `tgrs` never writes to them and has no settings UI. A file passed with `--config`, `--keymap` or `--theme` must exist.
 
 To customize, copy the files you want to change from [`examples/`](../examples/) into the config directory; missing files keep their defaults.
 

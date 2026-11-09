@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     app::action::{Modifiers, ReactionChoice},
-    ui::tests::create_test_app_context,
+    ui::tests::{click, create_test_app_context, draw_component, wheel},
 };
 use crossterm::event::KeyModifiers;
 use ratatui::{Terminal, backend::TestBackend};
@@ -109,4 +109,31 @@ fn draws_a_titled_list_with_the_selection_marker() {
     assert!(text.contains("Choose reaction"), "{text}");
     assert!(text.contains("▸ 1 👍"), "{text}");
     assert!(text.contains("remove"), "{text}");
+}
+
+#[test]
+fn the_mouse_moves_the_highlight_and_picks() {
+    let (mut picker, mut rx) = picker();
+    picker.update(Action::ShowPicker(reactions()));
+    draw_component(&mut picker, 80, 20);
+    let (popup, _) = picker.last_popup.unwrap();
+
+    picker.handle_mouse_events(wheel(true)).unwrap();
+    assert_eq!(picker.selected, 1);
+    picker.handle_mouse_events(wheel(true)).unwrap();
+    assert_eq!(picker.selected, 0);
+
+    let second = click(popup.x + 3, popup.y + 2);
+    picker.handle_mouse_events(second).unwrap();
+    assert_eq!(picker.selected, 1);
+    assert!(sent(&mut rx).is_empty());
+    picker.handle_mouse_events(second).unwrap();
+    assert_eq!(
+        sent(&mut rx),
+        vec![Action::HidePicker, Action::SetReaction(7, "❤".into(), true)]
+    );
+    assert_eq!(
+        picker.handle_mouse_events(click(0, 0)).unwrap(),
+        Some(Action::HidePicker)
+    );
 }

@@ -189,9 +189,9 @@ pub enum ConfigError {
     },
 }
 
-/// Loads `config.toml` from `config_dir`; a missing file is `Ok(None)`.
-pub fn load(config_dir: &Path) -> Result<Option<FileConfig>, ConfigError> {
-    read_toml(&config_dir.join(FILE_NAME))
+/// Loads a `config.toml` file; a missing file is `Ok(None)`.
+pub fn load(path: &Path) -> Result<Option<FileConfig>, ConfigError> {
+    read_toml(path)
 }
 
 /// Parses `config.toml` contents.

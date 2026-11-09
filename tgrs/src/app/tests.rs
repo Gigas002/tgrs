@@ -205,6 +205,38 @@ mod masked_input {
     }
 }
 
+mod login {
+    use libtgrs::client::Login;
+
+    use crate::app::auth::{parse_login, qr_code_text};
+
+    #[test]
+    fn qr_picks_the_qr_code_and_anything_else_is_a_phone_number() {
+        assert_eq!(parse_login("qr"), Login::QrCode);
+        assert_eq!(parse_login(" QR \n"), Login::QrCode);
+        assert_eq!(
+            parse_login(" +44 7700 900123 "),
+            Login::PhoneNumber("+44 7700 900123".into())
+        );
+    }
+
+    #[test]
+    fn the_qr_code_is_square_with_a_quiet_zone() {
+        let link = "tg://login?token=AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA";
+        let plain = qr_code_text(link, false).unwrap();
+        let lines: Vec<&str> = plain.lines().collect();
+        let width = lines[0].chars().count();
+        // Two module rows per line, a quiet zone of 4 modules on every side
+        assert!(lines.len() * 2 >= width && lines.len() * 2 <= width + 1);
+        assert!(lines[0].chars().all(|c| c == ' '), "{:?}", lines[0]);
+        assert!(lines.iter().all(|line| line.chars().count() == width));
+
+        let colored = qr_code_text(link, true).unwrap();
+        assert_eq!(colored.lines().count(), lines.len());
+        assert!(colored.lines().all(|line| line.starts_with("\x1b[30;107m")));
+    }
+}
+
 #[test]
 fn changed_messages_are_redrawn() {
     let ctx = test_app_context();
@@ -300,6 +332,15 @@ fn leader_keys_close_the_menu_then_run() {
     // Unbound keys (and Esc) only close it
     handle_leader_key(&ctx, &Event::Key(KeyCode::Esc, KeyModifiers::NONE)).unwrap();
     assert_eq!(sent(&ctx), vec![Action::HideLeaderMenu]);
+    // The arrows and Enter move through it and keep it open
+    for (key, action) in [
+        (KeyCode::Up, Action::LeaderMenuPrevious),
+        (KeyCode::Down, Action::LeaderMenuNext),
+        (KeyCode::Enter, Action::LeaderMenuConfirm),
+    ] {
+        handle_leader_key(&ctx, &Event::Key(key, KeyModifiers::NONE)).unwrap();
+        assert_eq!(sent(&ctx), vec![action]);
+    }
 }
 
 #[test]

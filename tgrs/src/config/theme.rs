@@ -39,11 +39,11 @@ impl ThemeFile {
     }
 }
 
-/// Loads `theme.toml` from `config_dir`; a missing file is the default theme.
-/// Returns the warnings about skipped entries.
-pub fn load(config_dir: &Path) -> Result<(ThemeFile, Vec<String>), ConfigError> {
-    let table: Option<toml::Table> = read_toml(&config_dir.join(FILE_NAME))?;
-    Ok(table.map_or_else(Default::default, |table| parse(&table)))
+/// Loads a `theme.toml` file with the warnings about skipped entries;
+/// a missing file is `Ok(None)`.
+pub fn load(path: &Path) -> Result<Option<(ThemeFile, Vec<String>)>, ConfigError> {
+    let table: Option<toml::Table> = read_toml(path)?;
+    Ok(table.map(|table| parse(&table)))
 }
 
 /// Parses `theme.toml` contents, collecting a warning per skipped entry.

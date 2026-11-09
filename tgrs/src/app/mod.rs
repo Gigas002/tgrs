@@ -44,6 +44,7 @@ use crate::{
     ui::component_name::ComponentName,
     ui::{
         Tui, chat_actions, find_chat,
+        leader_menu::LeaderMenu,
         terminal::{self, TuiBackend},
     },
 };
@@ -127,7 +128,7 @@ async fn run_telegram(settings: &Settings) -> Result<(), AppError> {
     let (notify_tx, notify_rx) = tokio::sync::mpsc::unbounded_channel();
     client.start(notify_tx);
     client.set_logging(&settings.tdlib_log).await;
-    client.authorize(&mut StdinAuthenticator).await;
+    client.authorize(&mut StdinAuthenticator::default()).await;
 
     if client.is_authorized() {
         if let Some(keychain) = &keychain
@@ -161,7 +162,7 @@ async fn run_telegram(settings: &Settings) -> Result<(), AppError> {
             client.close().await;
         }
         // Drain the authorization updates until TDLib reports `Closed`.
-        client.authorize(&mut StdinAuthenticator).await;
+        client.authorize(&mut StdinAuthenticator::default()).await;
         client.join().await;
         result
     } else {
@@ -506,15 +507,24 @@ async fn consume_until_single_action(
 
 /// A key pressed in the leader menu: its `[leader_menu]` binding runs after
 /// the menu closes (and gives the focus back); any other key just closes it.
+/// The keys that move through the entries keep it open.
 fn handle_leader_key(app_context: &AppContext, key: &Event) -> Result<(), AppError> {
     let action_tx = app_context.action_tx();
-    action_tx.send(Action::HideLeaderMenu)?;
-    if let Some(ActionBinding::Single { action, .. }) = app_context
+    let action = match app_context
         .keymap_config()
         .section(ComponentName::LeaderMenu)
         .and_then(|section| section.get(key))
     {
-        action_tx.send(action.clone())?;
+        Some(ActionBinding::Single { action, .. }) => Some(action.clone()),
+        _ => None,
+    };
+    match action {
+        Some(action) if LeaderMenu::navigates(&action) => action_tx.send(action)?,
+        Some(Action::HideLeaderMenu) | None => action_tx.send(Action::HideLeaderMenu)?,
+        Some(action) => {
+            action_tx.send(Action::HideLeaderMenu)?;
+            action_tx.send(action)?;
+        }
     }
     Ok(())
 }

@@ -3,7 +3,9 @@ use crate::{
     app::context::AppContext,
     ui::component_traits::{Component, HandleFocus},
     ui::message,
+    ui::popup_list::{self, MouseHit},
 };
+use crossterm::event::MouseEvent;
 use libtgrs::model::MessageEntry;
 use ratatui::{
     Frame,
@@ -25,6 +27,8 @@ pub struct PinnedMessagesPopup {
     visible: bool,
     messages: Vec<MessageEntry>,
     index: usize,
+    /// Where the popup was drawn, for mouse clicks.
+    last_popup: Option<Rect>,
 }
 
 impl PinnedMessagesPopup {
@@ -37,6 +41,7 @@ impl PinnedMessagesPopup {
             visible: false,
             messages: Vec::new(),
             index: 0,
+            last_popup: None,
         }
     }
 
@@ -103,6 +108,7 @@ impl Component for PinnedMessagesPopup {
             }
             Action::HidePinnedMessagesPopup => {
                 self.visible = false;
+                self.last_popup = None;
             }
             Action::PinnedPopupPrevious => self.go_previous(),
             Action::PinnedPopupNext => self.go_next(),
@@ -132,6 +138,20 @@ impl Component for PinnedMessagesPopup {
         }
     }
 
+    /// The wheel goes to older (up) or newer messages; a click outside closes.
+    fn handle_mouse_events(&mut self, mouse: MouseEvent) -> io::Result<Option<Action>> {
+        let Some(popup) = self.last_popup else {
+            return Ok(None);
+        };
+        match popup_list::mouse_hit(mouse, popup, 0) {
+            MouseHit::Previous => self.go_previous(),
+            MouseHit::Next => self.go_next(),
+            MouseHit::Outside => return Ok(Some(Action::HidePinnedMessagesPopup)),
+            MouseHit::Line(_) | MouseHit::None => {}
+        }
+        Ok(None)
+    }
+
     fn draw(&mut self, frame: &mut Frame<'_>, area: Rect) -> io::Result<()> {
         if !self.visible || self.messages.is_empty() {
             return Ok(());
@@ -149,6 +169,7 @@ impl Component for PinnedMessagesPopup {
         );
 
         frame.render_widget(Clear, popup_area);
+        self.last_popup = Some(popup_area);
 
         let title = format!("{}/{}", self.index + 1, self.messages.len());
         let block = Block::new()

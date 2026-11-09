@@ -53,7 +53,6 @@ fn defaults_follow_xdg() {
     let settings = env.resolve(CliOverrides::default()).unwrap();
     let home = env.home();
 
-    assert_eq!(settings.dirs.config, home.join(".config/tgrs"));
     assert_eq!(settings.dirs.data, home.join(".local/share/tgrs"));
     assert_eq!(settings.dirs.state, home.join(".local/state/tgrs"));
     assert_eq!(settings.logging.dir, home.join(".local/state/tgrs/logs"));
@@ -86,8 +85,14 @@ fn xdg_variables_are_respected() {
         .set("XDG_DATA_HOME", xdg.join("data"))
         .set("XDG_STATE_HOME", xdg.join("state"))
         .set("XDG_DOWNLOAD_DIR", xdg.join("downloads"));
+    std::fs::create_dir_all(xdg.join("config/tgrs")).unwrap();
+    std::fs::write(
+        xdg.join("config/tgrs/config.toml"),
+        "[app]\nuse_emoji_icons = true\n",
+    )
+    .unwrap();
     let settings = env.resolve(CliOverrides::default()).unwrap();
-    assert_eq!(settings.dirs.config, xdg.join("config/tgrs"));
+    assert!(settings.app.use_emoji_icons);
     assert_eq!(settings.dirs.data, xdg.join("data/tgrs"));
     assert_eq!(settings.dirs.state, xdg.join("state/tgrs"));
     assert_eq!(settings.app.download_dir, xdg.join("downloads"));
@@ -184,44 +189,78 @@ fn cli_overrides_config() {
 }
 
 #[test]
-fn config_dir_from_cli_then_env() {
+fn config_files_from_cli_replace_the_config_dir() {
     let env = Env::new();
-    let from_env = env.home().join("env-config");
-    let env = env.set(CONFIG_DIR_ENV, &from_env);
-    assert_eq!(
-        env.resolve(CliOverrides::default()).unwrap().dirs.config,
-        from_env
+    env.write_config("config.toml", "[app]\nuse_emoji_icons = true\n");
+    env.write_config(
+        "keymap.toml",
+        "[chat]\nkeymap = [{ keys = [\"q\"], command = \"no_such_command\" }]\n",
     );
+    env.write_config("theme.toml", "[highlight.Error]\nforeground = \"blue\"\n");
 
-    let from_cli = env.home().join("cli-config");
+    let dir = env.home().join("elsewhere");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("c.toml"), "[app]\nshow_status_bar = false\n").unwrap();
+    std::fs::write(dir.join("k.toml"), "").unwrap();
+    std::fs::write(
+        dir.join("t.toml"),
+        "[highlight.Error]\nforeground = \"green\"\n",
+    )
+    .unwrap();
     let cli = CliOverrides {
-        config_dir: Some(from_cli.clone()),
+        config: Some(dir.join("c.toml")),
+        keymap: Some(dir.join("k.toml")),
+        theme: Some(dir.join("t.toml")),
         ..CliOverrides::default()
     };
-    assert_eq!(env.resolve(cli).unwrap().dirs.config, from_cli);
+    let settings = env.resolve(cli).unwrap();
+
+    assert!(!settings.app.use_emoji_icons);
+    assert!(!settings.app.show_status_bar);
+    assert_eq!(
+        settings.theme.style(HighlightGroup::Error).fg,
+        Some(Color::Green)
+    );
 }
 
 #[test]
-fn api_credentials_from_env_override_config() {
+fn missing_config_file_from_cli_is_an_error() {
+    let env = Env::new();
+    let path = env.home().join("nope.toml");
+    for cli in [
+        CliOverrides {
+            config: Some(path.clone()),
+            ..CliOverrides::default()
+        },
+        CliOverrides {
+            keymap: Some(path.clone()),
+            ..CliOverrides::default()
+        },
+        CliOverrides {
+            theme: Some(path.clone()),
+            ..CliOverrides::default()
+        },
+    ] {
+        assert!(matches!(
+            env.resolve(cli),
+            Err(SettingsError::MissingFile { path: missing }) if missing == path
+        ));
+    }
+}
+
+#[test]
+fn environment_does_not_override_config() {
     let env = Env::new()
-        .set(API_ID_ENV, " 42 ")
-        .set(API_HASH_ENV, "env-hash");
+        .set("TGRS_CONFIG_DIR", "/nonexistent")
+        .set("API_ID", "42")
+        .set("API_HASH", "env-hash");
     env.write_config(
         "config.toml",
         "[telegram]\napi_id = 1\napi_hash = \"file\"\n",
     );
     let settings = env.resolve(CliOverrides::default()).unwrap();
-    assert_eq!(settings.telegram.api_id, 42);
-    assert_eq!(settings.telegram.api_hash, "env-hash");
-}
-
-#[test]
-fn invalid_api_id_is_an_error() {
-    let env = Env::new().set(API_ID_ENV, "nope");
-    assert!(matches!(
-        env.resolve(CliOverrides::default()),
-        Err(SettingsError::ApiId(value)) if value == "nope"
-    ));
+    assert_eq!(settings.telegram.api_id, 1);
+    assert_eq!(settings.telegram.api_hash, "file");
 }
 
 #[test]

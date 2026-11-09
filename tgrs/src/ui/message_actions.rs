@@ -5,8 +5,9 @@ use crate::{
     settings::HighlightGroup,
     ui::component_name::ComponentName,
     ui::component_traits::{Component, HandleFocus},
-    ui::popup_list::{self, PopupRow},
+    ui::popup_list::{self, MouseHit, PopupRow},
 };
+use crossterm::event::MouseEvent;
 use libtgrs::model::{MessageEntry, TdMessageReplyTo};
 use ratatui::{Frame, layout::Rect, text::Span};
 use std::{io, sync::Arc};
@@ -32,6 +33,8 @@ pub struct MessageActions {
     message_id: Option<i64>,
     items: Vec<MenuItem>,
     selected: usize,
+    /// Where the menu was drawn and its scroll offset, for mouse clicks.
+    last_popup: Option<(Rect, usize)>,
 }
 
 impl MessageActions {
@@ -45,6 +48,7 @@ impl MessageActions {
             message_id: None,
             items: Vec::new(),
             selected: 0,
+            last_popup: None,
         }
     }
 
@@ -121,6 +125,7 @@ impl MessageActions {
 
     fn hide(&mut self) {
         self.visible = false;
+        self.last_popup = None;
         // Keep the message selected in the chat
         if let Some(message_id) = self.message_id.take() {
             self.app_context
@@ -222,6 +227,23 @@ impl Component for MessageActions {
         }
     }
 
+    /// The wheel moves the highlight; a click highlights a row, and a click
+    /// on the highlighted row runs it.
+    fn handle_mouse_events(&mut self, mouse: MouseEvent) -> io::Result<Option<Action>> {
+        let Some((popup, offset)) = self.last_popup else {
+            return Ok(None);
+        };
+        match popup_list::mouse_hit(mouse, popup, offset) {
+            MouseHit::Previous => self.move_selection(false),
+            MouseHit::Next => self.move_selection(true),
+            MouseHit::Outside => return Ok(Some(Action::HideMessageActions)),
+            MouseHit::Line(index) if index == self.selected => self.activate(index),
+            MouseHit::Line(index) if index < self.items.len() => self.selected = index,
+            MouseHit::Line(_) | MouseHit::None => {}
+        }
+        Ok(None)
+    }
+
     fn draw(&mut self, frame: &mut Frame<'_>, area: Rect) -> io::Result<()> {
         if !self.visible || self.items.is_empty() {
             return Ok(());
@@ -245,7 +267,7 @@ impl Component for MessageActions {
                 }
             })
             .collect();
-        popup_list::draw(
+        self.last_popup = Some(popup_list::draw(
             frame,
             area,
             theme,
@@ -253,7 +275,7 @@ impl Component for MessageActions {
             &rows,
             self.selected,
             28,
-        );
+        ));
         Ok(())
     }
 }

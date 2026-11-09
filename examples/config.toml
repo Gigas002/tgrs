@@ -1,7 +1,7 @@
 # tgrs configuration.
 #
 # Location: $XDG_CONFIG_HOME/tgrs/config.toml (default ~/.config/tgrs/config.toml),
-# or the directory given by `--config-dir` / `TGRS_CONFIG_DIR`.
+# or the file given by `--config`.
 # Every key is optional; commented-out values are the defaults.
 # Paths may start with `~`; relative paths are rejected.
 
@@ -33,7 +33,6 @@
 
 [telegram]
 # Telegram API credentials from https://my.telegram.org.
-# Overridden by the API_ID and API_HASH environment variables.
 # api_id = 94575
 # api_hash = "a3406de8d171bb422bb6ddf3bbd800e2"
 # TDLib database directory (default $XDG_DATA_HOME/tgrs/tdlib).

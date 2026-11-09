@@ -3,9 +3,9 @@ use crate::{
     app::context::AppContext,
     settings::HighlightGroup,
     ui::component_traits::{Component, HandleFocus},
-    ui::popup_list::{self, PopupRow},
+    ui::popup_list::{self, MouseHit, PopupRow},
 };
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, MouseEvent};
 use ratatui::{Frame, layout::Rect, text::Span};
 use std::{io, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
@@ -27,6 +27,8 @@ pub struct Picker {
     focused: bool,
     kind: Option<PickerKind>,
     selected: usize,
+    /// Where the picker was drawn and its scroll offset, for mouse clicks.
+    last_popup: Option<(Rect, usize)>,
 }
 
 impl Picker {
@@ -38,6 +40,7 @@ impl Picker {
             focused: false,
             kind: None,
             selected: 0,
+            last_popup: None,
         }
     }
 
@@ -167,7 +170,10 @@ impl Component for Picker {
                 self.kind = Some(kind);
                 self.selected = 0;
             }
-            Action::HidePicker => self.kind = None,
+            Action::HidePicker => {
+                self.kind = None;
+                self.last_popup = None;
+            }
             Action::PickerPrevious => self.move_selection(false),
             Action::PickerNext => self.move_selection(true),
             Action::PickerConfirm => self.pick(self.selected),
@@ -181,6 +187,23 @@ impl Component for Picker {
         }
     }
 
+    /// The wheel moves the highlight; a click highlights an entry, and a
+    /// click on the highlighted entry picks it.
+    fn handle_mouse_events(&mut self, mouse: MouseEvent) -> io::Result<Option<Action>> {
+        let Some((popup, offset)) = self.last_popup else {
+            return Ok(None);
+        };
+        match popup_list::mouse_hit(mouse, popup, offset) {
+            MouseHit::Previous => self.move_selection(false),
+            MouseHit::Next => self.move_selection(true),
+            MouseHit::Outside => return Ok(Some(Action::HidePicker)),
+            MouseHit::Line(index) if index == self.selected => self.pick(index),
+            MouseHit::Line(index) if index < self.len() => self.selected = index,
+            MouseHit::Line(_) | MouseHit::None => {}
+        }
+        Ok(None)
+    }
+
     fn draw(&mut self, frame: &mut Frame<'_>, area: Rect) -> io::Result<()> {
         if self.kind.is_none() {
             return Ok(());
@@ -190,7 +213,7 @@ impl Component for Picker {
             Some(PickerKind::Links(_)) => 54,
             _ => 28,
         };
-        popup_list::draw(
+        self.last_popup = Some(popup_list::draw(
             frame,
             area,
             self.app_context.theme(),
@@ -198,7 +221,7 @@ impl Component for Picker {
             &rows,
             self.selected,
             min_width,
-        );
+        ));
         Ok(())
     }
 }

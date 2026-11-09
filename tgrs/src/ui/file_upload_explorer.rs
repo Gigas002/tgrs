@@ -2,8 +2,9 @@ use crate::{
     app::action::Action,
     app::context::AppContext,
     ui::component_traits::{Component, HandleFocus},
+    ui::popup_list::{self, MouseHit},
 };
-use crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use ratatui::widgets::FrameExt as _;
 use ratatui::{
     Frame,
@@ -26,6 +27,8 @@ pub struct FileUploadExplorer {
     explorer: FileExplorer,
     /// Files attached with `a` since the explorer opened, sent together.
     attached: usize,
+    /// Where the popup was drawn, for mouse clicks.
+    last_popup: Option<Rect>,
 }
 
 impl FileUploadExplorer {
@@ -53,6 +56,7 @@ impl FileUploadExplorer {
             visible: false,
             explorer,
             attached: 0,
+            last_popup: None,
         }
     }
 
@@ -146,6 +150,7 @@ impl Component for FileUploadExplorer {
             }
             Action::HideFileUploadExplorer => {
                 self.visible = false;
+                self.last_popup = None;
             }
             Action::Key(key_code, modifiers) => {
                 if !self.visible || !self.focused {
@@ -216,6 +221,20 @@ impl Component for FileUploadExplorer {
         }
     }
 
+    /// The wheel moves through the files; a click outside closes.
+    fn handle_mouse_events(&mut self, mouse: MouseEvent) -> std::io::Result<Option<Action>> {
+        let Some(popup) = self.last_popup else {
+            return Ok(None);
+        };
+        match popup_list::mouse_hit(mouse, popup, 0) {
+            MouseHit::Previous => self.explorer.handle(ExplorerInput::Up)?,
+            MouseHit::Next => self.explorer.handle(ExplorerInput::Down)?,
+            MouseHit::Outside => return Ok(Some(Action::HideFileUploadExplorer)),
+            MouseHit::Line(_) | MouseHit::None => {}
+        }
+        Ok(None)
+    }
+
     fn draw(&mut self, frame: &mut Frame<'_>, area: Rect) -> std::io::Result<()> {
         if !self.visible {
             return Ok(());
@@ -234,6 +253,7 @@ impl Component for FileUploadExplorer {
         let popup_area = Rect::new(popup_x, popup_y, popup_w, popup_h);
 
         frame.render_widget(Clear, popup_area);
+        self.last_popup = Some(popup_area);
 
         let block = Block::new()
             .borders(Borders::ALL)

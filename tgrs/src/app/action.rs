@@ -676,6 +676,12 @@ pub enum Action {
     ShowLeaderMenu,
     /// Close the leader menu.
     HideLeaderMenu,
+    /// Run the entry highlighted in the leader menu.
+    LeaderMenuConfirm,
+    /// Highlight the previous entry in the leader menu.
+    LeaderMenuPrevious,
+    /// Highlight the next entry in the leader menu.
+    LeaderMenuNext,
     /// Focus the pane to the right: chat list, chat, then prompt.
     FocusNextPane,
     /// Focus the pane to the left.
@@ -848,6 +854,9 @@ impl FromStr for Action {
             "copy_message_link" => Ok(Action::SelectedMessage(MessageCommand::CopyLink)),
             "show_leader_menu" => Ok(Action::ShowLeaderMenu),
             "hide_leader_menu" => Ok(Action::HideLeaderMenu),
+            "leader_menu_confirm" => Ok(Action::LeaderMenuConfirm),
+            "leader_menu_previous" => Ok(Action::LeaderMenuPrevious),
+            "leader_menu_next" => Ok(Action::LeaderMenuNext),
             "focus_next_pane" => Ok(Action::FocusNextPane),
             "focus_previous_pane" => Ok(Action::FocusPreviousPane),
             "resize_pane_wider" => Ok(Action::ResizePaneWider),
