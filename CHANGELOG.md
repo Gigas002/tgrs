@@ -64,6 +64,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+- The mouse works in the message actions, reaction and link pickers and the leader menu: the wheel moves the highlight, a click highlights an entry, a second click runs it and a click outside closes the menu. The wheel also moves through pinned messages and the upload explorer, and a click outside closes them.
+- The leader menu highlights an entry: `up`/`down` move it and `enter` runs it. Commands `leader_menu_previous`, `leader_menu_next` and `leader_menu_confirm`.
 - `telegram.use_test_dc`: use Telegram's test servers, for development.
 - `notifications` feature (default): desktop notifications for new messages through TDLib's notification API, so muted chats, mention-only settings and messages already read elsewhere stay silent; the open chat is never notified about. `[notifications] enabled` and `show_preview` in `config.toml`; the text is also hidden for chats that hide previews in Telegram.
 - Clearing chat history: `X` in the chat list (or the chat actions) deletes every message of a chat for you, keeping the chat, and the chat actions also clear it for everyone where Telegram allows it (private chats, groups you run); both ask for a second press. Commands `clear_chat_history` and `clear_chat_history_for_everyone`.

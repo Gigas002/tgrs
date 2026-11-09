@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use libtgrs::model::{ChatListEntry, Media, MediaFile, MediaKind, MessageEntry, TdMessageSender};
 
-use crate::app::context::AppContext;
+use crate::{app::context::AppContext, ui::component_traits::Component};
 
 pub fn create_test_app_context() -> Arc<AppContext> {
     AppContext::for_tests()
@@ -98,3 +98,45 @@ fn the_screen_has_a_header_panes_and_hints() {
 }
 
 mod perf;
+
+/// A left click at `column`, `row`.
+pub fn click(column: u16, row: u16) -> crossterm::event::MouseEvent {
+    mouse(
+        crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+        column,
+        row,
+    )
+}
+
+/// The mouse wheel turned down (`true`) or up.
+pub fn wheel(down: bool) -> crossterm::event::MouseEvent {
+    use crossterm::event::MouseEventKind;
+    let kind = if down {
+        MouseEventKind::ScrollDown
+    } else {
+        MouseEventKind::ScrollUp
+    };
+    mouse(kind, 0, 0)
+}
+
+fn mouse(
+    kind: crossterm::event::MouseEventKind,
+    column: u16,
+    row: u16,
+) -> crossterm::event::MouseEvent {
+    crossterm::event::MouseEvent {
+        kind,
+        column,
+        row,
+        modifiers: crossterm::event::KeyModifiers::NONE,
+    }
+}
+
+/// Draws `component` on a `width` x `height` screen.
+pub fn draw_component(component: &mut dyn Component, width: u16, height: u16) {
+    let mut terminal =
+        ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
+    terminal
+        .draw(|frame| component.draw(frame, frame.area()).unwrap())
+        .unwrap();
+}

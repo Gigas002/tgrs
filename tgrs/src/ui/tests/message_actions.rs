@@ -1,7 +1,10 @@
 use super::*;
 use crate::{
     app::action::Modifiers,
-    ui::tests::{create_mock_media_message, create_mock_message, create_test_app_context},
+    ui::tests::{
+        click, create_mock_media_message, create_mock_message, create_test_app_context,
+        draw_component, wheel,
+    },
 };
 use crossterm::event::{KeyCode, KeyModifiers};
 use libtgrs::model::{TdMessageSender, TextSpan, TextStyle};
@@ -248,5 +251,43 @@ fn protected_messages_can_t_be_forwarded() {
     assert_eq!(
         disabled(&menu, MessageCommand::Forward),
         Some("protected content")
+    );
+}
+
+#[test]
+fn the_mouse_moves_the_highlight_and_runs_actions() {
+    let (mut menu, mut rx) = menu_with(vec![create_mock_message(1, "hello")]);
+    menu.update(Action::ShowMessageActionsFor(1));
+    draw_component(&mut menu, 80, 40);
+    let (popup, _) = menu.last_popup.unwrap();
+
+    menu.handle_mouse_events(wheel(true)).unwrap();
+    assert_eq!(menu.selected, 1);
+    menu.handle_mouse_events(wheel(false)).unwrap();
+    assert_eq!(menu.selected, 0);
+
+    // A click on another row highlights it, a second click runs it
+    let row = popup.y + 2;
+    menu.handle_mouse_events(click(popup.x + 3, row)).unwrap();
+    assert_eq!(menu.selected, 1);
+    assert!(sent(&mut rx).is_empty());
+    menu.handle_mouse_events(click(popup.x + 3, row)).unwrap();
+    assert_eq!(
+        sent(&mut rx),
+        vec![
+            Action::HideMessageActions,
+            Action::RunMessageCommand(menu.items[1].command, 1),
+        ]
+    );
+}
+
+#[test]
+fn clicking_outside_closes_the_menu() {
+    let (mut menu, _rx) = menu_with(vec![create_mock_message(1, "hello")]);
+    menu.update(Action::ShowMessageActionsFor(1));
+    draw_component(&mut menu, 80, 40);
+    assert_eq!(
+        menu.handle_mouse_events(click(0, 0)).unwrap(),
+        Some(Action::HideMessageActions)
     );
 }

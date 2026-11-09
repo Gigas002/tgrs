@@ -1,6 +1,7 @@
 //! Selectable list popups like concord's: a centered modal with a title, the
 //! selection marker before the highlighted row and a column of keys.
 
+use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::{
     Frame,
     layout::Rect,
@@ -23,6 +24,45 @@ pub struct PopupRow {
     pub label: Vec<Span<'static>>,
     /// Dimmed, still selectable so pressing it can say why it's unavailable.
     pub disabled: bool,
+}
+
+/// What a mouse event does to a popup list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseHit {
+    /// Wheel up: highlight the previous row.
+    Previous,
+    /// Wheel down: highlight the next row.
+    Next,
+    /// A click on the line at this index of all the lines, counting the
+    /// scrolled-out ones; it may be past the last row.
+    Line(usize),
+    /// A click outside the popup: close it.
+    Outside,
+    /// Nothing to do, e.g. a click on the border.
+    None,
+}
+
+/// What `mouse` does to a list drawn at `popup` and scrolled by `offset`,
+/// as returned by [`draw`].
+pub fn mouse_hit(mouse: MouseEvent, popup: Rect, offset: usize) -> MouseHit {
+    match mouse.kind {
+        MouseEventKind::ScrollUp => MouseHit::Previous,
+        MouseEventKind::ScrollDown => MouseHit::Next,
+        MouseEventKind::Down(MouseButton::Left) => {
+            let inside = mouse.column >= popup.x
+                && mouse.column < popup.right()
+                && mouse.row >= popup.y
+                && mouse.row < popup.bottom();
+            if !inside {
+                MouseHit::Outside
+            } else if mouse.row > popup.y && mouse.row + 1 < popup.bottom() {
+                MouseHit::Line(offset + usize::from(mouse.row - popup.y - 1))
+            } else {
+                MouseHit::None
+            }
+        }
+        _ => MouseHit::None,
+    }
 }
 
 /// The first row shown so that `selected` is visible in `height` rows.

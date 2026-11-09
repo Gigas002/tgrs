@@ -412,7 +412,12 @@ keymap = [
 # pressed key runs its command and closes the menu, any other key just closes it.
 # Like concord, the pane numbers toggle panes: 1 hides or shows the chat list.
 [leader_menu]
+# Up, Down and Enter move through the entries and run the highlighted one;
+# they aren't listed in the menu.
 keymap = [
+  { keys = ["up"], command = "leader_menu_previous", description = "Previous entry"},
+  { keys = ["down"], command = "leader_menu_next", description = "Next entry"},
+  { keys = ["enter"], command = "leader_menu_confirm", description = "Run the highlighted entry"},
   { keys = ["1"], command = "toggle_chat_list", description = "Toggle the chat list"},
   { keys = ["2"], command = "toggle_topic_list", description = "Toggle the topic list"},
   { keys = ["3"], command = "toggle_archive_list", description = "Toggle the archived chats"},

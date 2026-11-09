@@ -27,7 +27,7 @@ Like [concord](https://github.com/chojs23/concord): `left`/`right` move between 
 
 ### Leader menu
 
-`space` opens the leader menu, which lists what comes next. Its entries are the `[leader_menu]` section of `keymap.toml`.
+`space` opens the leader menu, which lists what comes next. Press an entry's key, or move to it with `up`/`down` (or the mouse wheel, or a click) and press `enter` (or click it again). Its entries are the `[leader_menu]` section of `keymap.toml`.
 
 | Key     | Action                                       |
 | ------- | -------------------------------------------- |
@@ -125,7 +125,7 @@ What you write and don't send stays with its chat (or forum topic) as a draft, k
 
 ### Message actions
 
-Select a message in the chat (`up`/`down`) and press a key, or `enter` for the actions menu, which lists every action with its key and dims the ones that don't apply. The keys follow [concord](https://github.com/chojs23/concord)'s:
+Select a message in the chat (`up`/`down`) and press a key, or `enter` for the actions menu, which lists every action with its key and dims the ones that don't apply. In the menu, press an action's key, or move to it with `up`/`down` (or the mouse wheel, or a click) and press `enter` (or click it again); a click outside closes it, like in the other menus. The keys follow [concord](https://github.com/chojs23/concord)'s:
 
 | Key | Action                                                                                             |
 | --- | -------------------------------------------------------------------------------------------------- |

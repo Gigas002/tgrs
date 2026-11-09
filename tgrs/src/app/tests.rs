@@ -300,6 +300,15 @@ fn leader_keys_close_the_menu_then_run() {
     // Unbound keys (and Esc) only close it
     handle_leader_key(&ctx, &Event::Key(KeyCode::Esc, KeyModifiers::NONE)).unwrap();
     assert_eq!(sent(&ctx), vec![Action::HideLeaderMenu]);
+    // The arrows and Enter move through it and keep it open
+    for (key, action) in [
+        (KeyCode::Up, Action::LeaderMenuPrevious),
+        (KeyCode::Down, Action::LeaderMenuNext),
+        (KeyCode::Enter, Action::LeaderMenuConfirm),
+    ] {
+        handle_leader_key(&ctx, &Event::Key(key, KeyModifiers::NONE)).unwrap();
+        assert_eq!(sent(&ctx), vec![action]);
+    }
 }
 
 #[test]
