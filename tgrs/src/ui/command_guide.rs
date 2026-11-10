@@ -204,6 +204,7 @@ impl CommandGuide {
         // Popups opened from the chat
         for (title, component) in [
             ("Message Actions", ComponentName::MessageActions),
+            ("Send Images As", ComponentName::SendAs),
             ("Pinned Messages", ComponentName::PinnedMessagesPopup),
             ("Reaction and URL Picker", ComponentName::Picker),
             ("Sticker Picker", ComponentName::StickerPicker),
@@ -286,7 +287,7 @@ impl CommandGuide {
         lines.push(Line::from("  ]"));
         lines.push(Line::from(""));
         lines.push(Line::from(
-            "Available components: core_window, chat_list, archive_list, topic_list, chat, prompt, command_guide, search_overlay, message_actions, file_upload_explorer, pinned_messages_popup, picker, sticker_picker, chat_actions, profile, find_chat, edit_profile, report, blocked_list, sessions, forward, downloads, storage, notification_settings, privacy, leader_menu",
+            "Available components: core_window, chat_list, archive_list, topic_list, chat, prompt, command_guide, search_overlay, message_actions, file_upload_explorer, pinned_messages_popup, picker, sticker_picker, chat_actions, profile, find_chat, edit_profile, report, blocked_list, sessions, forward, downloads, storage, notification_settings, privacy, leader_menu, send_as",
         ));
         lines.push(Line::from(""));
         lines.push(Line::from("Example:"));

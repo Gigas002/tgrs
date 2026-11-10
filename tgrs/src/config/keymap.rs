@@ -54,6 +54,7 @@ pub struct KeymapFile {
     pub notification_settings: Option<KeymapMode>,
     pub privacy: Option<KeymapMode>,
     pub leader_menu: Option<KeymapMode>,
+    pub send_as: Option<KeymapMode>,
 }
 
 /// Loads a `keymap.toml` file; a missing file is `Ok(None)`.

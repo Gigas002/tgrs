@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use crossterm::event::{KeyCode, KeyModifiers};
+use libtgrs::client::SendAs;
 use libtgrs::model::{
     BlockedSender, NotificationOption, NotificationSettings, NotificationTarget, PrivacyRules,
     PrivacySetting, PrivacySettings, ProfileChange, ProfileField, ReportStep, SessionEntry,
@@ -779,10 +780,25 @@ pub enum Action {
     PromptPasteImage,
     /// Send the next message without sound, or with it again.
     PromptToggleSilent,
-    /// Send this file with this caption (none if empty), maybe as a reply.
-    SendFile(String, String, Option<TdMessageReplyToMessage>),
-    /// Send these files as albums, the first with this caption, maybe as a reply.
-    SendAlbum(Vec<String>, String, Option<TdMessageReplyToMessage>),
+    /// Send this file with this caption (none if empty), maybe as a reply;
+    /// an image as a photo or as a file.
+    SendFile(String, String, Option<TdMessageReplyToMessage>, SendAs),
+    /// Send these files as albums, the first with this caption, maybe as a
+    /// reply; images as photos or as files.
+    SendAlbum(Vec<String>, String, Option<TdMessageReplyToMessage>, SendAs),
+    /// Ask how to send the images about to be sent: the number of images,
+    /// and of other files sent with them.
+    ShowSendAs(usize, usize),
+    /// Don't send the files: they stay attached to the prompt.
+    HideSendAs,
+    /// Send the files, images this way.
+    SendAsChosen(SendAs),
+    /// Highlight the previous way of sending images.
+    SendAsPrevious,
+    /// Highlight the next way of sending images.
+    SendAsNext,
+    /// Send the images the highlighted way.
+    SendAsConfirm,
     /// Attach this file to the prompt, to send it with others.
     AttachFile(String),
 }
@@ -985,6 +1001,12 @@ impl FromStr for Action {
             "pinned_popup_next" => Ok(Action::PinnedPopupNext),
             "pinned_popup_confirm_jump" => Ok(Action::PinnedPopupConfirmJump),
             "pinned_popup_open_media" => Ok(Action::PinnedPopupOpenMedia),
+            "hide_send_as" => Ok(Action::HideSendAs),
+            "send_as_photos" => Ok(Action::SendAsChosen(SendAs::Photos)),
+            "send_as_files" => Ok(Action::SendAsChosen(SendAs::Files)),
+            "send_as_confirm" => Ok(Action::SendAsConfirm),
+            "send_as_previous" => Ok(Action::SendAsPrevious),
+            "send_as_next" => Ok(Action::SendAsNext),
             _ => Err(AppError::InvalidAction(s.to_string())),
         }
     }

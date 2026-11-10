@@ -9,6 +9,7 @@ use crate::{
 };
 use arboard::Clipboard;
 use crossterm::event::KeyCode;
+use libtgrs::client::{self, SendAs};
 use libtgrs::model::td_enums::TdMessageReplyToMessage;
 use ratatui::{
     Frame,
@@ -593,6 +594,18 @@ pub struct PromptWindow {
     saved_draft: String,
     /// Files dropped or pasted into the prompt, sent with the next message.
     attachments: Vec<PathBuf>,
+    /// Files with images waiting to be told how to send the images.
+    pending_send: Option<PendingSend>,
+}
+
+/// Files about to be sent, as they were when asked how to send their images:
+/// the prompt loses its reply mode while the question is shown.
+struct PendingSend {
+    paths: Vec<PathBuf>,
+    caption: String,
+    reply_to: Option<TdMessageReplyToMessage>,
+    /// Whether the text was the caption, cleared once the files are sent.
+    text_is_caption: bool,
 }
 
 /// A path as text that pastes back as the same file: quoted when it has
@@ -644,6 +657,7 @@ impl PromptWindow {
             draft_target: None,
             saved_draft: String::new(),
             attachments: Vec::new(),
+            pending_send: None,
         }
     }
 
@@ -684,11 +698,12 @@ impl PromptWindow {
 
     /// Sends files, the first with the text as its caption and as a reply
     /// when replying, and clears the text. While editing or searching, the
-    /// text isn't a caption and stays.
+    /// text isn't a caption and stays. With images among them, asks first
+    /// whether to send those as photos or as files.
     fn send_files(&mut self, paths: Vec<PathBuf>) {
-        let Some((first, rest)) = paths.split_first() else {
+        if paths.is_empty() {
             return;
-        };
+        }
         let (caption, reply_to) = match self.input.mode {
             Mode::Normal => (self.input.text_to_string(), None),
             Mode::Reply(message_id) => (
@@ -701,22 +716,66 @@ impl PromptWindow {
             ),
             _ => (String::new(), None),
         };
-        if matches!(self.input.mode, Mode::Normal | Mode::Reply(_)) {
+        let pending = PendingSend {
+            paths,
+            caption: caption.trim().to_owned(),
+            reply_to,
+            text_is_caption: self.can_attach(),
+        };
+        let images = pending.paths.iter().filter(|p| client::is_photo(p)).count();
+        if images == 0 {
+            self.send_pending(pending, SendAs::Files);
+            return;
+        }
+        let others = pending.paths.len() - images;
+        self.pending_send = Some(pending);
+        if let Some(tx) = self.action_tx.as_ref() {
+            let _ = tx.send(Action::ShowSendAs(images, others));
+        }
+    }
+
+    /// Sends the files, images `send_as`, and clears the text that was
+    /// their caption.
+    fn send_pending(&mut self, pending: PendingSend, send_as: SendAs) {
+        let PendingSend {
+            paths,
+            caption,
+            reply_to,
+            text_is_caption,
+        } = pending;
+        if text_is_caption {
             self.input.mode = Mode::Normal;
             self.input.set_text("");
             self.input.reset_cursor();
         }
         if let Some(tx) = self.action_tx.as_ref() {
             let path = |p: &PathBuf| p.display().to_string();
-            let caption = caption.trim().to_owned();
-            let _ = tx.send(if rest.is_empty() {
-                Action::SendFile(path(first), caption, reply_to)
-            } else {
-                Action::SendAlbum(paths.iter().map(path).collect(), caption, reply_to)
+            let _ = tx.send(match paths.as_slice() {
+                [only] => Action::SendFile(path(only), caption, reply_to, send_as),
+                _ => {
+                    Action::SendAlbum(paths.iter().map(path).collect(), caption, reply_to, send_as)
+                }
             });
         }
         // The caption was the draft: it's sent now
         self.save_draft();
+    }
+
+    /// The files weren't sent: they are attached again, with the text and
+    /// the reply as they were.
+    fn cancel_pending(&mut self) {
+        let Some(pending) = self.pending_send.take() else {
+            return;
+        };
+        if !pending.text_is_caption || !self.can_attach() {
+            return;
+        }
+        if let Some(reply) = pending.reply_to {
+            self.input.mode = Mode::Reply(reply.message_id);
+        }
+        let mut paths = pending.paths;
+        paths.append(&mut self.attachments);
+        self.attachments = paths;
     }
 
     /// Puts the chat's draft back in the prompt, e.g. after editing a message.
@@ -1143,6 +1202,12 @@ impl Component for PromptWindow {
             Action::EditMessage(message_id, message) => {
                 self.input.edit_message(message_id, message);
             }
+            Action::SendAsChosen(send_as) => {
+                if let Some(pending) = self.pending_send.take() {
+                    self.send_pending(pending, send_as);
+                }
+            }
+            Action::HideSendAs => self.cancel_pending(),
             // A picked file goes with the files attached before it
             Action::UploadFile(path) => {
                 let mut files = if self.can_attach() {

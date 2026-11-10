@@ -4,6 +4,7 @@ use crate::{
     app::event::Event,
     ui::tests::create_test_app_context,
 };
+use libtgrs::client::SendAs;
 
 fn create_test_core_window() -> CoreWindow {
     let app_context = create_test_app_context();
@@ -922,29 +923,69 @@ fn a_picked_file_goes_to_the_prompt_for_its_caption() {
     let tx = window.app_context.action_tx().clone();
     window.register_action_handler(tx).unwrap();
     window.update(Action::ShowFileUploadExplorer);
+    window.update(Action::HideFileUploadExplorer);
     sent_actions(&window);
-    window.update(Action::UploadFile("/tmp/a.jpg".into()));
+    window.update(Action::UploadFile("/tmp/a.pdf".into()));
     assert!(sent_actions(&window).contains(&Action::SendFile(
-        "/tmp/a.jpg".into(),
+        "/tmp/a.pdf".into(),
         String::new(),
-        None
+        None,
+        SendAs::Files
     )));
 }
 
+/// Runs the actions the window sent itself, like the app's loop does.
+fn run_sent_actions(window: &mut CoreWindow) -> Vec<Action> {
+    let actions = sent_actions(window);
+    for action in &actions {
+        window.update(action.clone());
+    }
+    actions
+}
+
 #[test]
-fn files_attached_in_the_explorer_go_to_the_prompt() {
+fn images_are_sent_the_way_asked() {
     let mut window = create_test_core_window();
     let tx = window.app_context.action_tx().clone();
     window.register_action_handler(tx).unwrap();
-    window.update(Action::ShowFileUploadExplorer);
+    window.focus_only(Some(ComponentName::Chat));
     window.update(Action::AttachFile("/tmp/a.jpg".into()));
     sent_actions(&window);
     window.update(Action::UploadFile("/tmp/b.jpg".into()));
+    assert!(run_sent_actions(&mut window).contains(&Action::ShowSendAs(2, 0)));
+    assert_eq!(window.component_focused, Some(ComponentName::SendAs));
+    window.update(Action::SendAsChosen(SendAs::Photos));
     assert!(sent_actions(&window).contains(&Action::SendAlbum(
         vec!["/tmp/a.jpg".into(), "/tmp/b.jpg".into()],
         String::new(),
-        None
+        None,
+        SendAs::Photos
     )));
+    assert_eq!(window.component_focused, Some(ComponentName::Chat));
+    assert!(!window.is_popup_visible(ComponentName::SendAs));
+}
+
+#[test]
+fn esc_keeps_the_images_unsent_and_attached() {
+    let mut window = create_test_core_window();
+    let tx = window.app_context.action_tx().clone();
+    window.register_action_handler(tx).unwrap();
+    window.focus_only(Some(ComponentName::Prompt));
+    window.update(Action::AttachFile("/tmp/a.jpg".into()));
+    window.update(Action::PromptSendMessage);
+    run_sent_actions(&mut window);
+    assert_eq!(window.component_focused, Some(ComponentName::SendAs));
+    window.update(Action::UnfocusComponent);
+    let after = sent_actions(&window);
+    assert!(
+        !after
+            .iter()
+            .any(|a| matches!(a, Action::SendFile(..) | Action::SendAlbum(..)))
+    );
+    // Back in the prompt, where enter asks again
+    assert_eq!(window.component_focused, Some(ComponentName::Prompt));
+    window.update(Action::PromptSendMessage);
+    assert!(sent_actions(&window).contains(&Action::ShowSendAs(1, 0)));
 }
 
 #[test]

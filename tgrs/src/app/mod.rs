@@ -1041,7 +1041,7 @@ async fn handle_app_actions(
                     }
                 });
             }
-            Action::SendFile(file_path, caption, reply_to) => {
+            Action::SendFile(file_path, caption, reply_to, send_as) => {
                 let chat_id = app_context.store().open_chat_id().as_i64();
                 if chat_id == 0 {
                     let _ = app_context.action_tx().send(Action::StatusMessage(
@@ -1051,12 +1051,13 @@ async fn handle_app_actions(
                 }
                 let topic = app_context.store().open_send_topic();
                 let sent = client
-                    .send_document(
+                    .send_file(
                         file_path.to_string(),
                         caption.clone(),
                         chat_id,
                         topic,
                         reply_to.clone(),
+                        *send_as,
                     )
                     .await;
                 if let Err(e) = sent {
@@ -1066,7 +1067,7 @@ async fn handle_app_actions(
                     app_context.action_tx().send(Action::HideChatWindowReply)?;
                 }
             }
-            Action::SendAlbum(file_paths, caption, reply_to) => {
+            Action::SendAlbum(file_paths, caption, reply_to, send_as) => {
                 let chat_id = app_context.store().open_chat_id().as_i64();
                 if chat_id == 0 {
                     continue;
@@ -1079,6 +1080,7 @@ async fn handle_app_actions(
                         chat_id,
                         topic,
                         reply_to.clone(),
+                        *send_as,
                     )
                     .await;
                 if let Err(e) = sent {

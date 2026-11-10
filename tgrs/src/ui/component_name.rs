@@ -62,11 +62,13 @@ pub enum ComponentName {
     Privacy,
     /// The leader menu (Space), like concord's.
     LeaderMenu,
+    /// Asks whether images are sent as photos or as files.
+    SendAs,
 }
 
 impl ComponentName {
     /// Every component, in a fixed order.
-    pub const ALL: [Self; 29] = [
+    pub const ALL: [Self; 30] = [
         Self::CoreWindow,
         Self::ChatList,
         Self::ArchiveList,
@@ -96,10 +98,11 @@ impl ComponentName {
         Self::NotificationSettings,
         Self::Privacy,
         Self::LeaderMenu,
+        Self::SendAs,
     ];
 
     /// The popups (modal overlays); only one is shown at a time.
-    pub const POPUPS: [Self; 20] = [
+    pub const POPUPS: [Self; 21] = [
         Self::CommandGuide,
         Self::SearchOverlay,
         Self::MessageActions,
@@ -120,6 +123,7 @@ impl ComponentName {
         Self::NotificationSettings,
         Self::Privacy,
         Self::LeaderMenu,
+        Self::SendAs,
     ];
 
     /// Returns true if this component is a popup (overlay) component.
@@ -161,6 +165,7 @@ impl Display for ComponentName {
             ComponentName::NotificationSettings => write!(f, "Notification Settings"),
             ComponentName::Privacy => write!(f, "Privacy"),
             ComponentName::LeaderMenu => write!(f, "Leader Menu"),
+            ComponentName::SendAs => write!(f, "Send As"),
         }
     }
 }

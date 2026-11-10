@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+### Added
+
+- Sending images asks whether to send them as photos (compressed) or as files (original quality), in a popup with its own `[send_as]` keymap section. Other files are sent as files either way.
+
 ### Fixed
 
 - Messages you sent could show twice in the chat: the copy shown while sending stayed next to the sent message once the history was loaded again.

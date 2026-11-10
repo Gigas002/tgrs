@@ -481,6 +481,22 @@ keymap = [
   { keys = ["q"], command = "hide_file_upload_explorer", description = "Close file upload explorer"},
 ]
 
+# Sending images asks whether to send them as photos (compressed) or as
+# files (original quality); other files are sent as files either way.
+[send_as]
+keymap = [
+  { keys = ["esc"], command = "hide_send_as", description = "Don't send"},
+  { keys = ["q"], command = "hide_send_as", description = "Don't send"},
+  { keys = ["p"], command = "send_as_photos", description = "Send images as photos"},
+  { keys = ["f"], command = "send_as_files", description = "Send images as files"},
+  { keys = ["d"], command = "send_as_files", description = "Send images as files"},
+  { keys = ["enter"], command = "send_as_confirm", description = "Send the highlighted way"},
+  { keys = ["up"], command = "send_as_previous", description = "Previous"},
+  { keys = ["k"], command = "send_as_previous", description = "Previous"},
+  { keys = ["down"], command = "send_as_next", description = "Next"},
+  { keys = ["j"], command = "send_as_next", description = "Next"},
+]
+
 # Pinned messages popup (browse all pins in the open chat).
 [pinned_messages_popup]
 keymap = [
