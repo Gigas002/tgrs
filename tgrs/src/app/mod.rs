@@ -40,7 +40,7 @@ use crate::{
         event::Event,
     },
     config::FileChooser,
-    notifier,
+    editor, notifier,
     settings::{ActionBinding, Command, Settings, is_plain_char},
     ui::component_name::ComponentName,
     ui::{
@@ -1034,6 +1034,27 @@ async fn handle_app_actions(
                         let _ = ctx.action_tx().send(Action::HideChatWindowReply);
                     }
                 });
+            }
+            // The editor takes the terminal until it exits
+            Action::OpenEditor(text) => {
+                let command = app_context.app_config().editor.clone();
+                let text = text.clone();
+                tui_backend.release().await;
+                let edited = tokio::task::spawn_blocking(move || {
+                    editor::edit_text(&command, &text, &std::env::temp_dir())
+                })
+                .await;
+                tui_backend.enter()?;
+                // Everything is drawn again over what the editor left
+                tui_backend.terminal.clear()?;
+                let edited = match edited {
+                    Ok(edited) => edited.map_err(|e| e.to_string()),
+                    Err(e) => Err(format!("The editor failed: {e}")),
+                };
+                if let Err(e) = &edited {
+                    tracing::warn!("{e}");
+                }
+                app_context.action_tx().send(Action::EditorClosed(edited))?;
             }
             // The desktop's file dialog instead of the built-in explorer
             Action::ShowFileUploadExplorer

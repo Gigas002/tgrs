@@ -54,6 +54,8 @@ pub struct AppFile {
     pub download_dir: Option<PathBuf>,
     /// How files to send are picked.
     pub file_chooser: Option<FileChooser>,
+    /// The command messages are written in, e.g. `nvim` or `code --wait`.
+    pub editor: Option<String>,
 }
 
 /// `[logger]`: tgrs's own log.

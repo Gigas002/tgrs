@@ -9,7 +9,7 @@ This document defines how Rust projects in this workspace are structured, how co
 | Crate | Kind | Responsibility |
 | ----- | ---- | -------------- |
 | `libtgrs` | library | Telegram client on top of [tdlib-rs](https://github.com/Gigas002/tdlib-rs): `client/` (TDLib requests, authorization through the `Authenticator` trait, the update loop emitting `Notification`s), `store/` (chats, users and open-chat state shared with the UI), `model/` (UI-agnostic chat and message types). No CLI, settings, logging setup or rendering. |
-| `tgrs` | binary | `cli/`, `config/`, `settings/`, `logger/`, `app/` (run loop, `logout`, terminal login, keychain policy, background media tasks), `credentials/` (TDLib database key in the system keychain, behind the `keychain` feature), `file_chooser/` (the desktop's file dialog through the XDG desktop portal, behind the `file-chooser` feature), `media/` (opening files with `xdg-open`, saving downloads), `notifier/` (desktop notifications, behind the `notifications` feature), `ui/` (ratatui components; media previews behind the `media-preview` feature), `utils/` (XDG paths). |
+| `tgrs` | binary | `cli/`, `config/`, `settings/`, `logger/`, `app/` (run loop, `logout`, terminal login, keychain policy, background media tasks), `credentials/` (TDLib database key in the system keychain, behind the `keychain` feature), `editor/` (writing messages in an external editor), `file_chooser/` (the desktop's file dialog through the XDG desktop portal, behind the `file-chooser` feature), `media/` (opening files with `xdg-open`, saving downloads), `notifier/` (desktop notifications, behind the `notifications` feature), `ui/` (ratatui components; media previews behind the `media-preview` feature), `utils/` (XDG paths). |
 
 Data flow at runtime:
 
@@ -21,7 +21,7 @@ TDLib ──updates──▶ libtgrs::client ──writes──▶ libtgrs::stor
                                                └──requests──▶ libtgrs::client
 ```
 
-Settings precedence is `CLI > config.toml > defaults`; no environment variables besides `HOME` and the XDG ones are read.
+Settings precedence is `CLI > config.toml > defaults`; no environment variables besides `HOME`, the XDG ones and `EDITOR`/`VISUAL` (the default for `app.editor`) are read.
 Files live in XDG directories: config in `$XDG_CONFIG_HOME/tgrs`, the TDLib database in
 `$XDG_DATA_HOME/tgrs/tdlib` (encrypted with a key from the keychain), logs in `$XDG_STATE_HOME/tgrs`.
 Settings are only changed by editing these files; the UI never writes them.

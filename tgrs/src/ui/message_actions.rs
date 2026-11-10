@@ -68,8 +68,10 @@ impl MessageActions {
             .map(|command| {
                 let disabled = match command {
                     MessageCommand::Copy if !has_text => Some("no text"),
-                    MessageCommand::Edit if !mine => Some("not your message"),
-                    MessageCommand::Edit
+                    MessageCommand::Edit | MessageCommand::EditInEditor if !mine => {
+                        Some("not your message")
+                    }
+                    MessageCommand::Edit | MessageCommand::EditInEditor
                         if message
                             .media()
                             .is_some_and(|media| !media.kind.has_caption()) =>

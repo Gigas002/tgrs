@@ -21,6 +21,8 @@ pub enum MessageCommand {
     Reply,
     DeleteForEveryone,
     Edit,
+    /// Edit the message in the external editor (`app.editor`, `$EDITOR`).
+    EditInEditor,
     /// Open a link in the message, picked when there are several.
     OpenLink,
     /// Open the attached media with the default application.
@@ -42,13 +44,14 @@ pub enum MessageCommand {
 
 impl MessageCommand {
     /// Every command, in the order of the message actions menu.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Copy,
         Self::React,
         Self::Reply,
         Self::Forward,
         Self::DeleteForEveryone,
         Self::Edit,
+        Self::EditInEditor,
         Self::OpenLink,
         Self::OpenMedia,
         Self::DownloadMedia,
@@ -66,6 +69,7 @@ impl MessageCommand {
             Self::Reply => "reply",
             Self::DeleteForEveryone => "delete for everyone",
             Self::Edit => "edit message",
+            Self::EditInEditor => "edit in editor",
             Self::OpenLink => "open URL",
             Self::OpenMedia => "open media",
             Self::DownloadMedia => "download file",
@@ -783,6 +787,12 @@ pub enum Action {
     PromptPasteImage,
     /// Send the next message without sound, or with it again.
     PromptToggleSilent,
+    /// Write the prompt's text in the external editor.
+    PromptOpenEditor,
+    /// Suspend the TUI to edit this text in the external editor.
+    OpenEditor(String),
+    /// The external editor closed: the edited text, or why there's none.
+    EditorClosed(Result<String, String>),
     /// Send this file with this caption (none if empty), maybe as a reply;
     /// an image as a photo or as a file.
     SendFile(String, String, Option<TdMessageReplyToMessage>, SendAs),
@@ -865,6 +875,10 @@ impl FromStr for Action {
             "chat_window_delete_for_me" => Ok(Action::SelectedMessage(MessageCommand::DeleteForMe)),
             "chat_window_copy" => Ok(Action::SelectedMessage(MessageCommand::Copy)),
             "chat_window_edit" => Ok(Action::SelectedMessage(MessageCommand::Edit)),
+            "chat_window_edit_in_editor" => {
+                Ok(Action::SelectedMessage(MessageCommand::EditInEditor))
+            }
+            "prompt_open_editor" => Ok(Action::PromptOpenEditor),
             "chat_window_reply" => Ok(Action::SelectedMessage(MessageCommand::Reply)),
             "react_message" => Ok(Action::SelectedMessage(MessageCommand::React)),
             "open_message_url" => Ok(Action::SelectedMessage(MessageCommand::OpenLink)),

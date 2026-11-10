@@ -761,6 +761,24 @@ impl PromptWindow {
         self.save_draft();
     }
 
+    /// Writes the text in the external editor: a new message, a reply, an
+    /// edit or a caption; not a search.
+    fn open_editor(&mut self) {
+        let Some(tx) = self.action_tx.as_ref() else {
+            return;
+        };
+        if matches!(
+            self.input.mode,
+            Mode::SearchChatList | Mode::SearchChatMessages
+        ) {
+            let _ = tx.send(Action::StatusMessage(
+                "Searches aren't written in the editor.".into(),
+            ));
+            return;
+        }
+        let _ = tx.send(Action::OpenEditor(self.input.text_to_string()));
+    }
+
     /// Sends picked files after the attached ones.
     fn upload(&mut self, paths: Vec<String>) {
         let mut files = if self.can_attach() {
@@ -1213,6 +1231,19 @@ impl Component for PromptWindow {
             Action::EditMessage(message_id, message) => {
                 self.input.edit_message(message_id, message);
             }
+            Action::PromptOpenEditor => self.open_editor(),
+            Action::EditorClosed(edited) => match edited {
+                Ok(text) => {
+                    self.input.unselect_all();
+                    self.input.set_text(&text);
+                    self.input.move_cursor_to_text_end();
+                }
+                Err(message) => {
+                    if let Some(tx) = self.action_tx.as_ref() {
+                        let _ = tx.send(Action::StatusMessage(message));
+                    }
+                }
+            },
             Action::SendAsChosen(send_as) => {
                 if let Some(pending) = self.pending_send.take() {
                     self.send_pending(pending, send_as);

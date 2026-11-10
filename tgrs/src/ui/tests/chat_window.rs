@@ -500,3 +500,35 @@ fn previews_follow_the_media_settings() {
     assert!(ChatWindow::preview_rows(auto, &downloaded) > 0);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn editing_in_the_editor_puts_the_message_in_the_prompt_first() {
+    let mut window = create_test_chat_window();
+    let mut rx = with_action_rx(&mut window);
+    // create_mock_message is from user 1
+    window.app_context.store().set_me(1);
+    setup_messages(&mut window, vec![create_mock_message(100, "typo")]);
+    window.update(Action::RunMessageCommand(MessageCommand::EditInEditor, 100));
+    assert_eq!(
+        sent(&mut rx),
+        vec![
+            Action::FocusComponent(ComponentName::Prompt),
+            Action::EditMessage(100, "typo".into()),
+            Action::PromptOpenEditor,
+        ]
+    );
+}
+
+#[test]
+fn others_messages_dont_open_the_editor() {
+    let mut window = create_test_chat_window();
+    let mut rx = with_action_rx(&mut window);
+    setup_messages(&mut window, vec![create_mock_message(100, "theirs")]);
+    window.update(Action::RunMessageCommand(MessageCommand::EditInEditor, 100));
+    assert_eq!(
+        sent(&mut rx),
+        vec![Action::StatusMessage(
+            "Only your own messages can be edited.".into()
+        )]
+    );
+}

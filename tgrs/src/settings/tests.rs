@@ -633,3 +633,39 @@ fn privacy_defaults_and_values() {
     assert!(!privacy.appear_online);
     assert!(!privacy.send_typing);
 }
+
+#[test]
+fn the_editor_is_configured_or_taken_from_the_environment() {
+    let env = |vars: &'static [(&'static str, &'static str)]| {
+        move |key: &str| {
+            vars.iter()
+                .find(|(var, _)| *var == key)
+                .map(|(_, value)| OsString::from(value))
+        }
+    };
+    let both = env(&[("VISUAL", "zeditor"), ("EDITOR", "hx --vsplit")]);
+    assert_eq!(
+        resolve_editor(Some("nvim -u NONE"), &both),
+        ["nvim", "-u", "NONE"]
+    );
+    // $EDITOR first: $VISUAL is often graphical
+    assert_eq!(resolve_editor(None, &both), ["hx", "--vsplit"]);
+    assert_eq!(
+        resolve_editor(None, &env(&[("VISUAL", "code --wait")])),
+        ["code", "--wait"]
+    );
+    // Blank values are skipped
+    assert_eq!(
+        resolve_editor(Some(" "), &env(&[("EDITOR", ""), ("VISUAL", "nano")])),
+        ["nano"]
+    );
+    assert_eq!(resolve_editor(None, &env(&[])), ["vi"]);
+}
+
+#[test]
+fn the_editor_setting_is_read_from_the_config() {
+    let env = Env::new();
+    env.write_config("config.toml", "[app]\neditor = \"hx --vsplit\"\n");
+    let settings = env.resolve(CliOverrides::default()).unwrap();
+    assert_eq!(settings.app.editor, ["hx", "--vsplit"]);
+}

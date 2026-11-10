@@ -25,6 +25,10 @@
 #             once; the built-in explorer when there's no portal;
 #   builtin - the file explorer inside tgrs.
 # file_chooser = "system"
+# The editor messages are written in (alt+e in the prompt, E on a message),
+# with its arguments; it must wait until you close the file, e.g.
+# "code --wait". Default: $EDITOR, else $VISUAL, else vi.
+# editor = "nvim"
 
 [logger]
 # off, error, warn, info, debug or trace. Overridden by `--log-level`, `-v`, `-q`.

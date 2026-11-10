@@ -1354,7 +1354,7 @@ impl Component for CoreWindow {
                         .update(action);
                 }
             }
-            Action::EditMessage(..) | Action::ReplyMessage(..) => {
+            Action::EditMessage(..) | Action::ReplyMessage(..) | Action::EditorClosed(_) => {
                 // Always dispatch to Prompt so the message is loaded regardless of focus order.
                 if let Some(component) = self.components.get_mut(&ComponentName::Prompt) {
                     component.update(action);

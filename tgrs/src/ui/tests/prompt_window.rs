@@ -887,3 +887,76 @@ fn editing_puts_the_cursor_after_the_text() {
     ));
     assert_eq!(window.input.text_to_string(), "first\nsecond!");
 }
+
+mod editor {
+    use super::*;
+
+    fn prompt() -> (PromptWindow, tokio::sync::mpsc::UnboundedReceiver<Action>) {
+        let mut window = create_test_prompt_window();
+        let (tx, rx) = unbounded_channel();
+        window.register_action_handler(tx).unwrap();
+        (window, rx)
+    }
+
+    fn sent(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Action>) -> Vec<Action> {
+        std::iter::from_fn(|| rx.try_recv().ok()).collect()
+    }
+
+    #[test]
+    fn the_text_is_written_in_the_editor_and_comes_back() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::Paste("draft\nline".into()));
+        window.update(Action::PromptOpenEditor);
+        assert_eq!(sent(&mut rx), [Action::OpenEditor("draft\nline".into())]);
+        window.update(Action::EditorClosed(Ok("written\nin vim".into())));
+        assert_eq!(typed(&window), "written\nin vim");
+        // Enter sends it as usual
+        assert!(sent(&mut rx).is_empty());
+    }
+
+    #[test]
+    fn an_edit_stays_an_edit() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::EditMessage(10, "typo".into()));
+        window.update(Action::PromptOpenEditor);
+        assert_eq!(sent(&mut rx), [Action::OpenEditor("typo".into())]);
+        window.update(Action::EditorClosed(Ok("fixed".into())));
+        assert!(matches!(window.current_mode(), Mode::Edit(10)));
+        assert_eq!(typed(&window), "fixed");
+    }
+
+    #[test]
+    fn a_reply_stays_a_reply() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::ReplyMessage(42, "q".into()));
+        window.update(Action::PromptOpenEditor);
+        sent(&mut rx);
+        window.update(Action::EditorClosed(Ok("answer".into())));
+        assert!(matches!(window.current_mode(), Mode::Reply(42)));
+        assert_eq!(typed(&window), "answer");
+    }
+
+    #[test]
+    fn a_failed_editor_leaves_the_text() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::Paste("keep me".into()));
+        window.update(Action::EditorClosed(Err("vi exited with 1".into())));
+        assert_eq!(typed(&window), "keep me");
+        assert_eq!(
+            sent(&mut rx),
+            [Action::StatusMessage("vi exited with 1".into())]
+        );
+    }
+
+    #[test]
+    fn searches_arent_written_in_the_editor() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::ChatWindowSearch);
+        window.update(Action::PromptOpenEditor);
+        assert!(
+            !sent(&mut rx)
+                .iter()
+                .any(|a| matches!(a, Action::OpenEditor(_)))
+        );
+    }
+}

@@ -164,6 +164,8 @@ keymap = [
   { keys = ["ctrl+c"], command = "chat_window_copy", description = "Copy the selected message"},
   # Edit the selected message
   { keys = ["e"], command = "chat_window_edit", description = "Edit the selected message"},
+  # Edit the selected message in your editor (app.editor, $EDITOR or $VISUAL)
+  { keys = ["E"], command = "chat_window_edit_in_editor", description = "Edit the selected message in your editor"},
   # Reply to the selected message
   { keys = ["R"], command = "chat_window_reply", description = "Reply to the selected message"},
   # Add or remove a reaction on the selected message
@@ -209,6 +211,9 @@ keymap = [
   { keys = ["alt+v"], command = "prompt_paste_image", description = "Paste an image from the clipboard"},
   # The next message, file or sticker arrives without sound (once)
   { keys = ["alt+q"], command = "prompt_toggle_silent", description = "Send the next message without sound"},
+  # Write the message (or the edit, or the caption) in your editor (app.editor,
+  # $EDITOR or $VISUAL); saving and quitting puts the text back here
+  { keys = ["alt+e"], command = "prompt_open_editor", description = "Write the message in your editor"},
   # Open message search overlay (same as Alt+R in chat section)
   { keys = ["alt+r"], command = "chat_window_search", description = "Open message search overlay"},
 ]
