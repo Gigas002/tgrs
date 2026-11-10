@@ -93,6 +93,19 @@ pub(super) async fn run(
     }
 }
 
+/// Puts the final `message` in place of the one with the temporary `old_id`.
+fn replace_sent_message(
+    store: &Store,
+    old_id: i64,
+    message: &tdlib_rs::types::Message,
+    notify: &UnboundedSender<Notification>,
+) {
+    let entry = MessageEntry::from(message);
+    if store.open_chat_messages().replace_message(old_id, entry) {
+        let _ = notify.send(Notification::OpenChatMessageAdded(message.id));
+    }
+}
+
 /// Updates a chat known to the store; updates for unknown chats are dropped.
 fn with_chat(store: &Store, chat_id: i64, f: impl FnOnce(&mut Chat)) -> bool {
     match store.chats().get_mut(&chat_id) {
@@ -113,8 +126,19 @@ async fn apply(
 ) {
     let open_chat_id = store.open_chat_id().as_i64();
     match update {
+        // The message shown while sending gets its final id: replace it, or
+        // loading the history later shows the message twice
         Update::MessageSendSucceeded(update) => {
             tracing::info!("Message sent: {:?}", update.message.id);
+            if update.message.chat_id == open_chat_id {
+                replace_sent_message(store, update.old_message_id, &update.message, notify);
+            }
+        }
+        Update::MessageSendFailed(update) => {
+            tracing::warn!("Message not sent: {}", update.error.message);
+            if update.message.chat_id == open_chat_id {
+                replace_sent_message(store, update.old_message_id, &update.message, notify);
+            }
         }
         Update::MessageSendAcknowledged(update) => {
             store.set_last_acknowledged_message_id(update.message_id);

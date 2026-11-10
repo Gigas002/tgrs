@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+### Fixed
+
+- Messages you sent could show twice in the chat: the copy shown while sending stayed next to the sent message once the history was loaded again.
+
 ## [0.1.0] - 2026-11-09
 
 ### Removed

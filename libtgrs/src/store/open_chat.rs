@@ -1,7 +1,7 @@
 //! Open-chat message cache and view window.
 //! UI reads it only through the read-only API.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use crate::model::message::MessageEntry;
 
@@ -46,6 +46,10 @@ impl LoadedRange {
 pub struct OpenChatMessageStore {
     cache: BTreeMap<i64, MessageEntry>,
     range: LoadedRange,
+    /// Temporary ids of sent messages that got their final id: a history
+    /// batch requested before the message was sent may still carry them,
+    /// and they mustn't come back next to the sent message.
+    replaced: HashSet<i64>,
 }
 
 /// Maximum number of messages to keep in memory per chat to prevent unbounded growth.
@@ -68,6 +72,9 @@ impl OpenChatMessageStore {
 
         for entry in messages {
             let id = entry.id();
+            if self.replaced.contains(&id) {
+                continue;
+            }
             self.range.extend_with(id);
             self.cache.insert(id, entry);
         }
@@ -95,10 +102,7 @@ impl OpenChatMessageStore {
             }
 
             // Recompute range after eviction
-            self.range = self.cache.keys().fold(LoadedRange::new(), |mut r, &k| {
-                r.extend_with(k);
-                r
-            });
+            self.recompute_range();
 
             tracing::debug!(
                 removed = to_remove,
@@ -117,6 +121,29 @@ impl OpenChatMessageStore {
     pub fn clear(&mut self) {
         self.cache.clear();
         self.range.clear();
+        self.replaced.clear();
+    }
+
+    /// A sent message got its final id (or failed to send): `entry` takes the
+    /// place of the message with the temporary `old_id`. Nothing is added if
+    /// that message isn't loaded, e.g. after a jump elsewhere in the chat;
+    /// loading the history brings the message then. Returns whether it was
+    /// replaced.
+    pub fn replace_message(&mut self, old_id: i64, entry: MessageEntry) -> bool {
+        self.replaced.insert(old_id);
+        if self.cache.remove(&old_id).is_none() {
+            return false;
+        }
+        self.recompute_range();
+        self.insert_messages(std::iter::once(entry));
+        true
+    }
+
+    fn recompute_range(&mut self) {
+        self.range = self.cache.keys().fold(LoadedRange::new(), |mut r, &k| {
+            r.extend_with(k);
+            r
+        });
     }
 
     /// Ordered message IDs (oldest to newest by id; BTreeMap iterates in key order).
@@ -167,9 +194,6 @@ impl OpenChatMessageStore {
     /// Remove a single message (e.g. delete_message). Recomputes view window from remaining entries.
     pub fn remove_message(&mut self, id: i64) {
         self.cache.remove(&id);
-        self.range = self.cache.keys().fold(LoadedRange::new(), |mut r, &k| {
-            r.extend_with(k);
-            r
-        });
+        self.recompute_range();
     }
 }

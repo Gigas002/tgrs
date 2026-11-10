@@ -51,6 +51,48 @@ mod open_chat {
     }
 
     #[test]
+    fn sent_message_replaces_its_pending_copy() {
+        let mut store = OpenChatMessageStore::new();
+        // 2000 is the temporary id of a message being sent
+        store.insert_messages([make_entry(10), make_entry(2000)]);
+        assert!(store.replace_message(2000, make_entry(1024)));
+        assert_eq!(store.ordered_message_ids(), [10, 1024]);
+        assert_eq!(store.newest_message_id(), Some(1024));
+    }
+
+    #[test]
+    fn stale_history_doesnt_bring_back_a_pending_message() {
+        let mut store = OpenChatMessageStore::new();
+        store.insert_messages([make_entry(10), make_entry(2000)]);
+        store.replace_message(2000, make_entry(1024));
+        // A history batch requested while the message was being sent
+        store.insert_messages([make_entry(10), make_entry(1024), make_entry(2000)]);
+        assert_eq!(store.ordered_message_ids(), [10, 1024]);
+    }
+
+    #[test]
+    fn sent_message_not_loaded_isnt_added() {
+        let mut store = OpenChatMessageStore::new();
+        store.insert_messages([make_entry(10), make_entry(20)]);
+        // The chat jumped elsewhere while the message was being sent
+        assert!(!store.replace_message(2000, make_entry(1024)));
+        assert_eq!(store.ordered_message_ids(), [10, 20]);
+        // Its pending copy stays out, the sent message comes with the history
+        store.insert_messages([make_entry(1024), make_entry(2000)]);
+        assert_eq!(store.ordered_message_ids(), [10, 20, 1024]);
+    }
+
+    #[test]
+    fn clearing_forgets_replaced_ids() {
+        let mut store = OpenChatMessageStore::new();
+        store.insert_messages([make_entry(2000)]);
+        store.replace_message(2000, make_entry(1024));
+        store.clear();
+        store.insert_messages([make_entry(2000)]);
+        assert_eq!(store.ordered_message_ids(), [2000]);
+    }
+
+    #[test]
     fn clear_resets_all() {
         let mut store = OpenChatMessageStore::new();
         store.insert_messages([make_entry(1), make_entry(2)]);
