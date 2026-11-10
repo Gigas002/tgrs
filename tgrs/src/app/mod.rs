@@ -39,6 +39,7 @@ use crate::{
         error::AppError,
         event::Event,
     },
+    config::FileChooser,
     notifier,
     settings::{ActionBinding, Command, Settings, is_plain_char},
     ui::component_name::ComponentName,
@@ -92,6 +93,8 @@ struct Workers {
     /// A read mark is waiting to be sent: it covers every message up to
     /// then, so a busy chat doesn't queue one per message ahead of ours.
     view_pending: Arc<std::sync::atomic::AtomicBool>,
+    /// The desktop's file dialog.
+    file_dialog: Arc<media::FileDialog>,
 }
 
 impl Workers {
@@ -100,6 +103,7 @@ impl Workers {
             send: Worker::start(),
             load: Worker::start(),
             view_pending: Arc::default(),
+            file_dialog: Arc::default(),
         }
     }
 }
@@ -1030,6 +1034,14 @@ async fn handle_app_actions(
                         let _ = ctx.action_tx().send(Action::HideChatWindowReply);
                     }
                 });
+            }
+            // The desktop's file dialog instead of the built-in explorer
+            Action::ShowFileUploadExplorer
+                if app_context.app_config().file_chooser == FileChooser::System
+                    && workers.file_dialog.is_available() =>
+            {
+                media::pick_files(&app_context, &workers.file_dialog);
+                continue;
             }
             Action::SendMessageEdited(message_id, message) => {
                 let requests = client.requests();

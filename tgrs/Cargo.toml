@@ -17,7 +17,9 @@ name = "tgrs"
 path = "src/main.rs"
 
 [features]
-default = ["keychain", "media-preview", "notifications"]
+default = ["file-chooser", "keychain", "media-preview", "notifications"]
+# Pick files to send in the desktop's file dialog (XDG desktop portal).
+file-chooser = ["dep:dbus"]
 # Keep the key of the encrypted TDLib database in the system keychain (Secret Service).
 keychain = [
     "dep:keyring-core",
@@ -35,6 +37,7 @@ arboard.workspace = true
 chrono.workspace = true
 clap.workspace = true
 crossterm.workspace = true
+dbus = { workspace = true, optional = true }
 dbus-secret-service-keyring-store = { workspace = true, optional = true }
 futures.workspace = true
 getrandom = { workspace = true, optional = true }

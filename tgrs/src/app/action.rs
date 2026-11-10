@@ -776,6 +776,9 @@ pub enum Action {
     /// A file was picked to upload: the prompt sends it with its text as
     /// the caption.
     UploadFile(String),
+    /// Files were picked in the desktop's file dialog: the prompt sends them
+    /// with the attached ones, its text as the caption.
+    UploadFiles(Vec<String>),
     /// Attach the image on the clipboard to the prompt.
     PromptPasteImage,
     /// Send the next message without sound, or with it again.

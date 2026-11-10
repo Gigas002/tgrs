@@ -11,7 +11,8 @@ use libtgrs::client::{Proxy, ProxyKind, TdLogging, TdParams};
 
 use crate::{
     config::{
-        self, ConfigError, CredentialStore, FileConfig, LogLevel, ProxyFile, ProxyType, Rotation,
+        self, ConfigError, CredentialStore, FileChooser, FileConfig, LogLevel, ProxyFile,
+        ProxyType, Rotation,
     },
     utils::{self, AppDirs, PathsError, XdgDirs},
 };
@@ -91,6 +92,8 @@ pub struct App {
     pub use_emoji_icons: bool,
     /// Where downloaded media is saved.
     pub download_dir: PathBuf,
+    /// How files to send are picked.
+    pub file_chooser: FileChooser,
 }
 
 /// `[notifications]`, resolved.
@@ -363,6 +366,7 @@ fn resolve_app(file: &FileConfig, download_dir: PathBuf) -> Result<App, Settings
         show_title_bar: app.show_title_bar.unwrap_or(true),
         use_emoji_icons: app.use_emoji_icons.unwrap_or(false),
         download_dir,
+        file_chooser: app.file_chooser.unwrap_or_default(),
     })
 }
 

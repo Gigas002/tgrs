@@ -944,6 +944,24 @@ fn run_sent_actions(window: &mut CoreWindow) -> Vec<Action> {
 }
 
 #[test]
+fn files_picked_in_the_dialog_go_to_the_prompt() {
+    let mut window = create_test_core_window();
+    let tx = window.app_context.action_tx().clone();
+    window.register_action_handler(tx).unwrap();
+    window.focus_only(Some(ComponentName::Chat));
+    sent_actions(&window);
+    window.update(Action::UploadFiles(vec!["/tmp/a.png".into()]));
+    assert!(run_sent_actions(&mut window).contains(&Action::ShowSendAs(1, 0)));
+    window.update(Action::SendAsChosen(SendAs::Files));
+    assert!(sent_actions(&window).contains(&Action::SendFile(
+        "/tmp/a.png".into(),
+        String::new(),
+        None,
+        SendAs::Files
+    )));
+}
+
+#[test]
 fn images_are_sent_the_way_asked() {
     let mut window = create_test_core_window();
     let tx = window.app_context.action_tx().clone();

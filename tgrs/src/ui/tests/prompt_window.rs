@@ -658,6 +658,32 @@ mod attachments {
     }
 
     #[test]
+    fn files_picked_in_the_dialog_join_the_attached_ones() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::AttachFile("/tmp/a.pdf".into()));
+        window.update(Action::Paste("docs".into()));
+        window.update(Action::UploadFiles(vec![
+            "/tmp/b.txt".into(),
+            "/tmp/c.zip".into(),
+        ]));
+        assert_eq!(
+            sent_files(&mut rx),
+            [Action::SendAlbum(
+                vec![
+                    "/tmp/a.pdf".into(),
+                    "/tmp/b.txt".into(),
+                    "/tmp/c.zip".into()
+                ],
+                "docs".into(),
+                None,
+                SendAs::Files
+            )]
+        );
+        assert!(window.attachments.is_empty());
+        assert_eq!(typed(&window), "");
+    }
+
+    #[test]
     fn files_without_images_are_sent_without_asking() {
         let (mut window, mut rx) = prompt();
         window.update(Action::AttachFile("/tmp/a.pdf".into()));

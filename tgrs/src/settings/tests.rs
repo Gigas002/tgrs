@@ -71,6 +71,7 @@ fn defaults_follow_xdg() {
     assert_eq!(settings.theme, Theme::default());
     assert!(settings.warnings.is_empty());
     assert_eq!(settings.app.download_dir, home.join("Downloads"));
+    assert_eq!(settings.app.file_chooser, FileChooser::System);
     assert_eq!(settings.credentials, CredentialStore::Auto);
     assert!(settings.telegram.database_encryption_key.is_empty());
     assert_eq!(settings.command, Command::Tui);
@@ -113,6 +114,7 @@ fn config_file_values_apply() {
         [app]
         use_emoji_icons = true
         download_dir = "~/dl"
+        file_chooser = "builtin"
 
         [credentials]
         store = "plain"
@@ -140,6 +142,7 @@ fn config_file_values_apply() {
 
     assert!(settings.app.use_emoji_icons);
     assert_eq!(settings.app.download_dir, home.join("dl"));
+    assert_eq!(settings.app.file_chooser, FileChooser::Builtin);
     assert_eq!(settings.credentials, CredentialStore::Plain);
     assert_eq!(settings.logging.level, LogLevel::Debug);
     assert_eq!(settings.logging.dir, home.join("logs"));

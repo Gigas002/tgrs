@@ -9,7 +9,7 @@ This document defines how Rust projects in this workspace are structured, how co
 | Crate | Kind | Responsibility |
 | ----- | ---- | -------------- |
 | `libtgrs` | library | Telegram client on top of [tdlib-rs](https://github.com/Gigas002/tdlib-rs): `client/` (TDLib requests, authorization through the `Authenticator` trait, the update loop emitting `Notification`s), `store/` (chats, users and open-chat state shared with the UI), `model/` (UI-agnostic chat and message types). No CLI, settings, logging setup or rendering. |
-| `tgrs` | binary | `cli/`, `config/`, `settings/`, `logger/`, `app/` (run loop, `logout`, terminal login, keychain policy, background media tasks), `credentials/` (TDLib database key in the system keychain, behind the `keychain` feature), `media/` (opening files with `xdg-open`, saving downloads), `notifier/` (desktop notifications, behind the `notifications` feature), `ui/` (ratatui components; media previews behind the `media-preview` feature), `utils/` (XDG paths). |
+| `tgrs` | binary | `cli/`, `config/`, `settings/`, `logger/`, `app/` (run loop, `logout`, terminal login, keychain policy, background media tasks), `credentials/` (TDLib database key in the system keychain, behind the `keychain` feature), `file_chooser/` (the desktop's file dialog through the XDG desktop portal, behind the `file-chooser` feature), `media/` (opening files with `xdg-open`, saving downloads), `notifier/` (desktop notifications, behind the `notifications` feature), `ui/` (ratatui components; media previews behind the `media-preview` feature), `utils/` (XDG paths). |
 
 Data flow at runtime:
 

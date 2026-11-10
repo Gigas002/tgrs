@@ -761,6 +761,17 @@ impl PromptWindow {
         self.save_draft();
     }
 
+    /// Sends picked files after the attached ones.
+    fn upload(&mut self, paths: Vec<String>) {
+        let mut files = if self.can_attach() {
+            std::mem::take(&mut self.attachments)
+        } else {
+            Vec::new()
+        };
+        files.extend(paths.into_iter().map(PathBuf::from));
+        self.send_files(files);
+    }
+
     /// The files weren't sent: they are attached again, with the text and
     /// the reply as they were.
     fn cancel_pending(&mut self) {
@@ -1208,16 +1219,9 @@ impl Component for PromptWindow {
                 }
             }
             Action::HideSendAs => self.cancel_pending(),
-            // A picked file goes with the files attached before it
-            Action::UploadFile(path) => {
-                let mut files = if self.can_attach() {
-                    std::mem::take(&mut self.attachments)
-                } else {
-                    Vec::new()
-                };
-                files.push(PathBuf::from(path));
-                self.send_files(files);
-            }
+            // Picked files go with the files attached before them
+            Action::UploadFile(path) => self.upload(vec![path]),
+            Action::UploadFiles(paths) => self.upload(paths),
             Action::AttachFile(path) => {
                 let message = if self.can_attach() {
                     self.attachments.push(PathBuf::from(path));

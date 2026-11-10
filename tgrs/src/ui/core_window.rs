@@ -980,7 +980,7 @@ impl Component for CoreWindow {
                 }
             }
             // The prompt has the caption, whatever is focused
-            Action::UploadFile(_) | Action::AttachFile(_) => {
+            Action::UploadFile(_) | Action::UploadFiles(_) | Action::AttachFile(_) => {
                 if let Some(component) = self.components.get_mut(&ComponentName::Prompt) {
                     component.update(action);
                 }
