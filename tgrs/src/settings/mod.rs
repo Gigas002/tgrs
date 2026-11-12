@@ -11,7 +11,8 @@ use libtgrs::client::{Proxy, ProxyKind, TdLogging, TdParams};
 
 use crate::{
     config::{
-        self, ConfigError, CredentialStore, FileConfig, LogLevel, ProxyFile, ProxyType, Rotation,
+        self, ConfigError, CredentialStore, FileChooser, FileConfig, LogLevel, ProxyFile,
+        ProxyType, Rotation,
     },
     utils::{self, AppDirs, PathsError, XdgDirs},
 };
@@ -91,6 +92,10 @@ pub struct App {
     pub use_emoji_icons: bool,
     /// Where downloaded media is saved.
     pub download_dir: PathBuf,
+    /// How files to send are picked.
+    pub file_chooser: FileChooser,
+    /// The editor messages are written in: the program and its arguments.
+    pub editor: Vec<String>,
 }
 
 /// `[notifications]`, resolved.
@@ -276,7 +281,8 @@ impl Settings {
 
         let download_dir = from_config("app.download_dir", file.app.download_dir.clone())?
             .unwrap_or_else(|| xdg.download_dir.clone());
-        let app = resolve_app(&file, download_dir)?;
+        let editor = resolve_editor(file.app.editor.as_deref(), &lookup);
+        let app = resolve_app(&file, download_dir, editor)?;
         let telegram = resolve_telegram(&file, &dirs, &from_config)?;
         let tdlib_log = TdLogging {
             verbosity_level: file
@@ -354,7 +360,34 @@ fn resolve_notifications(
     })
 }
 
-fn resolve_app(file: &FileConfig, download_dir: PathBuf) -> Result<App, SettingsError> {
+/// The editor: `app.editor`, else `$EDITOR`, else `$VISUAL`, else `vi`,
+/// split into the program and its arguments. `$EDITOR` comes first: it's
+/// usually a terminal editor, where `$VISUAL` may be a graphical one.
+pub(crate) fn resolve_editor<F>(configured: Option<&str>, lookup: &F) -> Vec<String>
+where
+    F: Fn(&str) -> Option<OsString>,
+{
+    let from_env = |var| lookup(var).and_then(|value| value.into_string().ok());
+    configured
+        .map(str::to_owned)
+        .into_iter()
+        .chain(from_env("EDITOR"))
+        .chain(from_env("VISUAL"))
+        .map(|command| {
+            command
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .find(|command| !command.is_empty())
+        .unwrap_or_else(|| vec!["vi".to_owned()])
+}
+
+fn resolve_app(
+    file: &FileConfig,
+    download_dir: PathBuf,
+    editor: Vec<String>,
+) -> Result<App, SettingsError> {
     let app = &file.app;
     Ok(App {
         mouse_support: app.mouse_support.unwrap_or(true),
@@ -363,6 +396,8 @@ fn resolve_app(file: &FileConfig, download_dir: PathBuf) -> Result<App, Settings
         show_title_bar: app.show_title_bar.unwrap_or(true),
         use_emoji_icons: app.use_emoji_icons.unwrap_or(false),
         download_dir,
+        file_chooser: app.file_chooser.unwrap_or_default(),
+        editor,
     })
 }
 

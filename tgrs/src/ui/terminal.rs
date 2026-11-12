@@ -177,6 +177,17 @@ impl TuiBackend {
         signal_hook::low_level::raise(signal_hook::consts::signal::SIGTSTP)?;
         Ok(())
     }
+    /// Hands the terminal to another program, e.g. an editor: stops reading
+    /// events, so that the program gets the keys, and restores the terminal.
+    /// [`Self::enter`] takes it back.
+    pub async fn release(&mut self) {
+        tracing::info!("Releasing the terminal");
+        self.task.abort();
+        // Dropping the event stream stops crossterm's reader before the
+        // program starts reading
+        let _ = (&mut self.task).await;
+        self.exit();
+    }
     /// Resume the user interface and start processing events.
     ///
     /// # Returns

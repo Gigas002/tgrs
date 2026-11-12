@@ -1,6 +1,7 @@
 use super::*;
 use crate::ui::tests::create_test_app_context;
 use crossterm::event::KeyModifiers;
+use libtgrs::client::SendAs;
 use tokio::sync::mpsc::unbounded_channel;
 
 fn create_test_prompt_window() -> PromptWindow {
@@ -474,12 +475,16 @@ mod captions {
         let (mut window, mut rx) = prompt();
         type_text(&mut window, " holiday photos ");
         window.update(Action::UploadFile("/tmp/a.jpg".into()));
+        // An image: asked how to send it first
+        assert!(sent_files(&mut rx).is_empty());
+        window.update(Action::SendAsChosen(SendAs::Photos));
         assert_eq!(
             sent_files(&mut rx),
             [Action::SendFile(
                 "/tmp/a.jpg".into(),
                 "holiday photos".into(),
-                None
+                None,
+                SendAs::Photos
             )]
         );
         assert_eq!(typed(&window), "");
@@ -488,7 +493,12 @@ mod captions {
         window.update(Action::UploadFile("/tmp/b.zip".into()));
         assert_eq!(
             sent_files(&mut rx),
-            [Action::SendFile("/tmp/b.zip".into(), String::new(), None)]
+            [Action::SendFile(
+                "/tmp/b.zip".into(),
+                String::new(),
+                None,
+                SendAs::Files
+            )]
         );
     }
 
@@ -506,7 +516,8 @@ mod captions {
                 Some(TdMessageReplyToMessage {
                     chat_id: 0,
                     message_id: 42
-                })
+                }),
+                SendAs::Files
             )]
         );
         assert!(matches!(window.current_mode(), Mode::Normal));
@@ -519,7 +530,12 @@ mod captions {
         window.update(Action::UploadFile("/tmp/a.pdf".into()));
         assert_eq!(
             sent_files(&mut rx),
-            [Action::SendFile("/tmp/a.pdf".into(), String::new(), None)]
+            [Action::SendFile(
+                "/tmp/a.pdf".into(),
+                String::new(),
+                None,
+                SendAs::Files
+            )]
         );
         assert_eq!(typed(&window), "fixed text");
         assert!(matches!(window.current_mode(), Mode::Edit(10)));
@@ -592,12 +608,15 @@ mod attachments {
         assert_eq!(typed(&window), "look");
 
         window.update(Action::PromptSendMessage);
+        assert_eq!(asked(&mut rx), [Action::ShowSendAs(1, 1)]);
+        window.update(Action::SendAsChosen(SendAs::Files));
         assert_eq!(
             sent_files(&mut rx),
             [Action::SendAlbum(
                 vec![a.display().to_string(), b.display().to_string()],
                 "look".into(),
-                None
+                None,
+                SendAs::Files
             )]
         );
         assert!(window.attachments.is_empty());
@@ -612,6 +631,7 @@ mod attachments {
         assert_eq!(window.attachments.len(), 2);
         window.update(Action::ReplyMessage(42, "q".into()));
         window.update(Action::UploadFile("/tmp/c.jpg".into()));
+        window.update(Action::SendAsChosen(SendAs::Photos));
         assert_eq!(
             sent_files(&mut rx),
             [Action::SendAlbum(
@@ -624,10 +644,106 @@ mod attachments {
                 Some(TdMessageReplyToMessage {
                     chat_id: 0,
                     message_id: 42
-                })
+                }),
+                SendAs::Photos
             )]
         );
         assert!(window.attachments.is_empty());
+    }
+
+    fn asked(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Action>) -> Vec<Action> {
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .filter(|action| matches!(action, Action::ShowSendAs(..)))
+            .collect()
+    }
+
+    #[test]
+    fn files_picked_in_the_dialog_join_the_attached_ones() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::AttachFile("/tmp/a.pdf".into()));
+        window.update(Action::Paste("docs".into()));
+        window.update(Action::UploadFiles(vec![
+            "/tmp/b.txt".into(),
+            "/tmp/c.zip".into(),
+        ]));
+        assert_eq!(
+            sent_files(&mut rx),
+            [Action::SendAlbum(
+                vec![
+                    "/tmp/a.pdf".into(),
+                    "/tmp/b.txt".into(),
+                    "/tmp/c.zip".into()
+                ],
+                "docs".into(),
+                None,
+                SendAs::Files
+            )]
+        );
+        assert!(window.attachments.is_empty());
+        assert_eq!(typed(&window), "");
+    }
+
+    #[test]
+    fn files_without_images_are_sent_without_asking() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::AttachFile("/tmp/a.pdf".into()));
+        window.update(Action::UploadFile("/tmp/b.gif".into()));
+        let actions: Vec<Action> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+        assert!(!actions.iter().any(|a| matches!(a, Action::ShowSendAs(..))));
+        assert!(actions.contains(&Action::SendAlbum(
+            vec!["/tmp/a.pdf".into(), "/tmp/b.gif".into()],
+            String::new(),
+            None,
+            SendAs::Files
+        )));
+    }
+
+    #[test]
+    fn the_reply_and_caption_survive_the_question() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::ReplyMessage(42, "q".into()));
+        window.update(Action::Paste("look".into()));
+        window.update(Action::UploadFile("/tmp/a.png".into()));
+        assert_eq!(asked(&mut rx), [Action::ShowSendAs(1, 0)]);
+        // The question takes the focus, which ends the reply mode
+        window.focus();
+        window.unfocus();
+        assert!(matches!(window.current_mode(), Mode::Normal));
+        assert_eq!(typed(&window), "look", "not sent yet");
+        window.update(Action::SendAsChosen(SendAs::Photos));
+        assert_eq!(
+            sent_files(&mut rx),
+            [Action::SendFile(
+                "/tmp/a.png".into(),
+                "look".into(),
+                Some(TdMessageReplyToMessage {
+                    chat_id: 0,
+                    message_id: 42
+                }),
+                SendAs::Photos
+            )]
+        );
+        assert_eq!(typed(&window), "");
+    }
+
+    #[test]
+    fn not_sending_attaches_the_files_again() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::ReplyMessage(42, "q".into()));
+        window.update(Action::Paste("look".into()));
+        window.update(Action::AttachFile("/tmp/a.png".into()));
+        window.update(Action::PromptSendMessage);
+        assert_eq!(asked(&mut rx), [Action::ShowSendAs(1, 0)]);
+        assert!(window.attachments.is_empty());
+        window.unfocus();
+        window.update(Action::HideSendAs);
+        assert!(sent_files(&mut rx).is_empty());
+        assert_eq!(window.attachments, [PathBuf::from("/tmp/a.png")]);
+        assert_eq!(typed(&window), "look");
+        assert!(matches!(window.current_mode(), Mode::Reply(42)));
+        // A late answer sends nothing
+        window.update(Action::SendAsChosen(SendAs::Files));
+        assert!(sent_files(&mut rx).is_empty());
     }
 
     #[test]
@@ -770,4 +886,77 @@ fn editing_puts_the_cursor_after_the_text() {
         Modifiers::from(KeyModifiers::NONE),
     ));
     assert_eq!(window.input.text_to_string(), "first\nsecond!");
+}
+
+mod editor {
+    use super::*;
+
+    fn prompt() -> (PromptWindow, tokio::sync::mpsc::UnboundedReceiver<Action>) {
+        let mut window = create_test_prompt_window();
+        let (tx, rx) = unbounded_channel();
+        window.register_action_handler(tx).unwrap();
+        (window, rx)
+    }
+
+    fn sent(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Action>) -> Vec<Action> {
+        std::iter::from_fn(|| rx.try_recv().ok()).collect()
+    }
+
+    #[test]
+    fn the_text_is_written_in_the_editor_and_comes_back() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::Paste("draft\nline".into()));
+        window.update(Action::PromptOpenEditor);
+        assert_eq!(sent(&mut rx), [Action::OpenEditor("draft\nline".into())]);
+        window.update(Action::EditorClosed(Ok("written\nin vim".into())));
+        assert_eq!(typed(&window), "written\nin vim");
+        // Enter sends it as usual
+        assert!(sent(&mut rx).is_empty());
+    }
+
+    #[test]
+    fn an_edit_stays_an_edit() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::EditMessage(10, "typo".into()));
+        window.update(Action::PromptOpenEditor);
+        assert_eq!(sent(&mut rx), [Action::OpenEditor("typo".into())]);
+        window.update(Action::EditorClosed(Ok("fixed".into())));
+        assert!(matches!(window.current_mode(), Mode::Edit(10)));
+        assert_eq!(typed(&window), "fixed");
+    }
+
+    #[test]
+    fn a_reply_stays_a_reply() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::ReplyMessage(42, "q".into()));
+        window.update(Action::PromptOpenEditor);
+        sent(&mut rx);
+        window.update(Action::EditorClosed(Ok("answer".into())));
+        assert!(matches!(window.current_mode(), Mode::Reply(42)));
+        assert_eq!(typed(&window), "answer");
+    }
+
+    #[test]
+    fn a_failed_editor_leaves_the_text() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::Paste("keep me".into()));
+        window.update(Action::EditorClosed(Err("vi exited with 1".into())));
+        assert_eq!(typed(&window), "keep me");
+        assert_eq!(
+            sent(&mut rx),
+            [Action::StatusMessage("vi exited with 1".into())]
+        );
+    }
+
+    #[test]
+    fn searches_arent_written_in_the_editor() {
+        let (mut window, mut rx) = prompt();
+        window.update(Action::ChatWindowSearch);
+        window.update(Action::PromptOpenEditor);
+        assert!(
+            !sent(&mut rx)
+                .iter()
+                .any(|a| matches!(a, Action::OpenEditor(_)))
+        );
+    }
 }

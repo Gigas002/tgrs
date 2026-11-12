@@ -74,6 +74,7 @@ const SECTIONS: &[(ComponentName, &str)] = &[
     (ComponentName::NotificationSettings, "notification_settings"),
     (ComponentName::Privacy, "privacy"),
     (ComponentName::LeaderMenu, "leader_menu"),
+    (ComponentName::SendAs, "send_as"),
 ];
 
 fn section(file: &KeymapFile, component: ComponentName) -> Option<&KeymapMode> {
@@ -103,6 +104,7 @@ fn section(file: &KeymapFile, component: ComponentName) -> Option<&KeymapMode> {
         ComponentName::NotificationSettings => file.notification_settings.as_ref(),
         ComponentName::Privacy => file.privacy.as_ref(),
         ComponentName::LeaderMenu => file.leader_menu.as_ref(),
+        ComponentName::SendAs => file.send_as.as_ref(),
         _ => file.core_window.as_ref(),
     }
 }

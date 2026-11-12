@@ -5,6 +5,16 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+### Added
+
+- Messages can be written and edited in your editor: `alt+e` in the prompt opens its text (a new message, a reply, an edit or a caption), `E` on one of your messages edits it there. The editor is `app.editor`, else `$EDITOR`, else `$VISUAL`, else `vi`.
+- Files to send (`alt+u`) are picked in the desktop's own file dialog, through the XDG desktop portal, several at once (`file-chooser` feature, on by default). Without a portal the built-in explorer is shown, as it is with `app.file_chooser = "builtin"`.
+- Sending images asks whether to send them as photos (compressed) or as files (original quality), in a popup with its own `[send_as]` keymap section. Other files are sent as files either way.
+
+### Fixed
+
+- Messages you sent could show twice in the chat: the copy shown while sending stayed next to the sent message once the history was loaded again.
+
 ## [0.1.0] - 2026-11-09
 
 ### Removed

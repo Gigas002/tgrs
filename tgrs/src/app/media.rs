@@ -2,7 +2,13 @@
 //! with the default application and saving it to the download directory.
 //! Progress and errors are reported in the status bar.
 
-use std::{path::Path, sync::Arc};
+use std::{
+    path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 
 use libtgrs::{
     client::Files,
@@ -11,7 +17,12 @@ use libtgrs::{
 
 #[cfg(feature = "media-preview")]
 use crate::app::action::{PreviewDecodedPayload, PreviewRequest};
-use crate::{app::action::Action, app::context::AppContext, media};
+use crate::{
+    app::action::Action,
+    app::context::AppContext,
+    file_chooser::{self, Answer, ChooserError},
+    media,
+};
 
 /// Opens the media of a message with the default application.
 pub fn open(app_context: &Arc<AppContext>, files: Files, message_id: i64) {
@@ -192,6 +203,83 @@ async fn local_path(
             None
         }
     }
+}
+
+/// The desktop's file dialog: whether it's open, and whether it failed to
+/// show, after which the built-in file explorer is used.
+#[derive(Debug, Default)]
+pub struct FileDialog {
+    open: AtomicBool,
+    unavailable: AtomicBool,
+}
+
+impl FileDialog {
+    /// Whether the dialog can be shown: it didn't fail to before.
+    pub fn is_available(&self) -> bool {
+        !self.unavailable.load(Ordering::Acquire)
+    }
+}
+
+/// Shows the desktop's file dialog to pick files to send to the open chat;
+/// the prompt then sends them. Without a dialog, the built-in file explorer
+/// is shown instead, now and from then on.
+pub fn pick_files(app_context: &Arc<AppContext>, dialog: &Arc<FileDialog>) {
+    let store = app_context.store();
+    let chat_id = store.open_chat_id().as_i64();
+    if chat_id == 0 {
+        status(app_context, "Open a chat before sending files.".to_owned());
+        return;
+    }
+    if dialog.open.swap(true, Ordering::AcqRel) {
+        status(app_context, "The file dialog is open already.".to_owned());
+        return;
+    }
+    let title = match store.name_of_open_chat_id() {
+        Some(name) => format!("Send files to {name}"),
+        None => "Send files".to_owned(),
+    };
+    let app_context = Arc::clone(app_context);
+    let dialog = Arc::clone(dialog);
+    tokio::spawn(async move {
+        let ctx = Arc::clone(&app_context);
+        let picked = tokio::task::spawn_blocking(move || {
+            // Quitting closes the dialog
+            file_chooser::pick_files(&title, &|| ctx.quit_acquire())
+        })
+        .await;
+        dialog.open.store(false, Ordering::Release);
+        let action_tx = app_context.action_tx();
+        match picked {
+            Ok(Ok(Answer::Picked(paths))) if paths.is_empty() => {
+                status(&app_context, "Only local files can be sent.".to_owned());
+            }
+            Ok(Ok(Answer::Picked(paths))) => {
+                // Not to another chat opened while picking
+                if app_context.store().open_chat_id().as_i64() == chat_id {
+                    let paths = paths.iter().map(|p| p.display().to_string()).collect();
+                    let _ = action_tx.send(Action::UploadFiles(paths));
+                } else {
+                    status(
+                        &app_context,
+                        "Not sent: another chat was opened meanwhile.".to_owned(),
+                    );
+                }
+            }
+            Ok(Ok(Answer::Cancelled)) => {}
+            Ok(Err(e @ ChooserError::Unavailable(_))) => {
+                tracing::warn!("{e}");
+                dialog.unavailable.store(true, Ordering::Release);
+                status(
+                    &app_context,
+                    "No file dialog on this desktop: using the built-in explorer".to_owned(),
+                );
+                let _ = action_tx.send(Action::ShowFileUploadExplorer);
+            }
+            Ok(Err(e)) => status(&app_context, format!("Can't pick files: {e}")),
+            Err(e) => tracing::error!("file dialog task failed: {e}"),
+        }
+        app_context.mark_dirty();
+    });
 }
 
 pub(super) fn status(app_context: &AppContext, message: String) {

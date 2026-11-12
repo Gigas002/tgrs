@@ -71,6 +71,7 @@ fn defaults_follow_xdg() {
     assert_eq!(settings.theme, Theme::default());
     assert!(settings.warnings.is_empty());
     assert_eq!(settings.app.download_dir, home.join("Downloads"));
+    assert_eq!(settings.app.file_chooser, FileChooser::System);
     assert_eq!(settings.credentials, CredentialStore::Auto);
     assert!(settings.telegram.database_encryption_key.is_empty());
     assert_eq!(settings.command, Command::Tui);
@@ -113,6 +114,7 @@ fn config_file_values_apply() {
         [app]
         use_emoji_icons = true
         download_dir = "~/dl"
+        file_chooser = "builtin"
 
         [credentials]
         store = "plain"
@@ -140,6 +142,7 @@ fn config_file_values_apply() {
 
     assert!(settings.app.use_emoji_icons);
     assert_eq!(settings.app.download_dir, home.join("dl"));
+    assert_eq!(settings.app.file_chooser, FileChooser::Builtin);
     assert_eq!(settings.credentials, CredentialStore::Plain);
     assert_eq!(settings.logging.level, LogLevel::Debug);
     assert_eq!(settings.logging.dir, home.join("logs"));
@@ -629,4 +632,40 @@ fn privacy_defaults_and_values() {
     let privacy = env.resolve(CliOverrides::default()).unwrap().privacy;
     assert!(!privacy.appear_online);
     assert!(!privacy.send_typing);
+}
+
+#[test]
+fn the_editor_is_configured_or_taken_from_the_environment() {
+    let env = |vars: &'static [(&'static str, &'static str)]| {
+        move |key: &str| {
+            vars.iter()
+                .find(|(var, _)| *var == key)
+                .map(|(_, value)| OsString::from(value))
+        }
+    };
+    let both = env(&[("VISUAL", "zeditor"), ("EDITOR", "hx --vsplit")]);
+    assert_eq!(
+        resolve_editor(Some("nvim -u NONE"), &both),
+        ["nvim", "-u", "NONE"]
+    );
+    // $EDITOR first: $VISUAL is often graphical
+    assert_eq!(resolve_editor(None, &both), ["hx", "--vsplit"]);
+    assert_eq!(
+        resolve_editor(None, &env(&[("VISUAL", "code --wait")])),
+        ["code", "--wait"]
+    );
+    // Blank values are skipped
+    assert_eq!(
+        resolve_editor(Some(" "), &env(&[("EDITOR", ""), ("VISUAL", "nano")])),
+        ["nano"]
+    );
+    assert_eq!(resolve_editor(None, &env(&[])), ["vi"]);
+}
+
+#[test]
+fn the_editor_setting_is_read_from_the_config() {
+    let env = Env::new();
+    env.write_config("config.toml", "[app]\neditor = \"hx --vsplit\"\n");
+    let settings = env.resolve(CliOverrides::default()).unwrap();
+    assert_eq!(settings.app.editor, ["hx", "--vsplit"]);
 }

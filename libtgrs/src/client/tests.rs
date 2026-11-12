@@ -81,3 +81,42 @@ fn albums_hold_ten_files_split_evenly() {
     let groups = album_groups(&all);
     assert_eq!(groups.concat(), all);
 }
+
+#[test]
+fn photos_are_told_by_their_extension() {
+    assert!(is_photo("/tmp/a.jpg"));
+    assert!(is_photo("/tmp/a.JPEG"));
+    assert!(is_photo("/tmp/a b.png"));
+    assert!(is_photo("/tmp/a.webp"));
+    // GIFs are animations, other files documents
+    assert!(!is_photo("/tmp/a.gif"));
+    assert!(!is_photo("/tmp/a.pdf"));
+    assert!(!is_photo("/tmp/jpg"));
+}
+
+#[test]
+fn files_are_sent_in_their_order() {
+    let paths = ["a.jpg", "b.pdf", "c.png"].map(String::from).to_vec();
+    assert_eq!(send_groups(&paths, SendAs::Files), [paths]);
+}
+
+#[test]
+fn photos_go_in_albums_apart_from_files() {
+    let paths = ["a.jpg", "b.pdf", "c.png", "d.txt"]
+        .map(String::from)
+        .to_vec();
+    assert_eq!(
+        send_groups(&paths, SendAs::Photos),
+        [vec!["a.jpg", "c.png"], vec!["b.pdf", "d.txt"]]
+    );
+    // Only photos: no empty album of files
+    let photos = ["a.jpg", "c.png"].map(String::from).to_vec();
+    assert_eq!(send_groups(&photos, SendAs::Photos), [photos]);
+    // Eleven photos are split evenly too
+    let many: Vec<String> = (0..11).map(|i| format!("{i}.png")).collect();
+    let sizes: Vec<usize> = send_groups(&many, SendAs::Photos)
+        .iter()
+        .map(Vec::len)
+        .collect();
+    assert_eq!(sizes, [6, 5]);
+}

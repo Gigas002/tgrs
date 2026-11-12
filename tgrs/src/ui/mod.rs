@@ -38,6 +38,7 @@ pub mod prompt_window;
 pub mod reply_message;
 pub mod report;
 pub mod search_overlay;
+pub mod send_as;
 pub mod sessions;
 pub mod status_bar;
 pub mod sticker_picker;

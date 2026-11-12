@@ -60,39 +60,13 @@ fn split_words(text: &str) -> Option<Vec<String>> {
 
 /// An absolute path, a `~/` one or a local `file://` URI as a path.
 fn to_path(word: &str) -> Option<PathBuf> {
-    if let Some(rest) = word.strip_prefix("file://") {
-        // file:///path or file://localhost/path
-        let path = rest.strip_prefix("localhost").unwrap_or(rest);
-        if !path.starts_with('/') {
-            return None;
-        }
-        return percent_decode(path).map(PathBuf::from);
+    if word.starts_with("file://") {
+        return crate::file_chooser::file_uri_path(word);
     }
     if let Some(rest) = word.strip_prefix("~/") {
         return std::env::var_os("HOME").map(|home| Path::new(&home).join(rest));
     }
     word.starts_with('/').then(|| PathBuf::from(word))
-}
-
-/// Decodes `%xx` escapes; None if they don't make UTF-8.
-fn percent_decode(text: &str) -> Option<String> {
-    let bytes = text.as_bytes();
-    let mut decoded = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%'
-            && let Some(byte) = text
-                .get(i + 1..i + 3)
-                .and_then(|hex| u8::from_str_radix(hex, 16).ok())
-        {
-            decoded.push(byte);
-            i += 3;
-        } else {
-            decoded.push(bytes[i]);
-            i += 1;
-        }
-    }
-    String::from_utf8(decoded).ok()
 }
 
 /// The names of `paths` for the prompt's title, e.g. `a.jpg, b.pdf`.

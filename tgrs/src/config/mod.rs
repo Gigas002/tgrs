@@ -52,6 +52,10 @@ pub struct AppFile {
     pub use_emoji_icons: Option<bool>,
     /// Where downloaded media is saved.
     pub download_dir: Option<PathBuf>,
+    /// How files to send are picked.
+    pub file_chooser: Option<FileChooser>,
+    /// The command messages are written in, e.g. `nvim` or `code --wait`.
+    pub editor: Option<String>,
 }
 
 /// `[logger]`: tgrs's own log.
@@ -165,6 +169,18 @@ pub enum LogLevel {
     Info,
     Debug,
     Trace,
+}
+
+/// How files to send are picked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FileChooser {
+    /// The desktop's file dialog (XDG desktop portal), or the built-in
+    /// explorer when there's none.
+    #[default]
+    System,
+    /// The file explorer inside tgrs.
+    Builtin,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]

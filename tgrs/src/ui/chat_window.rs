@@ -237,7 +237,15 @@ impl ChatWindow {
         };
         match command {
             MessageCommand::Reply => self.reply(&entry),
-            MessageCommand::Edit => self.edit(&entry),
+            MessageCommand::Edit => {
+                self.edit(&entry);
+            }
+            // Once the prompt has the message
+            MessageCommand::EditInEditor => {
+                if self.edit(&entry) {
+                    self.send(Action::PromptOpenEditor);
+                }
+            }
             MessageCommand::Copy => self.copy(&entry),
             MessageCommand::DeleteForEveryone => self.delete(&entry, true),
             MessageCommand::DeleteForMe => self.delete(&entry, false),
@@ -322,12 +330,13 @@ impl ChatWindow {
     }
 
     /// Edits a message. Only our own messages can be edited.
-    fn edit(&self, entry: &MessageEntry) {
+    /// Puts a message in the prompt to edit; false if it can't be edited.
+    fn edit(&self, entry: &MessageEntry) -> bool {
         if entry.sender_id() != self.app_context.store().me() {
             self.send(Action::StatusMessage(
                 "Only your own messages can be edited.".into(),
             ));
-            return;
+            return false;
         }
         // Media messages edit their caption
         let text = match entry.media() {
@@ -335,7 +344,7 @@ impl ChatWindow {
                 self.send(Action::StatusMessage(
                     "Stickers and round videos have no caption.".into(),
                 ));
-                return;
+                return false;
             }
             Some(_) => entry.caption().unwrap_or_default(),
             None => entry.message_content_to_string(),
@@ -343,6 +352,7 @@ impl ChatWindow {
         // The prompt must be focused first: actions go to the focused component.
         self.send(Action::FocusComponent(ComponentName::Prompt));
         self.send(Action::EditMessage(entry.id(), text));
+        true
     }
 
     /// Replies to a message.

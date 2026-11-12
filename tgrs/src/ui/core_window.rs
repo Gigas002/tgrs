@@ -32,6 +32,7 @@ use crate::{
         prompt_window::PromptWindow,
         report::Report,
         search_overlay::SearchOverlay,
+        send_as::SendAsPopup,
         sessions::Sessions,
         sticker_picker::StickerPicker,
         storage::Storage,
@@ -91,6 +92,8 @@ pub struct CoreWindow {
     focus_before_report: Option<ComponentName>,
     /// The pane focused when the blocked list opened, focused again after.
     focus_before_blocked_list: Option<ComponentName>,
+    /// The pane focused when asked how to send images, focused again after.
+    focus_before_send_as: Option<ComponentName>,
     /// The pane focused when the session list opened, focused again after.
     focus_before_sessions: Option<ComponentName>,
     /// The pane focused when the forward popup opened, focused again after.
@@ -285,6 +288,12 @@ impl CoreWindow {
                     .new_boxed(),
             ),
             (
+                ComponentName::SendAs,
+                SendAsPopup::new(Arc::clone(&app_context))
+                    .with_name(ComponentName::SendAs.to_string())
+                    .new_boxed(),
+            ),
+            (
                 ComponentName::PinnedMessagesPopup,
                 PinnedMessagesPopup::new(Arc::clone(&app_context))
                     .with_name(ComponentName::PinnedMessagesPopup.to_string())
@@ -329,6 +338,7 @@ impl CoreWindow {
             profile_chat: None,
             focus_before_report: None,
             focus_before_blocked_list: None,
+            focus_before_send_as: None,
             focus_before_sessions: None,
             focus_before_forward: None,
             focus_before_downloads: None,
@@ -590,6 +600,7 @@ impl CoreWindow {
             ComponentName::NotificationSettings => Action::HideNotificationSettings,
             ComponentName::Privacy => Action::HidePrivacy,
             ComponentName::LeaderMenu => Action::HideLeaderMenu,
+            ComponentName::SendAs => Action::HideSendAs,
             _ => return None,
         })
     }
@@ -789,6 +800,10 @@ impl Component for CoreWindow {
                 self.focus_only(Some(component_name));
             }
             // Esc closes a popup or leaves the prompt; a pane keeps the focus
+            // Not sending the files goes back to where they were sent from
+            Action::UnfocusComponent if self.active_popup == Some(ComponentName::SendAs) => {
+                self.update(Action::HideSendAs);
+            }
             Action::UnfocusComponent => {
                 self.show_reply_message = false;
                 if let Some(popup) = self.active_popup {
@@ -951,8 +966,21 @@ impl Component for CoreWindow {
                     component.update(action);
                 }
             }
+            Action::ShowSendAs(..) => {
+                self.focus_before_send_as = self.component_focused.filter(|c| !c.is_popup());
+                self.show_popup(ComponentName::SendAs, action);
+            }
+            // The prompt keeps the files to send until it's told how, or not
+            // to send them
+            Action::HideSendAs | Action::SendAsChosen(_) => {
+                let refocus = self.focus_before_send_as.take();
+                self.close_popup(ComponentName::SendAs, refocus);
+                if let Some(component) = self.components.get_mut(&ComponentName::Prompt) {
+                    component.update(action);
+                }
+            }
             // The prompt has the caption, whatever is focused
-            Action::UploadFile(_) | Action::AttachFile(_) => {
+            Action::UploadFile(_) | Action::UploadFiles(_) | Action::AttachFile(_) => {
                 if let Some(component) = self.components.get_mut(&ComponentName::Prompt) {
                     component.update(action);
                 }
@@ -1326,7 +1354,7 @@ impl Component for CoreWindow {
                         .update(action);
                 }
             }
-            Action::EditMessage(..) | Action::ReplyMessage(..) => {
+            Action::EditMessage(..) | Action::ReplyMessage(..) | Action::EditorClosed(_) => {
                 // Always dispatch to Prompt so the message is loaded regardless of focus order.
                 if let Some(component) = self.components.get_mut(&ComponentName::Prompt) {
                     component.update(action);

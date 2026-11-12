@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use crossterm::event::{KeyCode, KeyModifiers};
+use libtgrs::client::SendAs;
 use libtgrs::model::{
     BlockedSender, NotificationOption, NotificationSettings, NotificationTarget, PrivacyRules,
     PrivacySetting, PrivacySettings, ProfileChange, ProfileField, ReportStep, SessionEntry,
@@ -20,6 +21,8 @@ pub enum MessageCommand {
     Reply,
     DeleteForEveryone,
     Edit,
+    /// Edit the message in the external editor (`app.editor`, `$EDITOR`).
+    EditInEditor,
     /// Open a link in the message, picked when there are several.
     OpenLink,
     /// Open the attached media with the default application.
@@ -41,13 +44,14 @@ pub enum MessageCommand {
 
 impl MessageCommand {
     /// Every command, in the order of the message actions menu.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Copy,
         Self::React,
         Self::Reply,
         Self::Forward,
         Self::DeleteForEveryone,
         Self::Edit,
+        Self::EditInEditor,
         Self::OpenLink,
         Self::OpenMedia,
         Self::DownloadMedia,
@@ -65,6 +69,7 @@ impl MessageCommand {
             Self::Reply => "reply",
             Self::DeleteForEveryone => "delete for everyone",
             Self::Edit => "edit message",
+            Self::EditInEditor => "edit in editor",
             Self::OpenLink => "open URL",
             Self::OpenMedia => "open media",
             Self::DownloadMedia => "download file",
@@ -775,14 +780,38 @@ pub enum Action {
     /// A file was picked to upload: the prompt sends it with its text as
     /// the caption.
     UploadFile(String),
+    /// Files were picked in the desktop's file dialog: the prompt sends them
+    /// with the attached ones, its text as the caption.
+    UploadFiles(Vec<String>),
     /// Attach the image on the clipboard to the prompt.
     PromptPasteImage,
     /// Send the next message without sound, or with it again.
     PromptToggleSilent,
-    /// Send this file with this caption (none if empty), maybe as a reply.
-    SendFile(String, String, Option<TdMessageReplyToMessage>),
-    /// Send these files as albums, the first with this caption, maybe as a reply.
-    SendAlbum(Vec<String>, String, Option<TdMessageReplyToMessage>),
+    /// Write the prompt's text in the external editor.
+    PromptOpenEditor,
+    /// Suspend the TUI to edit this text in the external editor.
+    OpenEditor(String),
+    /// The external editor closed: the edited text, or why there's none.
+    EditorClosed(Result<String, String>),
+    /// Send this file with this caption (none if empty), maybe as a reply;
+    /// an image as a photo or as a file.
+    SendFile(String, String, Option<TdMessageReplyToMessage>, SendAs),
+    /// Send these files as albums, the first with this caption, maybe as a
+    /// reply; images as photos or as files.
+    SendAlbum(Vec<String>, String, Option<TdMessageReplyToMessage>, SendAs),
+    /// Ask how to send the images about to be sent: the number of images,
+    /// and of other files sent with them.
+    ShowSendAs(usize, usize),
+    /// Don't send the files: they stay attached to the prompt.
+    HideSendAs,
+    /// Send the files, images this way.
+    SendAsChosen(SendAs),
+    /// Highlight the previous way of sending images.
+    SendAsPrevious,
+    /// Highlight the next way of sending images.
+    SendAsNext,
+    /// Send the images the highlighted way.
+    SendAsConfirm,
     /// Attach this file to the prompt, to send it with others.
     AttachFile(String),
 }
@@ -846,6 +875,10 @@ impl FromStr for Action {
             "chat_window_delete_for_me" => Ok(Action::SelectedMessage(MessageCommand::DeleteForMe)),
             "chat_window_copy" => Ok(Action::SelectedMessage(MessageCommand::Copy)),
             "chat_window_edit" => Ok(Action::SelectedMessage(MessageCommand::Edit)),
+            "chat_window_edit_in_editor" => {
+                Ok(Action::SelectedMessage(MessageCommand::EditInEditor))
+            }
+            "prompt_open_editor" => Ok(Action::PromptOpenEditor),
             "chat_window_reply" => Ok(Action::SelectedMessage(MessageCommand::Reply)),
             "react_message" => Ok(Action::SelectedMessage(MessageCommand::React)),
             "open_message_url" => Ok(Action::SelectedMessage(MessageCommand::OpenLink)),
@@ -985,6 +1018,12 @@ impl FromStr for Action {
             "pinned_popup_next" => Ok(Action::PinnedPopupNext),
             "pinned_popup_confirm_jump" => Ok(Action::PinnedPopupConfirmJump),
             "pinned_popup_open_media" => Ok(Action::PinnedPopupOpenMedia),
+            "hide_send_as" => Ok(Action::HideSendAs),
+            "send_as_photos" => Ok(Action::SendAsChosen(SendAs::Photos)),
+            "send_as_files" => Ok(Action::SendAsChosen(SendAs::Files)),
+            "send_as_confirm" => Ok(Action::SendAsConfirm),
+            "send_as_previous" => Ok(Action::SendAsPrevious),
+            "send_as_next" => Ok(Action::SendAsNext),
             _ => Err(AppError::InvalidAction(s.to_string())),
         }
     }

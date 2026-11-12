@@ -2946,6 +2946,7 @@ dependencies = [
  "chrono",
  "clap",
  "crossterm",
+ "dbus",
  "dbus-secret-service-keyring-store",
  "futures",
  "getrandom 0.4.3",

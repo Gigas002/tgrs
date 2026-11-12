@@ -11,9 +11,9 @@ use tdlib_rs::enums::{
 };
 use tdlib_rs::functions;
 use tdlib_rs::types::{
-    FormattedText, InputFileId, InputFileLocal, InputMessageDocument, InputMessageSticker,
-    InputMessageText, InputSticker, LogStreamFile, MessageTopicForum, OptionValueBoolean,
-    OptionValueInteger, ReactionTypeEmoji,
+    FormattedText, InputFileId, InputFileLocal, InputMessageDocument, InputMessagePhoto,
+    InputMessageSticker, InputMessageText, InputSticker, LogStreamFile, MessageTopicForum,
+    OptionValueBoolean, OptionValueInteger, ReactionTypeEmoji,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
@@ -1196,35 +1196,37 @@ impl Requests {
             })
     }
 
-    /// Sends a local file as a document with `caption` (none if empty), to
-    /// a forum topic when `topic` is given and as a reply when `reply_to`
-    /// is, and clears the pending reply.
-    pub async fn send_document(
+    /// Sends a local file with `caption` (none if empty): an image as a
+    /// photo with [`SendAs::Photos`], anything else as a document. To a forum
+    /// topic when `topic` is given and as a reply when `reply_to` is; clears
+    /// the pending reply.
+    pub async fn send_file(
         &self,
         file_path: String,
         caption: String,
         chat_id: i64,
         topic: Option<MessageTopic>,
         reply_to: Option<TdMessageReplyToMessage>,
+        send_as: SendAs,
     ) -> Result<tdlib_rs::types::Message, TdError> {
         self.store.clear_reply_message();
         let reply_to = reply_to.map(|r| InputMessageReplyTo::Message((&r).into()));
-        let content = document_content(file_path, &caption);
+        let content = file_content(file_path, &caption, send_as);
         let options = self.send_options();
         match functions::send_message(chat_id, topic, reply_to, options, content, self.client_id)
             .await
         {
             Ok(enums::Message::Message(message)) => Ok(message),
             Err(e) => {
-                tracing::error!("Failed to send document: {e:?}");
+                tracing::error!("Failed to send a file: {e:?}");
                 Err(e)
             }
         }
     }
 
-    /// Sends local files as albums of documents, at most [`ALBUM_SIZE`] in
-    /// each: the first file has `caption` (none if empty) and the first album
-    /// answers `reply_to`. A last single file goes as a plain document.
+    /// Sends local files as albums of at most [`ALBUM_SIZE`] (see
+    /// [`send_groups`]): the first file has `caption` (none if empty) and the
+    /// first album answers `reply_to`. A last single file goes on its own.
     /// Clears the pending reply. Every group is tried; the first error is
     /// returned.
     pub async fn send_album(
@@ -1234,22 +1236,30 @@ impl Requests {
         chat_id: i64,
         topic: Option<MessageTopic>,
         reply_to: Option<TdMessageReplyToMessage>,
+        send_as: SendAs,
     ) -> Result<(), TdError> {
         let mut caption = Some(caption);
         let mut reply_to = reply_to;
         let mut first_error = None;
         // Every album of the files goes without sound, or none
         let silent = self.store.take_send_silently();
-        for group in album_groups(&file_paths) {
+        for group in send_groups(&file_paths, send_as) {
             let caption = caption.take().unwrap_or_default();
             let reply = reply_to.take();
             self.store.set_send_silently(silent);
             let options = self.send_options();
-            let sent = if let [path] = group {
+            let sent = if let [path] = group.as_slice() {
                 self.store.set_send_silently(silent);
-                self.send_document(path.clone(), caption, chat_id, topic.clone(), reply)
-                    .await
-                    .map(|_| ())
+                self.send_file(
+                    path.clone(),
+                    caption,
+                    chat_id,
+                    topic.clone(),
+                    reply,
+                    send_as,
+                )
+                .await
+                .map(|_| ())
             } else {
                 self.store.clear_reply_message();
                 let reply = reply.map(|r| InputMessageReplyTo::Message((&r).into()));
@@ -1257,7 +1267,11 @@ impl Requests {
                     .iter()
                     .enumerate()
                     .map(|(index, path)| {
-                        document_content(path.clone(), if index == 0 { &caption } else { "" })
+                        file_content(
+                            path.clone(),
+                            if index == 0 { &caption } else { "" },
+                            send_as,
+                        )
                     })
                     .collect();
                 functions::send_message_album(
@@ -1569,12 +1583,87 @@ pub fn album_groups(paths: &[String]) -> Vec<&[String]> {
     paths.chunks(size).collect()
 }
 
-/// A local file as a document, with `caption` unless it's blank.
-fn document_content(file_path: String, caption: &str) -> InputMessageContent {
-    let caption = (!caption.trim().is_empty()).then(|| FormattedText {
+/// How files that are images are sent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SendAs {
+    /// As documents, the images untouched.
+    #[default]
+    Files,
+    /// Images as photos, compressed by Telegram; other files as documents.
+    Photos,
+}
+
+/// Image formats Telegram takes as photos.
+const PHOTO_EXTENSIONS: [&str; 4] = ["jpg", "jpeg", "png", "webp"];
+
+/// Whether the file at `path` is an image Telegram can send as a photo, by
+/// its extension.
+pub fn is_photo(path: impl AsRef<std::path::Path>) -> bool {
+    path.as_ref()
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| {
+            PHOTO_EXTENSIONS
+                .iter()
+                .any(|photo| ext.eq_ignore_ascii_case(photo))
+        })
+}
+
+/// `paths` in the albums they are sent in, each sized by [`album_groups`].
+/// An album can't mix photos with documents: with [`SendAs::Photos`], the
+/// images come first in albums of their own, then the other files.
+pub fn send_groups(paths: &[String], send_as: SendAs) -> Vec<Vec<String>> {
+    let (photos, files): (Vec<String>, Vec<String>) = match send_as {
+        SendAs::Files => (Vec::new(), paths.to_vec()),
+        SendAs::Photos => paths.iter().cloned().partition(|path| is_photo(path)),
+    };
+    album_groups(&photos)
+        .into_iter()
+        .chain(album_groups(&files))
+        .map(<[String]>::to_vec)
+        .collect()
+}
+
+/// A local file with `caption`: as a photo when it's an image to send as
+/// one, otherwise as a document.
+fn file_content(file_path: String, caption: &str, send_as: SendAs) -> InputMessageContent {
+    if send_as == SendAs::Photos && is_photo(&file_path) {
+        photo_content(file_path, caption)
+    } else {
+        document_content(file_path, caption)
+    }
+}
+
+/// `caption` as text, none if it's blank.
+fn caption_text(caption: &str) -> Option<FormattedText> {
+    (!caption.trim().is_empty()).then(|| FormattedText {
         text: caption.to_owned(),
         entities: vec![],
-    });
+    })
+}
+
+/// A local image as a photo, with `caption` unless it's blank. Telegram
+/// finds its size.
+fn photo_content(file_path: String, caption: &str) -> InputMessageContent {
+    InputMessageContent::InputMessagePhoto(InputMessagePhoto {
+        photo: tdlib_rs::types::InputPhoto {
+            photo: enums::InputFile::Local(InputFileLocal { path: file_path }),
+            thumbnail: None,
+            video: None,
+            added_sticker_file_ids: Vec::new(),
+            width: 0,
+            height: 0,
+        },
+        caption: caption_text(caption),
+        show_caption_above_media: false,
+        self_destruct_type: None,
+        has_spoiler: false,
+    })
+}
+
+/// A local file as a document, with `caption` unless it's blank.
+fn document_content(file_path: String, caption: &str) -> InputMessageContent {
+    let caption = caption_text(caption);
     InputMessageContent::InputMessageDocument(InputMessageDocument {
         document: tdlib_rs::types::InputDocument {
             document: enums::InputFile::Local(InputFileLocal { path: file_path }),

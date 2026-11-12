@@ -39,7 +39,8 @@ use crate::{
         error::AppError,
         event::Event,
     },
-    notifier,
+    config::FileChooser,
+    editor, notifier,
     settings::{ActionBinding, Command, Settings, is_plain_char},
     ui::component_name::ComponentName,
     ui::{
@@ -92,6 +93,8 @@ struct Workers {
     /// A read mark is waiting to be sent: it covers every message up to
     /// then, so a busy chat doesn't queue one per message ahead of ours.
     view_pending: Arc<std::sync::atomic::AtomicBool>,
+    /// The desktop's file dialog.
+    file_dialog: Arc<media::FileDialog>,
 }
 
 impl Workers {
@@ -100,6 +103,7 @@ impl Workers {
             send: Worker::start(),
             load: Worker::start(),
             view_pending: Arc::default(),
+            file_dialog: Arc::default(),
         }
     }
 }
@@ -1031,6 +1035,35 @@ async fn handle_app_actions(
                     }
                 });
             }
+            // The editor takes the terminal until it exits
+            Action::OpenEditor(text) => {
+                let command = app_context.app_config().editor.clone();
+                let text = text.clone();
+                tui_backend.release().await;
+                let edited = tokio::task::spawn_blocking(move || {
+                    editor::edit_text(&command, &text, &std::env::temp_dir())
+                })
+                .await;
+                tui_backend.enter()?;
+                // Everything is drawn again over what the editor left
+                tui_backend.terminal.clear()?;
+                let edited = match edited {
+                    Ok(edited) => edited.map_err(|e| e.to_string()),
+                    Err(e) => Err(format!("The editor failed: {e}")),
+                };
+                if let Err(e) = &edited {
+                    tracing::warn!("{e}");
+                }
+                app_context.action_tx().send(Action::EditorClosed(edited))?;
+            }
+            // The desktop's file dialog instead of the built-in explorer
+            Action::ShowFileUploadExplorer
+                if app_context.app_config().file_chooser == FileChooser::System
+                    && workers.file_dialog.is_available() =>
+            {
+                media::pick_files(&app_context, &workers.file_dialog);
+                continue;
+            }
             Action::SendMessageEdited(message_id, message) => {
                 let requests = client.requests();
                 let (message_id, message) = (*message_id, message.to_string());
@@ -1041,7 +1074,7 @@ async fn handle_app_actions(
                     }
                 });
             }
-            Action::SendFile(file_path, caption, reply_to) => {
+            Action::SendFile(file_path, caption, reply_to, send_as) => {
                 let chat_id = app_context.store().open_chat_id().as_i64();
                 if chat_id == 0 {
                     let _ = app_context.action_tx().send(Action::StatusMessage(
@@ -1051,12 +1084,13 @@ async fn handle_app_actions(
                 }
                 let topic = app_context.store().open_send_topic();
                 let sent = client
-                    .send_document(
+                    .send_file(
                         file_path.to_string(),
                         caption.clone(),
                         chat_id,
                         topic,
                         reply_to.clone(),
+                        *send_as,
                     )
                     .await;
                 if let Err(e) = sent {
@@ -1066,7 +1100,7 @@ async fn handle_app_actions(
                     app_context.action_tx().send(Action::HideChatWindowReply)?;
                 }
             }
-            Action::SendAlbum(file_paths, caption, reply_to) => {
+            Action::SendAlbum(file_paths, caption, reply_to, send_as) => {
                 let chat_id = app_context.store().open_chat_id().as_i64();
                 if chat_id == 0 {
                     continue;
@@ -1079,6 +1113,7 @@ async fn handle_app_actions(
                         chat_id,
                         topic,
                         reply_to.clone(),
+                        *send_as,
                     )
                     .await;
                 if let Err(e) = sent {
