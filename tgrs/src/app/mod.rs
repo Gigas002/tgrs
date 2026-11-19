@@ -333,6 +333,29 @@ fn forward_status(
     }
 }
 
+/// `paths` ready to send `send_as`: images Telegram doesn't take as photos
+/// converted off the async runtime, as [`crate::photo::prepare`] does; what
+/// couldn't be is sent as a file, and the status line says why.
+async fn photos_to_send(
+    app_context: &AppContext,
+    paths: Vec<String>,
+    send_as: libtgrs::client::SendAs,
+) -> Vec<String> {
+    let fallback = paths.clone();
+    match tokio::task::spawn_blocking(move || crate::photo::prepare(paths, send_as)).await {
+        Ok((paths, problems)) => {
+            if !problems.is_empty() {
+                media::status(app_context, problems.join("; "));
+            }
+            paths
+        }
+        Err(e) => {
+            media::status(app_context, format!("Photos not converted: {e}"));
+            fallback
+        }
+    }
+}
+
 /// Tells a privacy change failed and shows what Telegram has; quiet when saved.
 async fn privacy_saved(
     app_context: &Arc<AppContext>,
@@ -1083,9 +1106,13 @@ async fn handle_app_actions(
                     continue;
                 }
                 let topic = app_context.store().open_send_topic();
+                let file_path = photos_to_send(&app_context, vec![file_path.clone()], *send_as)
+                    .await
+                    .pop()
+                    .unwrap_or_default();
                 let sent = client
                     .send_file(
-                        file_path.to_string(),
+                        file_path,
                         caption.clone(),
                         chat_id,
                         topic,
@@ -1106,9 +1133,10 @@ async fn handle_app_actions(
                     continue;
                 }
                 let topic = app_context.store().open_send_topic();
+                let file_paths = photos_to_send(&app_context, file_paths.clone(), *send_as).await;
                 let sent = client
                     .send_album(
-                        file_paths.clone(),
+                        file_paths,
                         caption.clone(),
                         chat_id,
                         topic,

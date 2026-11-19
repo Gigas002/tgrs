@@ -653,6 +653,30 @@ mod attachments {
         assert!(window.attachments.is_empty());
     }
 
+    #[test]
+    fn a_jpeg_xl_can_be_sent_as_a_photo_with_the_feature() {
+        let dir = tempfile::tempdir().unwrap();
+        let jxl = file(&dir, "shot.jxl");
+        let (mut window, mut rx) = prompt();
+        window.update(Action::Paste(jxl.display().to_string()));
+        window.update(Action::PromptSendMessage);
+        let actions: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok())
+            .filter(|a| matches!(a, Action::ShowSendAs(..) | Action::SendFile(..)))
+            .collect();
+        let want = if cfg!(feature = "jxl") {
+            Action::ShowSendAs(1, 0)
+        } else {
+            // Without a converter it can only go as a file: nothing to ask.
+            Action::SendFile(
+                jxl.display().to_string(),
+                String::new(),
+                None,
+                SendAs::Files,
+            )
+        };
+        assert_eq!(actions, [want]);
+    }
+
     fn asked(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Action>) -> Vec<Action> {
         std::iter::from_fn(|| rx.try_recv().ok())
             .filter(|action| matches!(action, Action::ShowSendAs(..)))

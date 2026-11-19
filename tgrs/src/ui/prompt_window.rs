@@ -9,7 +9,7 @@ use crate::{
 };
 use arboard::Clipboard;
 use crossterm::event::KeyCode;
-use libtgrs::client::{self, SendAs};
+use libtgrs::client::SendAs;
 use libtgrs::model::td_enums::TdMessageReplyToMessage;
 use ratatui::{
     Frame,
@@ -726,7 +726,11 @@ impl PromptWindow {
             reply_to,
             text_is_caption: self.can_attach(),
         };
-        let images = pending.paths.iter().filter(|p| client::is_photo(p)).count();
+        let images = pending
+            .paths
+            .iter()
+            .filter(|p| crate::photo::can_send_as_photo(p))
+            .count();
         if images == 0 {
             self.send_pending(pending, SendAs::Files);
             return;

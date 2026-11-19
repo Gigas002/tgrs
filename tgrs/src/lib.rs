@@ -9,6 +9,7 @@ pub mod file_chooser;
 pub mod logger;
 pub mod media;
 pub mod notifier;
+pub mod photo;
 pub mod settings;
 pub mod ui;
 pub mod utils;

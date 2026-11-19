@@ -36,6 +36,7 @@ jiff = { version = "1.0.1", default-features = false, features = [
     "tz-system",
     "tzdb-zoneinfo",
 ] }
+jxl = "0.8"
 keyring-core = "1"
 notify-rust = "4"
 nucleo-matcher = "0.3"
@@ -65,3 +66,7 @@ tracing-subscriber = { version = "0.3", default-features = false, features = [
 ] }
 unicode-width = "0.2"
 wl-clipboard-rs = "0.9.5"
+
+# Decoding a JPEG XL unoptimized takes seconds even for a small photo.
+[profile.dev.package.jxl]
+opt-level = 3
