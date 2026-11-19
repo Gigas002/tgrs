@@ -58,5 +58,10 @@ tracing-appender.workspace = true
 tracing-subscriber.workspace = true
 unicode-width.workspace = true
 
+# The clipboard's offered types, which arboard doesn't list; arboard already
+# depends on it on these platforms.
+[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "android", target_os = "emscripten"))))'.dependencies]
+wl-clipboard-rs.workspace = true
+
 [dev-dependencies]
 tempfile.workspace = true

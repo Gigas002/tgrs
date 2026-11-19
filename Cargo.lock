@@ -2996,6 +2996,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "unicode-width",
+ "wl-clipboard-rs",
 ]
 
 [[package]]
