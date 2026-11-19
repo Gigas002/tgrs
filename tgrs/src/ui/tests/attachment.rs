@@ -70,3 +70,81 @@ fn names_are_the_file_names() {
     let paths = [PathBuf::from("/x/a.jpg"), PathBuf::from("/y/b c.pdf")];
     assert_eq!(names(&paths), "a.jpg, b c.pdf");
 }
+
+#[test]
+fn copied_files_come_before_any_image() {
+    // Dolphin offers the files, their text and an icon of the first one.
+    let offered = ["text/uri-list", "text/plain", "image/png"];
+    assert_eq!(
+        clipboard_picks(&offered),
+        [
+            ClipboardPick::Files,
+            ClipboardPick::Image("image/png", "png")
+        ]
+    );
+}
+
+#[test]
+fn a_jpeg_xl_alone_is_pasted_as_one() {
+    let offered = ["image/jxl", "text/plain"];
+    assert_eq!(
+        clipboard_picks(&offered),
+        [ClipboardPick::Image("image/jxl", "jxl")]
+    );
+}
+
+#[test]
+fn images_tdlib_sends_as_they_are_are_preferred() {
+    let offered = [
+        "image/gif",
+        "image/jxl",
+        "image/webp",
+        "IMAGE/JPEG",
+        "image/png",
+    ];
+    let picks: Vec<_> = clipboard_picks(&offered)
+        .into_iter()
+        .map(|pick| match pick {
+            ClipboardPick::Image(_, ext) => ext,
+            ClipboardPick::Files => "files",
+        })
+        .collect();
+    assert_eq!(picks, ["png", "jpg", "webp", "jxl", "gif"]);
+}
+
+#[test]
+fn text_or_unknown_images_paste_nothing() {
+    assert!(clipboard_picks(&["text/plain", "UTF8_STRING"]).is_empty());
+    assert!(clipboard_picks(&["image/x-unknown"]).is_empty());
+    assert!(clipboard_picks::<&str>(&[]).is_empty());
+}
+
+#[test]
+fn a_uri_list_of_files_is_those_files() {
+    let (_dir, a, spaced) = files();
+    let uri = |p: &PathBuf| format!("file://{}", p.display().to_string().replace(' ', "%20"));
+    let list = format!(
+        "# copied by a file manager\r\n{}\r\n{}\r\n",
+        uri(&a),
+        uri(&spaced)
+    );
+    assert_eq!(uri_list_files(&list), Some(vec![a, spaced]));
+}
+
+#[test]
+fn a_uri_list_with_a_link_or_a_missing_file_is_not_files() {
+    let (dir, a, _) = files();
+    let file = format!("file://{}", a.display());
+    assert_eq!(
+        uri_list_files(&format!("{file}\nhttps://example.org/a.jpg")),
+        None
+    );
+    let missing = format!("file://{}", dir.path().join("gone.jxl").display());
+    assert_eq!(uri_list_files(&format!("{file}\n{missing}")), None);
+    assert_eq!(uri_list_files("# only a comment\n"), None);
+    // A directory isn't a file to send.
+    assert_eq!(
+        uri_list_files(&format!("file://{}", dir.path().display())),
+        None
+    );
+}

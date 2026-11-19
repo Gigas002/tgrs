@@ -9,7 +9,7 @@ use crate::{
 };
 use arboard::Clipboard;
 use crossterm::event::KeyCode;
-use libtgrs::client::{self, SendAs};
+use libtgrs::client::SendAs;
 use libtgrs::model::td_enums::TdMessageReplyToMessage;
 use ratatui::{
     Frame,
@@ -596,6 +596,9 @@ pub struct PromptWindow {
     attachments: Vec<PathBuf>,
     /// Files with images waiting to be told how to send the images.
     pending_send: Option<PendingSend>,
+    /// Reads what `alt+v` attaches; tests swap in one that doesn't touch the
+    /// real clipboard.
+    read_clipboard: fn() -> Result<Vec<PathBuf>, String>,
 }
 
 /// Files about to be sent, as they were when asked how to send their images:
@@ -657,6 +660,7 @@ impl PromptWindow {
             draft_target: None,
             saved_draft: String::new(),
             attachments: Vec::new(),
+            read_clipboard: attachment::clipboard_attachments,
             pending_send: None,
         }
     }
@@ -722,7 +726,11 @@ impl PromptWindow {
             reply_to,
             text_is_caption: self.can_attach(),
         };
-        let images = pending.paths.iter().filter(|p| client::is_photo(p)).count();
+        let images = pending
+            .paths
+            .iter()
+            .filter(|p| crate::photo::can_send_as_photo(p))
+            .count();
         if images == 0 {
             self.send_pending(pending, SendAs::Files);
             return;
@@ -1218,16 +1226,14 @@ impl Component for PromptWindow {
                 let store = self.app_context.store();
                 store.set_send_silently(!store.sends_silently());
             }
-            Action::PromptPasteImage if self.can_attach() => {
-                match attachment::save_clipboard_image() {
-                    Ok(path) => self.attachments.push(path),
-                    Err(message) => {
-                        if let Some(tx) = self.action_tx.as_ref() {
-                            let _ = tx.send(Action::StatusMessage(message));
-                        }
+            Action::PromptPasteImage if self.can_attach() => match (self.read_clipboard)() {
+                Ok(paths) => self.attachments.extend(paths),
+                Err(message) => {
+                    if let Some(tx) = self.action_tx.as_ref() {
+                        let _ = tx.send(Action::StatusMessage(message));
                     }
                 }
-            }
+            },
             Action::EditMessage(message_id, message) => {
                 self.input.edit_message(message_id, message);
             }

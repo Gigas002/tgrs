@@ -31,9 +31,8 @@ pub fn escape_markup(text: &str) -> String {
 }
 
 /// Whether `now` falls in the quiet hours, when nothing is shown.
-pub fn is_quiet(settings: &Notifications, now: chrono::NaiveTime) -> bool {
-    use chrono::Timelike;
-    let minute = u16::try_from(now.hour() * 60 + now.minute()).unwrap_or(0);
+pub fn is_quiet(settings: &Notifications, now: jiff::civil::Time) -> bool {
+    let minute = u16::try_from(i16::from(now.hour()) * 60 + i16::from(now.minute())).unwrap_or(0);
     settings
         .quiet_hours
         .is_some_and(|hours| hours.contains(minute))

@@ -1,9 +1,9 @@
 //! Rendering of [`MessageEntry`] values with the active theme.
 
-use chrono::{DateTime, Local, NaiveDate};
+use jiff::civil::Date;
 use libtgrs::model::{
     Media, MediaKind, MessageContentType, MessageEntry, TdMessageReplyTo, TdMessageSender,
-    TextLine, TextStyle, format_duration, format_size, format_timestamp,
+    TextLine, TextStyle, format_duration, format_size, format_timestamp, local_time,
 };
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
@@ -327,14 +327,8 @@ pub fn starts_new_day(previous: Option<&MessageEntry>, entry: &MessageEntry) -> 
         .is_none_or(|previous| local_date(previous.timestamp()) != local_date(entry.timestamp()))
 }
 
-fn local_time(timestamp: i32) -> DateTime<Local> {
-    DateTime::from_timestamp(i64::from(timestamp), 0)
-        .unwrap_or_default()
-        .with_timezone(&Local)
-}
-
-fn local_date(timestamp: i32) -> NaiveDate {
-    local_time(timestamp).date_naive()
+fn local_date(timestamp: i32) -> Date {
+    local_time(timestamp).date()
 }
 
 /// A message laid out like concord's: an author line, the content indented
@@ -356,7 +350,7 @@ pub fn message_lines(
     let mut separators = Vec::new();
     if row.new_day {
         let date = local_time(entry.timestamp())
-            .format(" %Y-%m-%d ")
+            .strftime(" %Y-%m-%d ")
             .to_string();
         separators.push(separator_line(
             &date,
@@ -418,7 +412,7 @@ pub fn message_lines(
 
     let mut preview_row = preview_row;
     if row.selected {
-        let time = local_time(entry.timestamp()).format("%H:%M").to_string();
+        let time = local_time(entry.timestamp()).strftime("%H:%M").to_string();
         let extra_top = !row.show_header;
         lines = card_lines(
             lines,
@@ -485,7 +479,7 @@ fn header_spans(
 ) -> Vec<Span<'static>> {
     let theme = app_context.theme();
     let store = app_context.store();
-    let time = local_time(entry.timestamp()).format("%H:%M").to_string();
+    let time = local_time(entry.timestamp()).strftime("%H:%M").to_string();
     let mut trailer = vec![
         Span::raw(" "),
         Span::styled(time, theme.style(HighlightGroup::MessageTimestamp)),

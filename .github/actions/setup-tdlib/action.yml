@@ -34,8 +34,9 @@ runs:
         TDLIB_COMMIT: ${{ inputs.tdlib-commit }}
         PREFIX: ${{ github.workspace }}/.tdlib
       run: |
+        # libc++ links libunwind; since Ubuntu 26.04 its -dev package isn't pulled in.
         sudo apt-get install -y -qq make git zlib1g-dev libssl-dev gperf php-cli cmake \
-          clang-18 libc++-18-dev libc++abi-18-dev
+          clang-18 libc++-18-dev libc++abi-18-dev libunwind-18-dev
         git clone https://github.com/tdlib/td.git "$RUNNER_TEMP/td"
         cd "$RUNNER_TEMP/td"
         git checkout "$TDLIB_COMMIT"

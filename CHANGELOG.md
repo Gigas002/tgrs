@@ -7,9 +7,15 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+- JPEG XL images can be sent as photos (`jxl` feature, on by default). Telegram takes none, so tgrs converts them to JPEG first, as Telegram Desktop does: the first frame, transparency over white, scaled to 2560 pixels on the long side, keeping the image's color profile. A file that can't be decoded is sent as a file, and the status bar says why. Sending as files keeps the `.jxl` as it is.
 - Messages can be written and edited in your editor: `alt+e` in the prompt opens its text (a new message, a reply, an edit or a caption), `E` on one of your messages edits it there. The editor is `app.editor`, else `$EDITOR`, else `$VISUAL`, else `vi`.
 - Files to send (`alt+u`) are picked in the desktop's own file dialog, through the XDG desktop portal, several at once (`file-chooser` feature, on by default). Without a portal the built-in explorer is shown, as it is with `app.file_chooser = "builtin"`.
 - Sending images asks whether to send them as photos (compressed) or as files (original quality), in a popup with its own `[send_as]` keymap section. Other files are sent as files either way.
+
+### Changed
+
+- `alt+v` attaches files copied in a file manager, and images in the format they were copied in: PNG, JPEG, WebP, JPEG XL or GIF. It only read PNG images before, so an image copied as JPEG XL alone (or anything but PNG) gave "No image on the clipboard". On Wayland this no longer needs the `media-preview` feature.
+- Dates and times are handled by jiff instead of chrono, which is no longer maintained (RUSTSEC-2026-0543). Timestamps look the same.
 
 ### Fixed
 

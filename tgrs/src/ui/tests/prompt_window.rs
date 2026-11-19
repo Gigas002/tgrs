@@ -6,7 +6,9 @@ use tokio::sync::mpsc::unbounded_channel;
 
 fn create_test_prompt_window() -> PromptWindow {
     let app_context = create_test_app_context();
-    PromptWindow::new(app_context)
+    let mut window = PromptWindow::new(app_context);
+    window.read_clipboard = || Err("No clipboard in tests.".to_owned());
+    window
 }
 
 #[test]
@@ -651,6 +653,30 @@ mod attachments {
         assert!(window.attachments.is_empty());
     }
 
+    #[test]
+    fn a_jpeg_xl_can_be_sent_as_a_photo_with_the_feature() {
+        let dir = tempfile::tempdir().unwrap();
+        let jxl = file(&dir, "shot.jxl");
+        let (mut window, mut rx) = prompt();
+        window.update(Action::Paste(jxl.display().to_string()));
+        window.update(Action::PromptSendMessage);
+        let actions: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok())
+            .filter(|a| matches!(a, Action::ShowSendAs(..) | Action::SendFile(..)))
+            .collect();
+        let want = if cfg!(feature = "jxl") {
+            Action::ShowSendAs(1, 0)
+        } else {
+            // Without a converter it can only go as a file: nothing to ask.
+            Action::SendFile(
+                jxl.display().to_string(),
+                String::new(),
+                None,
+                SendAs::Files,
+            )
+        };
+        assert_eq!(actions, [want]);
+    }
+
     fn asked(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Action>) -> Vec<Action> {
         std::iter::from_fn(|| rx.try_recv().ok())
             .filter(|action| matches!(action, Action::ShowSendAs(..)))
@@ -813,16 +839,26 @@ mod attachments {
         assert!(screen.contains("enter sends"), "{screen}");
     }
 
-    #[cfg(not(feature = "media-preview"))]
     #[test]
-    fn pasting_an_image_needs_media_preview() {
+    fn pasted_files_are_attached() {
+        let (mut window, _rx) = prompt();
+        window.read_clipboard = || Ok(vec![PathBuf::from("/a.jxl"), PathBuf::from("/b.pdf")]);
+        window.update(Action::PromptPasteImage);
+        assert_eq!(
+            window.attachments,
+            [PathBuf::from("/a.jxl"), PathBuf::from("/b.pdf")]
+        );
+    }
+
+    #[test]
+    fn nothing_to_paste_is_said_and_attaches_nothing() {
         let (mut window, mut rx) = prompt();
         window.update(Action::PromptPasteImage);
         assert!(window.attachments.is_empty());
         assert!(
             std::iter::from_fn(|| rx.try_recv().ok()).any(|action| matches!(
                 action,
-                Action::StatusMessage(ref m) if m.contains("media-preview")
+                Action::StatusMessage(ref m) if m == "No clipboard in tests."
             ))
         );
     }

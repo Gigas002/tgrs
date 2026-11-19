@@ -1504,3 +1504,64 @@ mod activity {
         );
     }
 }
+
+mod timestamps {
+    use jiff::ZonedDateTime;
+    use jiff::civil::{Date, date};
+    use jiff::tz::TimeZone;
+
+    use crate::model::message::{format_short_timestamp_on, format_timestamp_on};
+
+    const TODAY: Date = date(2026, 3, 2);
+
+    /// `y-m-d h:m` at UTC+3, so the date is the local one, not UTC's.
+    fn at(y: i16, m: i8, d: i8, hour: i8, minute: i8) -> ZonedDateTime {
+        date(y, m, d)
+            .at(hour, minute, 0, 0)
+            .to_zoned_datetime(TimeZone::fixed(jiff::tz::offset(3)))
+            .unwrap()
+    }
+
+    #[test]
+    fn full_timestamps_name_today_and_yesterday() {
+        assert_eq!(format_timestamp_on(&at(2026, 3, 2, 0, 5), TODAY), "00:05");
+        assert_eq!(
+            format_timestamp_on(&at(2026, 3, 1, 23, 59), TODAY),
+            "Yesterday 23:59"
+        );
+        assert_eq!(
+            format_timestamp_on(&at(2026, 2, 28, 9, 0), TODAY),
+            "2026-02-28 09:00"
+        );
+        // Yesterday across a month end, February's 28th.
+        assert_eq!(
+            format_timestamp_on(&at(2026, 2, 28, 9, 0), date(2026, 3, 1)),
+            "Yesterday 09:00"
+        );
+    }
+
+    #[test]
+    fn short_timestamps_use_the_weekday_within_a_week() {
+        assert_eq!(
+            format_short_timestamp_on(&at(2026, 3, 2, 8, 30), TODAY),
+            "08:30"
+        );
+        assert_eq!(
+            format_short_timestamp_on(&at(2026, 3, 1, 8, 30), TODAY),
+            "Sun"
+        );
+        assert_eq!(
+            format_short_timestamp_on(&at(2026, 2, 24, 8, 30), TODAY),
+            "Tue"
+        );
+        assert_eq!(
+            format_short_timestamp_on(&at(2026, 2, 23, 8, 30), TODAY),
+            "2026-02-23"
+        );
+        // A clock that ran ahead (a message "from tomorrow") shows the date.
+        assert_eq!(
+            format_short_timestamp_on(&at(2026, 3, 3, 8, 30), TODAY),
+            "2026-03-03"
+        );
+    }
+}

@@ -26,8 +26,9 @@ Build features can be combined (e.g. `cargo build --release --no-default-feature
 
 | Feature         | Description                                                                                                                                    |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `default`       | Enables `file-chooser`, `keychain`, `media-preview` and `notifications`.                                                                       |
+| `default`       | Enables `file-chooser`, `jxl`, `keychain`, `media-preview` and `notifications`.                                                                |
 | `file-chooser`  | Pick files to send in the desktop's file dialog, through the XDG desktop portal on D-Bus. See `app.file_chooser` in `config.toml`.             |
+| `jxl`           | Send JPEG XL images as photos: Telegram takes none, so they are converted to JPEG first (jxl-rs), as Telegram Desktop does. Adds about 2.6 MB. |
 | `keychain`      | Encrypt the TDLib database (your login session) with a key kept in the system keychain (Secret Service). See `[credentials]` in `config.toml`. |
 | `media-preview` | Image previews in the chat: photos, static stickers and the thumbnails of videos, GIFs, video messages and files.                              |
 | `notifications` | Desktop notifications for new messages, following each chat's Telegram notification settings. See `[notifications]` in `config.toml`.          |

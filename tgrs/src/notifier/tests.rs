@@ -60,8 +60,8 @@ fn settings() -> Notifications {
     }
 }
 
-fn at(hour: u32, minute: u32) -> chrono::NaiveTime {
-    chrono::NaiveTime::from_hms_opt(hour, minute, 0).unwrap()
+fn at(hour: i8, minute: i8) -> jiff::civil::Time {
+    jiff::civil::Time::new(hour, minute, 0, 0).unwrap()
 }
 
 #[test]

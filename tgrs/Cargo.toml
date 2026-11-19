@@ -3,7 +3,6 @@ name = "tgrs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-homepage.workspace = true
 description.workspace = true
 keywords.workspace = true
 repository.workspace = true
@@ -17,7 +16,7 @@ name = "tgrs"
 path = "src/main.rs"
 
 [features]
-default = ["file-chooser", "keychain", "media-preview", "notifications"]
+default = ["file-chooser", "jxl", "keychain", "media-preview", "notifications"]
 # Pick files to send in the desktop's file dialog (XDG desktop portal).
 file-chooser = ["dep:dbus"]
 # Keep the key of the encrypted TDLib database in the system keychain (Secret Service).
@@ -28,13 +27,15 @@ keychain = [
 ]
 # Image previews of photos, videos, GIFs and stickers in the chat.
 media-preview = ["dep:image", "dep:ratatui-image", "arboard/image-data"]
+# Send JPEG XL images as photos: converted to JPEG first, as Telegram takes none.
+jxl = ["dep:jxl", "dep:image"]
 # Desktop notifications for new messages.
 notifications = ["dep:notify-rust"]
 
 [dependencies]
-libtgrs = { path = "../libtgrs", version = "0.1.0" }
+libtgrs = { path = "../libtgrs", version = "0.2.0" }
 arboard.workspace = true
-chrono.workspace = true
+jiff.workspace = true
 clap.workspace = true
 crossterm.workspace = true
 dbus = { workspace = true, optional = true }
@@ -42,6 +43,7 @@ dbus-secret-service-keyring-store = { workspace = true, optional = true }
 futures.workspace = true
 getrandom = { workspace = true, optional = true }
 image = { workspace = true, optional = true }
+jxl = { workspace = true, optional = true }
 keyring-core = { workspace = true, optional = true }
 notify-rust = { workspace = true, optional = true }
 nucleo-matcher.workspace = true
@@ -58,6 +60,11 @@ tracing.workspace = true
 tracing-appender.workspace = true
 tracing-subscriber.workspace = true
 unicode-width.workspace = true
+
+# The clipboard's offered types, which arboard doesn't list; arboard already
+# depends on it on these platforms.
+[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "android", target_os = "emscripten"))))'.dependencies]
+wl-clipboard-rs.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
