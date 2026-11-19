@@ -1,7 +1,8 @@
 use std::path::Path;
-use std::time::{Duration, UNIX_EPOCH};
 
-use chrono::{DateTime, Local};
+use jiff::civil::Date;
+use jiff::tz::TimeZone;
+use jiff::{Timestamp, ZonedDateTime};
 use tdlib_rs::enums::{
     MessageContent, MessageReplyTo, MessageSender, ReactionType, StickerFormat, TextEntityType,
     ThumbnailFormat,
@@ -10,31 +11,52 @@ use tdlib_rs::types::{FormattedText, MessageInteractionInfo, Thumbnail};
 
 use super::td_enums::{TdMessageReplyTo, TdMessageSender};
 
+/// A unix timestamp in the system's time zone.
+pub fn local_time(timestamp: i32) -> ZonedDateTime {
+    Timestamp::from_second(i64::from(timestamp))
+        .unwrap_or(Timestamp::UNIX_EPOCH)
+        .to_zoned_datetime(TimeZone::system())
+}
+
+/// Today's date in the system's time zone.
+fn today() -> Date {
+    ZonedDateTime::now().date()
+}
+
 /// Formats a unix timestamp for display: `HH:MM` today, `Yesterday HH:MM`, otherwise the date.
 pub fn format_timestamp(timestamp: i32) -> String {
-    let d = UNIX_EPOCH + Duration::from_secs(timestamp as u64);
-    let datetime = DateTime::<Local>::from(d);
-    if datetime.date_naive() == Local::now().date_naive() {
-        return datetime.format("%H:%M").to_string();
-    }
-    if datetime.date_naive() == (Local::now() - chrono::Duration::days(1)).date_naive() {
-        return datetime.format("Yesterday %H:%M").to_string();
-    }
-    datetime.format("%Y-%m-%d %H:%M").to_string()
+    format_timestamp_on(&local_time(timestamp), today())
+}
+
+/// [`format_timestamp`] as seen on `today`.
+pub(crate) fn format_timestamp_on(time: &ZonedDateTime, today: Date) -> String {
+    let format = if time.date() == today {
+        "%H:%M"
+    } else if today
+        .yesterday()
+        .is_ok_and(|yesterday| time.date() == yesterday)
+    {
+        "Yesterday %H:%M"
+    } else {
+        "%Y-%m-%d %H:%M"
+    };
+    time.strftime(format).to_string()
 }
 
 /// Formats a unix timestamp for a list row, where columns are scarce:
 /// `HH:MM` today, the weekday within the last week, otherwise the date.
 pub fn format_short_timestamp(timestamp: i32) -> String {
-    let d = UNIX_EPOCH + Duration::from_secs(timestamp as u64);
-    let date = DateTime::<Local>::from(d);
-    let today = Local::now().date_naive();
-    let days = (today - date.date_naive()).num_days();
-    match days {
-        0 => date.format("%H:%M").to_string(),
-        1..=6 => date.format("%a").to_string(),
-        _ => date.format("%Y-%m-%d").to_string(),
-    }
+    format_short_timestamp_on(&local_time(timestamp), today())
+}
+
+/// [`format_short_timestamp`] as seen on `today`.
+pub(crate) fn format_short_timestamp_on(time: &ZonedDateTime, today: Date) -> String {
+    let format = match time.date().duration_until(today).as_hours() / 24 {
+        0 => "%H:%M",
+        1..=6 => "%a",
+        _ => "%Y-%m-%d",
+    };
+    time.strftime(format).to_string()
 }
 
 fn path_file_basename(path: &str) -> Option<String> {

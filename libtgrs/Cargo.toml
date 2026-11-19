@@ -9,7 +9,7 @@ keywords.workspace = true
 repository.workspace = true
 
 [dependencies]
-chrono.workspace = true
+jiff.workspace = true
 serde_json.workspace = true
 tdlib-rs.workspace = true
 tokio.workspace = true

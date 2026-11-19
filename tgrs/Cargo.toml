@@ -34,7 +34,7 @@ notifications = ["dep:notify-rust"]
 [dependencies]
 libtgrs = { path = "../libtgrs", version = "0.1.0" }
 arboard.workspace = true
-chrono.workspace = true
+jiff.workspace = true
 clap.workspace = true
 crossterm.workspace = true
 dbus = { workspace = true, optional = true }

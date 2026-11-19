@@ -381,7 +381,7 @@ fn handle_notification(
             if alert.chat_id != app_context.store().open_chat_id_i64() =>
         {
             let settings = app_context.notifications();
-            if notifier::is_quiet(settings, chrono::Local::now().time()) {
+            if notifier::is_quiet(settings, jiff::ZonedDateTime::now().time()) {
                 tracing::debug!(chat_id = alert.chat_id, "quiet hours: no notification");
             } else {
                 let open_tx = action_tx.clone();

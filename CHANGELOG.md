@@ -11,6 +11,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - Files to send (`alt+u`) are picked in the desktop's own file dialog, through the XDG desktop portal, several at once (`file-chooser` feature, on by default). Without a portal the built-in explorer is shown, as it is with `app.file_chooser = "builtin"`.
 - Sending images asks whether to send them as photos (compressed) or as files (original quality), in a popup with its own `[send_as]` keymap section. Other files are sent as files either way.
 
+### Changed
+
+- Dates and times are handled by jiff instead of chrono, which is no longer maintained (RUSTSEC-2026-0543). Timestamps look the same.
+
 ### Fixed
 
 - Messages you sent could show twice in the chat: the copy shown while sending stayed next to the sent message once the history was loaded again.
