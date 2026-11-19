@@ -33,7 +33,7 @@ jxl = ["dep:jxl", "dep:image"]
 notifications = ["dep:notify-rust"]
 
 [dependencies]
-libtgrs = { path = "../libtgrs", version = "0.1.0" }
+libtgrs = { path = "../libtgrs", version = "0.2.0" }
 arboard.workspace = true
 jiff.workspace = true
 clap.workspace = true

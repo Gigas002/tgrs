@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 description = "A simple TUI for Telegram"
 keywords = ["telegram", "tui", "tdlib"]
 repository = "https://github.com/Gigas002/tgrs"
-version = "0.1.0"
+version = "0.2.0"
 
 [workspace.dependencies]
 arboard = { version = "3", default-features = false, features = [
