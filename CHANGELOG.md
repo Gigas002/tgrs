@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 - `alt+v` attaches files copied in a file manager, and images in the format they were copied in: PNG, JPEG, WebP, JPEG XL or GIF. It only read PNG images before, so an image copied as JPEG XL alone (or anything but PNG) gave "No image on the clipboard". On Wayland this no longer needs the `media-preview` feature.
 - Dates and times are handled by jiff instead of chrono, which is no longer maintained (RUSTSEC-2026-0543). Timestamps look the same.
+- Built for TDLib 1.8.70 (tdlib-rs updated): the system `tdjson` must be 1.8.70.
 
 ### Fixed
 
