@@ -6,7 +6,7 @@ description: >
 inputs:
   tdlib-commit:
     description: TDLib commit matching the tdlib-rs version in Cargo.lock.
-    default: c15d3f5a5de6e3ba5839822c451152e5e18bb700
+    default: 23383aef218a3123f02b744bfa91bde21056a814
 
 runs:
   using: composite
