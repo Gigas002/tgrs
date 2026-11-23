@@ -1117,7 +1117,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.58.0",
 ]
 
 [[package]]
@@ -2904,7 +2904,7 @@ dependencies = [
 [[package]]
 name = "tdlib-rs"
 version = "1.4.0"
-source = "git+https://github.com/Gigas002/tdlib-rs#b2b1b03942abba506b11a478b39bb393f52e8dfe"
+source = "git+https://github.com/Gigas002/tdlib-rs#515891da1c8207d1fb66e1493ed30bff77df184e"
 dependencies = [
  "futures-channel",
  "log",
@@ -2920,7 +2920,7 @@ dependencies = [
 [[package]]
 name = "tdlib-rs-gen"
 version = "1.4.0"
-source = "git+https://github.com/Gigas002/tdlib-rs#b2b1b03942abba506b11a478b39bb393f52e8dfe"
+source = "git+https://github.com/Gigas002/tdlib-rs#515891da1c8207d1fb66e1493ed30bff77df184e"
 dependencies = [
  "tdlib-rs-parser",
 ]
@@ -2928,7 +2928,7 @@ dependencies = [
 [[package]]
 name = "tdlib-rs-parser"
 version = "1.4.0"
-source = "git+https://github.com/Gigas002/tdlib-rs#b2b1b03942abba506b11a478b39bb393f52e8dfe"
+source = "git+https://github.com/Gigas002/tdlib-rs#515891da1c8207d1fb66e1493ed30bff77df184e"
 
 [[package]]
 name = "tempfile"
